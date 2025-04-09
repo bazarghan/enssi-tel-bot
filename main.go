@@ -2,12 +2,11 @@ package main
 
 import (
 	"log"
-	"os"
-	"time"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/bot"
+	"github.com/2000ostd/enssi-tel-bot/internal/bot/handlers"
 	"github.com/2000ostd/enssi-tel-bot/internal/db"
 	"github.com/joho/godotenv"
-	"gopkg.in/telebot.v4"
 )
 
 func main() {
@@ -20,22 +19,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not initialize database connection: %v", err)
 	}
-
-	// Use the database connection
-	log.Println("Database connection available.")
+	log.Println("Database connection successful")
 	log.Println(db)
 
-	conf := telebot.Settings{
-		Token:  os.Getenv("TEL_BOT_TOKEN"),
-		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
-	}
-
-	bot, err := telebot.NewBot(conf)
+	bot, err := bot.InitializeBot()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Could not initialize bot: %v", err)
 	}
+	log.Println("Bot initialization successful")
 
-	log.Println("Bot started!")
+	handlers.RegisterHandlers(bot)
 
 	bot.Start()
 }
