@@ -15,12 +15,12 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	db, err := db.ConnectDB()
+	dbMain, err := db.ConnectDB()
 	if err != nil {
 		log.Fatalf("Could not initialize database connection: %v", err)
 	}
 	log.Println("Database connection successful")
-	log.Println(db)
+	log.Println(dbMain)
 
 	bot, err := bot.InitializeBot()
 	if err != nil {
