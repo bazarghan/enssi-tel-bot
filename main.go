@@ -30,5 +30,9 @@ func main() {
 
 	handlers.RegisterHandlers(bot)
 
+	// state := bitset.New(1000)
+	// state.Set(0)
+	// utils.UpdateImage("input.png", state, 32, 10)
+
 	bot.Start()
 }
