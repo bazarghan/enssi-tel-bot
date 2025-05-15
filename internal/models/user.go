@@ -15,7 +15,8 @@ type User struct {
 	WordsStudiedToday []WordStudiedToday
 	WordsStudied      []WordStudied
 
-	Username   string `gorm:"type:string;uniqueIndex;not null;check: length(username) >= 5 AND length(username) <= 32"`
+	TelegramID int64 `gorm:"not null;uniqueIndex"`
 	LastActive time.Time
 	LastOnline time.Time
+	LastMenu   string `gorm:"type:varchar(100);not null;default:''"`
 }

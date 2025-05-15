@@ -10,9 +10,3 @@ func handleBtnStartCourseClicked(ctx telebot.Context) error {
 
 	return ctx.Send("Course", menu)
 }
-
-func handleBtnPrevMenuCourseDetailsClicked(ctx telebot.Context) error {
-	menu := keyboards.SelectCourse()
-
-	return ctx.Send("Select a course or continue one", menu)
-}

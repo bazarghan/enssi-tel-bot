@@ -1,6 +1,8 @@
 package keyboards
 
-import "gopkg.in/telebot.v4"
+import (
+	"gopkg.in/telebot.v4"
+)
 
 var (
 	BtnStartCourse           = menu.Text("شروع دوره")

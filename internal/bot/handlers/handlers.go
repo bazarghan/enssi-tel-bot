@@ -1,40 +1,103 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
+	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"gopkg.in/telebot.v4"
+	"gorm.io/gorm"
 )
 
-func RegisterHandlers(bot *telebot.Bot) {
-	bot.Handle("/start", handleStart)
-	bot.Handle(&keyboards.BtnReturnToMainMenu, handleBtnReturnToMainMenuClicked)
-	bot.Handle(&keyboards.BtnStartLearning, handleBtnStartLearningClicked)
-	bot.Handle(&keyboards.Btn504, handleBtn504Clicked)
-	bot.Handle(&keyboards.Btn1100, handleBtn1100Clicked)
-	bot.Handle(&keyboards.BtnStartCourse, handleBtnStartCourseClicked)
-	bot.Handle(&keyboards.BtnNextWord, handleBtnNextWordClicked)
-	bot.Handle(&keyboards.BtnPrevMenuCourseDetails, handleBtnPrevMenuCourseDetailsClicked)
-	bot.Handle(&keyboards.BtnPrevMenuCourse, handleBtnPrevMenuCourseClicked)
+func RegisterHandlers(bot *telebot.Bot, db *gorm.DB) {
+
+	bot.Handle("/start", withTimestamp(db, func(ctx telebot.Context) error {
+		return handleStart(ctx, db)
+	}))
+
+	bot.Handle(&keyboards.BtnStartLearning, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleBtnStartLearningClicked(ctx, db)
+	}))
+
+	bot.Handle(&keyboards.BtnPrevMenuCourse, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleBtnStartLearningClicked(ctx, db)
+	}))
+
+	bot.Handle(&keyboards.BtnPrevMenuCourseDetails, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleBtnStartLearningClicked(ctx, db)
+	}))
+
+	bot.Handle(telebot.OnText, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleCourseSelection(ctx, db)
+	}))
+
+	bot.Handle(&keyboards.BtnReturnToMainMenu, withTimestamp(db, handleBtnReturnToMainMenuClicked))
+	bot.Handle(&keyboards.BtnStartCourse, withTimestamp(db, handleBtnStartCourseClicked))
+	bot.Handle(&keyboards.BtnNextWord, withTimestamp(db, handleBtnNextWordClicked))
 }
 
-func handleStart(ctx telebot.Context) error {
+// withTimestamp returns a handler that first spawns a background update
+// of last_active and last_online, then immediately invokes h.
+func withTimestamp(db *gorm.DB, h func(ctx telebot.Context) error) func(ctx telebot.Context) error {
+
+	return func(ctx telebot.Context) error {
+		if sender := ctx.Sender(); sender != nil {
+			tgID := int64(sender.ID)
+			now := time.Now()
+
+			go func(id int64, ts time.Time) {
+				_ = db.Model(&models.User{}).
+					Where("telegram_id = ?", id).
+					Updates(map[string]interface{}{
+						"last_active": ts,
+						"last_online": ts,
+					}).Error
+			}(tgID, now)
+		}
+		return h(ctx)
+	}
+}
+
+func handleStart(ctx telebot.Context, db *gorm.DB) error {
+
+	sender := ctx.Sender()
+	tgID := int64(sender.ID)
+
+	user := models.User{TelegramID: tgID}
+	if err := db.
+		FirstOrCreate(&user, models.User{TelegramID: tgID}).
+		Error; err != nil {
+		return err
+	}
+
+	now := time.Now()
+	user.LastActive = now
+	user.LastOnline = now
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
 	menu := keyboards.Main()
 
-	desciption := "به ربات زبان *اِنسی* خوش اومدی 🙌\n\nواسه یاد گرفتن زبان انگیزه نداری ؟\nاز کلاسا و دوره های مختلف نتیجه نگرفتی ؟\nبرنامه ریزی واسه خوندن و مرور کلمات سخته ؟\nکلماتی که می خونی رو مدام یادت می ره ؟\n\n اگه اینطوره پس جای درستی اومدی، اینجا ما با روشای مختلف مثل گیمیفیکیشن، مرورای دوره ای و زمان بندی شده، کوییزای متنوع، رقابت و \\.\\.\\. بهت انگیزه می دیم و کمک می کنیم به هدفت تو یادگیری زبان برسی و تا نرسیدی ول کنتم نیستیم 😅\n\n پس اگه آماده ای بزن بریممم 🤝"
+	desc := Texts["start"]
 
-	return ctx.Send(desciption, menu, telebot.ModeMarkdownV2)
+	return ctx.Send(desc, menu, telebot.ModeMarkdownV2)
 }
 
-func handleBtnStartLearningClicked(ctx telebot.Context) error {
-	menu := keyboards.SelectCourse()
-
-	desciption := "حالا که تصمیم گرفتی یادگیری رو شروع کنی تو این مرحله باید مجموعه ای که می خوای رو انتخاب کنی و ادامه بدی 🙂"
-
-	return ctx.Send(desciption, menu)
+func handleBtnStartLearningClicked(ctx telebot.Context, db *gorm.DB) error {
+	var courses []models.Course
+	if err := db.Find(&courses).Error; err != nil {
+		return ctx.Send("مشکلی در بارگذاری دوره‌ها پیش آمد")
+	}
+	return ctx.Send(
+		"کدوم دوره رو می‌خوای شروع کنی؟",
+		keyboards.CourseMenu(courses),
+	)
 }
 
 func handleBtnReturnToMainMenuClicked(ctx telebot.Context) error {
 	menu := keyboards.Main()
 
-	return ctx.Send("Please continue with an option", menu)
+	desc := Texts["return_to_main_menu"]
+
+	return ctx.Send(desc, menu)
 }

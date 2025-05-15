@@ -28,11 +28,7 @@ func main() {
 	}
 	log.Println("Bot initialization successful")
 
-	handlers.RegisterHandlers(bot)
-
-	// state := bitset.New(1000)
-	// state.Set(0)
-	// utils.UpdateImage("input.png", state, 32, 10)
+	handlers.RegisterHandlers(bot, dbMain)
 
 	bot.Start()
 }

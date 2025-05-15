@@ -1,22 +1,38 @@
 package handlers
 
 import (
+	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
+	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"gopkg.in/telebot.v4"
+	"gorm.io/gorm"
 )
 
-func handleBtn504Clicked(ctx telebot.Context) error {
-	menu := keyboards.CourseDetails()
+func handleCourseSelection(ctx telebot.Context, db *gorm.DB) error {
+	label := ctx.Text()
 
-	description := "مجموعه 504 کلمه یکی از معروف ترین و محبوب ترین مجموعه لغات انگلیسی، طراحی شده برای افرادی با سطح زبان متوسطه، هدف اصلی این مجموعه آموزش کلماتیه که به وفور تو مکالمات روزانه، ادبیات، روزنامه ها و تستای مختلف مثل GRE, IELTS, TOFEL و SAT تکرار می شن\n\nاگه آماده ای پس منتظر چی هستی بزن رو شروع دوره که بی معطلی یادگیری رو شروع کنیم، در ضمن نگران نباش می تونی به صورت همزمان چند تا دوره رو شروع کنی و جلو ببری پس خیالت از این بابت راحت باشه 😉"
+	if label == "بازگشت به منوی اصلی" {
+		return ctx.Send(
+			"به منوی اصلی بازگشتید",
+			keyboards.Main(),
+		)
+	}
 
-	return ctx.Send(description, menu)
-}
-
-func handleBtn1100Clicked(ctx telebot.Context) error {
-	menu := keyboards.CourseDetails()
-
-	description := "مجموعه کلمات 1100 در کنار مجموعه 504 یکی دیگه از مجموعه لغات انگیلیسی معروف و محبوبه، این مجموعه برای کسایی طراحی شده که سطح زبان بالایی دارن و می خوان به طور قابل توجهی دایره لغات خودشون رو گسترش بدن، این مجموعه به نسبت مجموعه 504 دارای کلمات سخت تر، اصطلاحات و کلمات آکادمیکه\n\nاگه آماده ای پس منتظر چی هستی بزن رو شروع دوره که بی معطلی یادگیری رو شروع کنیم، در ضمن نگران نباش می تونی به صورت همزمان چند تا دوره رو شروع کنی و جلو ببری پس خیالت از این بابت راحت باشه 😉"
-
-	return ctx.Send(description, menu)
+	var course models.Course
+	if err := db.Where("persian_title = ?", label).First(&course).Error; err != nil {
+		return nil
+	}
+	//
+	// user := models.User{}
+	// db.Where("telegram_id = ?", ctx.Sender().ID).First(&user)
+	// db.Create(&models.UserCourse{
+	// 	UserID:   user.ID,
+	// 	CourseID: course.ID,
+	// })
+	//
+	// And send a confirmation or the first lesson
+	return ctx.Send(
+		fmt.Sprintf("شما دوره «%s» را انتخاب کردید! بیا شروع کنیم.", course.PersianTitle),
+		keyboards.CourseDetails(),
+	)
 }
