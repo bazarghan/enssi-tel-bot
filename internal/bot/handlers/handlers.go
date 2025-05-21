@@ -31,9 +31,18 @@ func RegisterHandlers(bot *telebot.Bot, db *gorm.DB) {
 		return handleCourseSelection(ctx, db)
 	}))
 
-	bot.Handle(&keyboards.BtnReturnToMainMenu, withTimestamp(db, handleBtnReturnToMainMenuClicked))
-	bot.Handle(&keyboards.BtnStartCourse, withTimestamp(db, handleBtnStartCourseClicked))
-	bot.Handle(&keyboards.BtnNextWord, withTimestamp(db, handleBtnNextWordClicked))
+	bot.Handle(&keyboards.BtnReturnToMainMenu, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleBtnReturnToMainMenuClicked(ctx, db)
+	}))
+
+	bot.Handle(&keyboards.BtnStartCourse, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleBtnStartCourseClicked(ctx, db)
+	}))
+
+	bot.Handle(&keyboards.BtnNextWord, withTimestamp(db, func(ctx telebot.Context) error {
+		return handleBtnNextWordClicked(ctx, db)
+	}))
+
 }
 
 // withTimestamp returns a handler that first spawns a background update
@@ -65,7 +74,7 @@ func handleStart(ctx telebot.Context, db *gorm.DB) error {
 
 	user := models.User{TelegramID: tgID}
 	if err := db.
-		FirstOrCreate(&user, models.User{TelegramID: tgID}).
+		FirstOrCreate(&user, models.User{TelegramID: tgID, LastMenu: "main"}).
 		Error; err != nil {
 		return err
 	}
@@ -73,6 +82,7 @@ func handleStart(ctx telebot.Context, db *gorm.DB) error {
 	now := time.Now()
 	user.LastActive = now
 	user.LastOnline = now
+	user.LastMenu = "main"
 	if err := db.Save(&user).Error; err != nil {
 		return err
 	}
@@ -84,6 +94,20 @@ func handleStart(ctx telebot.Context, db *gorm.DB) error {
 }
 
 func handleBtnStartLearningClicked(ctx telebot.Context, db *gorm.DB) error {
+
+	sender := ctx.Sender()
+	tgID := int64(sender.ID)
+
+	var user models.User
+	if err := db.Where("telegram_id = ?", tgID).First(&user).Error; err != nil {
+		return err
+	}
+
+	user.LastMenu = "courses"
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
+
 	var courses []models.Course
 	if err := db.Find(&courses).Error; err != nil {
 		return ctx.Send("مشکلی در بارگذاری دوره‌ها پیش آمد")
@@ -94,7 +118,21 @@ func handleBtnStartLearningClicked(ctx telebot.Context, db *gorm.DB) error {
 	)
 }
 
-func handleBtnReturnToMainMenuClicked(ctx telebot.Context) error {
+func handleBtnReturnToMainMenuClicked(ctx telebot.Context, db *gorm.DB) error {
+
+	sender := ctx.Sender()
+	tgID := int64(sender.ID)
+
+	var user models.User
+	if err := db.Where("telegram_id = ?", tgID).First(&user).Error; err != nil {
+		return err
+	}
+
+	user.LastMenu = "main"
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
+
 	menu := keyboards.Main()
 
 	desc := Texts["return_to_main_menu"]

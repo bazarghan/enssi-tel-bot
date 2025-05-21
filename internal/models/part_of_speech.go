@@ -8,6 +8,7 @@ type PartOfSpeech struct {
 	gorm.Model
 	WordSourceID uint
 
-	Title    string `gorm:"not null"`
-	Meanings []Meaning
+	Meanings []Meaning `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+
+	Title string `gorm:"not null"`
 }

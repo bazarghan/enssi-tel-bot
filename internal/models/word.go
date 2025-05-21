@@ -6,8 +6,8 @@ import (
 
 type Word struct {
 	gorm.Model
-	Sources []WordSource
+	Sources []WordSource `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
-	Title string `gorm:"not null"`
 	Lang  string `gorm:"not null"`
+	Title string `gorm:"not null"`
 }

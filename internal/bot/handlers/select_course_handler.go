@@ -12,27 +12,31 @@ func handleCourseSelection(ctx telebot.Context, db *gorm.DB) error {
 	label := ctx.Text()
 
 	if label == "بازگشت به منوی اصلی" {
-		return ctx.Send(
-			"به منوی اصلی بازگشتید",
-			keyboards.Main(),
-		)
+		return handleBtnReturnToMainMenuClicked(ctx, db)
 	}
 
 	var course models.Course
 	if err := db.Where("persian_title = ?", label).First(&course).Error; err != nil {
 		return nil
 	}
-	//
-	// user := models.User{}
-	// db.Where("telegram_id = ?", ctx.Sender().ID).First(&user)
-	// db.Create(&models.UserCourse{
-	// 	UserID:   user.ID,
-	// 	CourseID: course.ID,
-	// })
-	//
-	// And send a confirmation or the first lesson
+
+	sender := ctx.Sender()
+	tgID := int64(sender.ID)
+
+	var user models.User
+	if err := db.Where("telegram_id = ?", tgID).First(&user).Error; err != nil {
+		return err
+	}
+
+	user.LastMenu = fmt.Sprintf("courseId:%d", course.ID)
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
+
+	desc := course.PersianDescription
 	return ctx.Send(
-		fmt.Sprintf("شما دوره «%s» را انتخاب کردید! بیا شروع کنیم.", course.PersianTitle),
+		desc,
 		keyboards.CourseDetails(),
 	)
 }
+

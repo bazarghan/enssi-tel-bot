@@ -10,7 +10,7 @@ type Achievement struct {
 
 	Title           string `gorm:"not null;unique"`
 	Description     string
-	Type            string `gorm:"not null"`
+	Type            string
 	ImageURL        string
 	MinWordRequired uint
 }

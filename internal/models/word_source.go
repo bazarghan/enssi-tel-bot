@@ -6,12 +6,13 @@ import (
 
 type WordSource struct {
 	gorm.Model
-	WordID          uint
-	SourceID        uint
-	Pronunciations  []Pronunciation
-	Images          []Image
-	PartsOfSpeeches []PartOfSpeech
-	Phonetics       []Phonetic
+	WordID   uint
+	SourceID uint
+
+	PartsOfSpeeches []PartOfSpeech  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Pronunciations  []Pronunciation `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Phonetics       []Phonetic      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Images          []Image         `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	DefPrimary   string
 	DefSecondary string

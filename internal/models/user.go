@@ -18,5 +18,6 @@ type User struct {
 	TelegramID int64 `gorm:"not null;uniqueIndex"`
 	LastActive time.Time
 	LastOnline time.Time
-	LastMenu   string `gorm:"type:varchar(100);not null;default:''"`
+
+	LastMenu string `gorm:"type:varchar(100);not null;default:''"`
 }
