@@ -1,14 +1,13 @@
 package handlers
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-
+	"errors"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
+	"strconv"
+	"strings"
 )
 
 func handleBtnStartCourseClicked(ctx telebot.Context, db *gorm.DB) error {
@@ -39,38 +38,30 @@ func handleBtnStartCourseClicked(ctx telebot.Context, db *gorm.DB) error {
 		return ctx.Send("دوره‌ای با این شناسه پیدا نشد")
 	}
 
-	// 4) Upsert the UserCourse (start tracking progress)
-	uc := models.UserCourse{UserID: user.ID, CourseID: course.ID}
-	db.FirstOrCreate(&uc, uc) // ignore error for now
-
-	// 5) Fetch the first 10 CourseWord entries for this course
-	var cws []models.CourseWord
+	var uc models.UserCourse
 	if err := db.
-		Where("course_id = ?", course.ID).
-		Order("index asc").
-		Limit(10).
-		Find(&cws).Error; err != nil {
-		return ctx.Send("خطا در بارگذاری کلمات دوره")
-	}
+		Where("user_id = ? AND course_id = ?", user.ID, course.ID).
+		First(&uc).Error; err != nil {
 
-	// 6) Lookup each Word title
-	titles := make([]string, 0, len(cws))
-	for _, cw := range cws {
-		var w models.Word
-		if err := db.First(&w, cw.WordID).Error; err == nil {
-			titles = append(titles, w.Title)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// not enrolled yet → start at 1
+			uc = models.UserCourse{
+				UserID:   user.ID,
+				CourseID: course.ID,
+				Progress: 1,
+			}
+			if err := db.Create(&uc).Error; err != nil {
+				return ctx.Send("خطا در ثبت پیشرفت دوره")
+			}
+		} else {
+			return ctx.Send("خطا در بررسی دوره کاربر")
 		}
 	}
 
-	// 7) Send the first-10 list + course-details keyboard
-	resp := fmt.Sprintf(
-		"📖 دوره «%s» انتخاب شد. اولین ۱۰ کلمه:\n\n%s",
-		course.PersianTitle,
-		strings.Join(titles, "\n"),
-	)
-	return ctx.Send(
-		resp,
-		keyboards.Course(),
-	)
-}
+	if err := sendCourseWord(ctx, db, tgID, course.ID, uc.Progress); err != nil {
+		return err
+	}
 
+	return ctx.Send("برای دریافت کلمه بعدی رو کلمه بعدی کلیک کنید", keyboards.Course())
+
+}
