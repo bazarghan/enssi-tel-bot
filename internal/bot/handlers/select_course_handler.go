@@ -12,7 +12,7 @@ func handleCourseSelection(ctx telebot.Context, db *gorm.DB) error {
 	label := ctx.Text()
 
 	if label == "بازگشت به منوی اصلی" {
-		return handleBtnReturnToMainMenuClicked(ctx, db)
+		return handleReturnToMainMenu(ctx, db)
 	}
 
 	var course models.Course
@@ -39,4 +39,3 @@ func handleCourseSelection(ctx telebot.Context, db *gorm.DB) error {
 		keyboards.CourseDetails(),
 	)
 }
-

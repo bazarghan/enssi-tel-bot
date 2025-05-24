@@ -13,4 +13,8 @@ type UserQuiz struct {
 	Type        string
 	IsCompleted bool `gorm:"default:false"`
 	Score       uint `gorm:"check:score >= 0 AND score <= 100"`
+
+	CurrentQuestionIndex uint
+	TotalQuestions       uint
+	LastQuestionWordID   uint
 }

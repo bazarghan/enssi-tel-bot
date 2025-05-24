@@ -1,12 +1,11 @@
 package main
 
 import (
-	"log"
-
 	"github.com/2000ostd/enssi-tel-bot/internal/bot"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/handlers"
 	"github.com/2000ostd/enssi-tel-bot/internal/db"
 	"github.com/joho/godotenv"
+	"log"
 )
 
 func main() {
