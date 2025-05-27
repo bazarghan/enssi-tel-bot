@@ -6,8 +6,8 @@ import (
 
 type QuizAnswer struct {
 	gorm.Model
-	QuizAttemptID uint
-	QuestionID    uint
-	OptionID      uint
-	IsCorrect     bool
+	QuizAttemptID        uint
+	QuizQuestionID       uint
+	QuizQuestionOptionID uint
+	IsCorrect            bool
 }
