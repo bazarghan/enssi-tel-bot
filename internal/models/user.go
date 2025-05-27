@@ -11,7 +11,7 @@ type User struct {
 
 	Profile           Profile `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	Courses           []UserCourse
-	UserQuizzes       []UserQuiz
+	QuizAttempts      []QuizAttempt
 	WordsStudiedToday []WordStudiedToday
 	WordsStudied      []WordStudied
 
