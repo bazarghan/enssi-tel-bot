@@ -69,13 +69,8 @@ func withTimestamp(db *gorm.DB, h func(ctx telebot.Context) error) func(ctx tele
 
 func handleStart(ctx telebot.Context, db *gorm.DB) error {
 
-	sender := ctx.Sender()
-	tgID := int64(sender.ID)
-
-	user := models.User{TelegramID: tgID}
-	if err := db.
-		FirstOrCreate(&user, models.User{TelegramID: tgID, LastMenu: "main"}).
-		Error; err != nil {
+	user, err := fetchUser(ctx, db)
+	if err != nil {
 		return err
 	}
 

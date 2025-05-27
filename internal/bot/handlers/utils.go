@@ -9,27 +9,17 @@ import (
 	"gorm.io/gorm"
 )
 
-func sendCourseWord(ctx telebot.Context, db *gorm.DB, telegramUserID int64, courseID uint, idx uint) error {
-	// 1) Load our User (to ensure they exist / are enrolled, etc.)
-	var user models.User
-	if err := db.
-		Where("telegram_id = ?", telegramUserID).
-		First(&user).Error; err != nil {
-		return ctx.Send("مشکلی در یافتن کاربر پیش آمد")
+func sendCourseWord(ctx telebot.Context, db *gorm.DB, courseID uint, idx uint) error {
+
+	cw, err := fetchCourseWordByCourseIDAndIndex(db, courseID, idx)
+
+	if err != nil {
+		return err
 	}
 
-	// 2) Fetch the CourseWord by courseID + idx
-	var cw models.CourseWord
-	if err := db.
-		Where("course_id = ? AND index = ?", courseID, idx).
-		First(&cw).Error; err != nil {
-		return ctx.Send("کلمه‌ای با این شماره پیدا نشد")
-	}
-
-	// 3) Load the Word
-	var word models.Word
-	if err := db.First(&word, cw.WordID).Error; err != nil {
-		return ctx.Send("خطا در بارگذاری کلمه")
+	word, err := fetchWord(db, cw.WordID)
+	if err != nil {
+		return ctx.Send("can't find the word")
 	}
 
 	// 4) Load the first WordSource (with its IPA and voice data)
@@ -82,4 +72,51 @@ func sendCourseWord(ctx telebot.Context, db *gorm.DB, telegramUserID int64, cour
 	}
 
 	return nil
+}
+
+func createQuiz(ctx telebot.Context, db *gorm.DB, courseID uint, idx uint) error {
+
+	user, err := fetchUser(ctx, db)
+	if err != nil {
+		return err
+	}
+
+	cw, err := fetchCourseWordByCourseIDAndIndex(db, courseID, idx)
+	if err != nil {
+		return err
+	}
+
+	word, err := fetchWord(db, cw.CourseID)
+
+	// 2. Create the UserQuiz model instance
+	newQuiz := models.UserQuiz{
+		UserID:               user.ID,
+		CourseID:             courseID,
+		Type:                 "multi-option",
+		IsCompleted:          false,
+		Score:                0,
+		CurrentQuestionIndex: 0,
+		TotalQuestions:       12,
+		LastQuestionWordID:   word.ID,
+	}
+
+	if err := db.Create(&newQuiz).Error; err != nil {
+		// Log the actual error for server-side debugging
+		// log.Printf("Error creating quiz for user %d, course %d: %v", user.ID, courseID, err)
+		return ctx.Send("مشکلی در ایجاد آزمون جدید پیش آمد. لطفا دوباره تلاش کنید.")
+	}
+
+	confirmationMessage := fmt.Sprintf(
+		"✅ آزمون جدید برای دوره با شناسه %d با موفقیت برای شما ایجاد شد.\n"+
+			"نوع آزمون: چند گزینه‌ای\n"+
+			"تعداد سوالات: %d\n\n"+
+			"برای شروع آزمون، دستور /startquiz %d را ارسال کنید (یا دکمه مربوطه را فشار دهید).", // Assuming newQuiz.ID is what you'd use to start/refer to it
+		courseID,
+		newQuiz.TotalQuestions,
+		newQuiz.ID, // Or some other identifier if you don't want to expose DB ID directly
+	)
+	// If you want to immediately start the quiz, you would call a function here like:
+	// return sendQuizQuestion(ctx, db, newQuiz.ID, newQuiz.CurrentQuestionIndex)
+
+	return ctx.Send(confirmationMessage)
 }
