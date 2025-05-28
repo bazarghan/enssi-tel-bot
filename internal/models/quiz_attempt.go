@@ -10,5 +10,8 @@ type QuizAttempt struct {
 	UserID      uint `gorm:"not null"`
 	Score       int  `gorm:"default:0"`
 	IsCompleted bool `gorm:"default:false"`
+
 	QuizAnswers []QuizAnswer
+
+	CurrentQuestionNum int `gorm:"default:0"`
 }

@@ -9,5 +9,7 @@ type Quiz struct {
 	CourseID       uint
 	QuizQuesetions []QuizQuestion
 
-	Type string
+	QuestionCount   uint
+	Type            string
+	TriggerProgress uint
 }
