@@ -13,5 +13,6 @@ type QuizAttempt struct {
 
 	QuizAnswers []QuizAnswer
 
-	CurrentQuestionNum int `gorm:"default:0"`
+	CurrentQuestionNum       int `gorm:"default:0"`
+	CurrentQuestionMessageID int
 }

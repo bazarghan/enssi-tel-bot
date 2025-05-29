@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
@@ -28,21 +29,40 @@ func RegisterHandlers(bot *telebot.Bot, db *gorm.DB) {
 	}))
 
 	bot.Handle(telebot.OnText, withTimestamp(db, func(ctx telebot.Context) error {
-		return handleCourseSelection(ctx, db)
+		text := ctx.Text()
+		if text == "شروع دوره" || strings.HasPrefix(text, "ادامه دوره - ") {
+			return handleStartCourse(ctx, db)
+		} else {
+			return handleCourseSelection(ctx, db)
+		}
 	}))
 
 	bot.Handle(&keyboards.BtnReturnToMainMenu, withTimestamp(db, func(ctx telebot.Context) error {
 		return handleReturnToMainMenu(ctx, db)
 	}))
 
-	bot.Handle(&keyboards.BtnStartCourse, withTimestamp(db, func(ctx telebot.Context) error {
-		return handleStartCourse(ctx, db)
-	}))
-
+	// bot.Handle(&keyboards.BtnStartCourse, withTimestamp(db, func(ctx telebot.Context) error {
+	// 	return handleStartCourse(ctx, db)
+	// }))
+	//
 	bot.Handle(&keyboards.BtnNextWord, withTimestamp(db, func(ctx telebot.Context) error {
 		return handleNextWord(ctx, db)
 	}))
 
+	// --- Handler for Quiz Answer Callbacks ---
+	bot.Handle(telebot.OnCallback, withTimestamp(db, func(ctx telebot.Context) error {
+		if ctx.Callback() == nil {
+			return nil
+		}
+
+		callbackData := strings.TrimSpace(ctx.Callback().Data)
+
+		expectedPrefix := "quiz_ans:"
+		if strings.HasPrefix(callbackData, expectedPrefix) {
+			return handleQuizAnswerCallback(ctx, db)
+		}
+		return nil
+	}))
 }
 
 // withTimestamp returns a handler that first spawns a background update

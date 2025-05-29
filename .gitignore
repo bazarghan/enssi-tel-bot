@@ -36,3 +36,6 @@ Thumbs.db
 # Logs
 *.log
 __debug_bin
+
+#bash file
+.copy.bash
