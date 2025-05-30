@@ -13,13 +13,10 @@ import (
 )
 
 func handleStartCourse(ctx telebot.Context, db *gorm.DB) error {
-	// 1) Load the user from DB
-	tgID := ctx.Sender().ID
-	var user models.User
-	if err := db.
-		Where("telegram_id = ?", tgID).
-		First(&user).Error; err != nil {
-		return ctx.Send("مشکلی در یافتن کاربر پیش آمد")
+
+	user, err := fetchUser(ctx, db)
+	if err != nil {
+		return err
 	}
 
 	// 2) Parse courseId out of LastMenu
@@ -60,40 +57,18 @@ func handleStartCourse(ctx telebot.Context, db *gorm.DB) error {
 		}
 	}
 
-	return handleStartOrResumeCourse(ctx, db, &user, &course, &uc)
+	return handleStartOrResumeCourse(ctx, db, user, &course, &uc)
 
-}
-
-// This function checks if a user is currently in an active (uncompleted) quiz for ANY course.
-// For a more focused check (current course only), pass courseID.
-func findAnyActiveQuizAttempt(db *gorm.DB, userID uint) (*models.QuizAttempt, error) {
-	var attempt models.QuizAttempt
-	err := db.Where("user_id = ? AND is_completed = ?", userID, false).
-		Order("created_at DESC").First(&attempt).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // No active quiz attempt found
-		}
-		return nil, err // Other DB error
-	}
-	return &attempt, nil
 }
 
 func handleStartOrResumeCourse(ctx telebot.Context, db *gorm.DB, user *models.User, course *models.Course, uc *models.UserCourse) error {
-	// Check if user has an active, uncompleted quiz FOR THIS SPECIFIC BLOCK they are landing on.
-	// A quiz is due after completing a block, i.e. uc.Progress is N*WordsPerQuizBlock
-	// Or if their current progress means they are *within* a block for which they have an active quiz.
 
-	// Calculate the end-progress of the block the user is currently in or has just completed.
-	// Example: progress 1-11 -> block ends at 12. progress 12 -> block ends at 12.
-	// progress 13-23 -> block ends at 24. progress 24 -> block ends at 24.
+	// check for active quiz attempt
 	blockEndProgress := ((uc.Progress-1)/WordsPerQuizBlock + 1) * WordsPerQuizBlock
 	if uc.Progress == 0 {
 		blockEndProgress = WordsPerQuizBlock
-	} // If progress is 0 (new course), first block ends at 12
-
+	}
 	activeAttemptForBlock, _ := findActiveQuizAttemptForBlock(db, user.ID, course.ID, blockEndProgress)
-
 	if activeAttemptForBlock != nil {
 		ctx.Send("شما یک آزمون نیمه‌تمام برای این بخش از دوره دارید. ادامه می‌دهیم...")
 		return sendCurrentQuizQuestion(ctx, db, activeAttemptForBlock.ID)
@@ -111,7 +86,6 @@ func handleStartOrResumeCourse(ctx telebot.Context, db *gorm.DB, user *models.Us
 		if errors.Is(err, gorm.ErrRecordNotFound) { // Not found a passed attempt means quiz is due or re-due
 			return startQuizFlow(ctx, db, user.ID, course.ID, uc.Progress)
 		}
-		// If found a passed attempt or other error, proceed to send word.
 	}
 
 	if err := sendCourseWord(ctx, db, course.ID, uc.Progress); err != nil {
@@ -130,24 +104,6 @@ func handleNextWord(ctx telebot.Context, db *gorm.DB) error {
 		fmt.Printf("[ERROR] handleNextWord: Error fetching user: %v\n", err)
 		return ctx.Send("مشکلی در یافتن کاربر پیش آمد.")
 	}
-
-	// --- CHECK 1: Is there ANY active (uncompleted) quiz for this user? ---
-	anyActiveAttempt, errFindActive := findAnyActiveQuizAttempt(db, user.ID)
-	if errFindActive != nil {
-		// This is an actual DB error, not just "not found"
-		fmt.Printf("[ERROR] handleNextWord: Error checking for any active quiz: %v. UserID: %d\n", errFindActive, user.ID)
-		return ctx.Send("خطایی در بررسی وضعیت آزمون شما رخ داد. لطفا دوباره تلاش کنید.")
-	}
-
-	if anyActiveAttempt != nil {
-		// User has an active quiz. Resend the current question of that quiz and stop.
-		log.Printf("[DEBUG] handleNextWord: UserID %d has active quiz attempt ID %d. Resending quiz question.", user.ID, anyActiveAttempt.ID)
-		ctx.Send("لطفا ابتدا آزمون فعال خود را تکمیل کنید.")
-		return sendCurrentQuizQuestion(ctx, db, anyActiveAttempt.ID) // This should handle resuming the quiz display
-	}
-
-	// --- If NO active quiz, proceed to the next word ---
-	log.Printf("[DEBUG] handleNextWord: UserID %d has no active quiz. Proceeding to next word.", user.ID)
 
 	const prefix = "courseId:"
 	if !strings.HasPrefix(user.LastMenu, prefix) {
@@ -171,6 +127,17 @@ func handleNextWord(ctx telebot.Context, db *gorm.DB) error {
 		}
 		fmt.Printf("[ERROR] handleNextWord: Error fetching UserCourse for UserID %d, CourseID %d: %v\n", user.ID, courseID, err)
 		return ctx.Send("خطا در یافتن اطلاعات پیشرفت شما در دوره.")
+	}
+
+	// check for active quiz attempt
+	blockEndProgress := ((uc.Progress-1)/WordsPerQuizBlock + 1) * WordsPerQuizBlock
+	if uc.Progress == 0 {
+		blockEndProgress = WordsPerQuizBlock
+	}
+	activeAttemptForBlock, _ := findActiveQuizAttemptForBlock(db, user.ID, courseID, blockEndProgress)
+	if activeAttemptForBlock != nil {
+		ctx.Send("شما یک آزمون نیمه‌تمام برای این بخش از دوره دارید. ادامه می‌دهیم...")
+		return sendCurrentQuizQuestion(ctx, db, activeAttemptForBlock.ID)
 	}
 
 	// --- Advance Progress ---

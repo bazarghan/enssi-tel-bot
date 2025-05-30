@@ -3,33 +3,7 @@ package handlers
 import (
 	"embed"
 	"fmt"
-	"strings"
 )
-
-var md2Escaper = strings.NewReplacer(
-	"_", "\\_",
-	"*", "\\*",
-	"[", "\\[",
-	"]", "\\]",
-	"(", "\\(",
-	")", "\\)",
-	"~", "\\~",
-	"`", "\\`",
-	">", "\\>",
-	"#", "\\#",
-	"+", "\\+",
-	"-", "\\-",
-	"=", "\\=",
-	"|", "\\|",
-	"{", "\\{",
-	"}", "\\}",
-	".", "\\.", // <— escape dot
-	"!", "\\!",
-)
-
-func escapeMarkdownV2(text string) string {
-	return md2Escaper.Replace(text)
-}
 
 //go:embed texts/*.txt
 var textFS embed.FS

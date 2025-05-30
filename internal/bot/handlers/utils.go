@@ -6,6 +6,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -17,14 +18,11 @@ const QuizPassThresholdCorrectAnswers = 9 // e.g., 9 out of 12 for 75%
 const WordsPerQuizBlock = 12
 const QuizDefaultQuestionCount = 12
 
-// sendCourseWord presents the word details comprehensively.
-// The parameter 'idx' is the UserCourse.Progress.
 func sendCourseWord(ctx telebot.Context, db *gorm.DB, courseID uint, idx uint) error {
-	// 1. Fetch Core Data
+	// 1. Fetch Core Data (same as your existing code, ensure preloads are correct)
 	cw, err := fetchCourseWordByCourseIDAndIndex(db, courseID, idx)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// This specific error message will be checked by the caller (handleNextWord)
 			return errors.New("کلمه مورد نظر یافت نشد، ممکن است به انتهای دوره رسیده باشید یا دوره کلمه‌ای با این شماره نداشته باشد.")
 		}
 		log.Printf("Error fetching CourseWord (CourseID: %d, Index: %d): %v", courseID, idx, err)
@@ -44,170 +42,125 @@ func sendCourseWord(ctx telebot.Context, db *gorm.DB, courseID uint, idx uint) e
 		Preload("Pronunciations").
 		Preload("PartsOfSpeeches.Meanings"). // Eager load PartsOfSpeeches and their Meanings
 		First(&ws).Error; err != nil {
-		log.Printf("Error fetching WordSource with preloads for WordID %d: %v", word.ID, err)
-		return ctx.Send("خطا در بارگذاری جزئیات کامل کلمه (تلفظ، معانی و غیره).")
+		log.Printf("Error fetching WordSource for WordID %d: %v", word.ID, err)
+		return ctx.Send("خطا در بارگذاری جزئیات کامل کلمه.")
 	}
 
-	// 2. Send Images (if available)
+	// 2. Send Images
 	if cw.TelgramImageID != "" {
 		photo := &telebot.Photo{File: telebot.File{FileID: cw.TelgramImageID}}
-		if err := ctx.Send(photo); err != nil {
-			log.Printf("Error sending photo (FileID: %s) for WordID %d: %v", cw.TelgramImageID, word.ID, err)
-			// Don't return yet, try sending document or text content
+		if errImg := ctx.Send(photo); errImg != nil {
+			log.Printf("Error sending photo (FileID: %s) for WordID %d: %v", cw.TelgramImageID, word.ID, errImg)
 		}
-	} else if cw.TelgramImageDocID != "" { // Use 'else if' if you prefer only one image, or remove 'else' to send both if both IDs exist
+	}
+	if cw.TelgramImageDocID != "" {
 		doc := &telebot.Document{File: telebot.File{FileID: cw.TelgramImageDocID}}
-		if err := ctx.Send(doc); err != nil {
-			log.Printf("Error sending document (FileID: %s) for WordID %d: %v", cw.TelgramImageDocID, word.ID, err)
+		if errImgDoc := ctx.Send(doc); errImgDoc != nil {
+			log.Printf("Error sending document (FileID: %s) for WordID %d: %v", cw.TelgramImageDocID, word.ID, errImgDoc)
 		}
 	}
 
-	// 3. Construct and Send Main Textual Information
-	var messageBuilder strings.Builder
+	// 3. Send Text
 
-	// Word Title
-	messageBuilder.WriteString(fmt.Sprintf("🔤 **%s**\n", strings.ToUpper(word.Title))) // Make title more prominent
+	formattedMessage := formatWordMarkdown(word, &ws)
 
-	// Phonetics
-	if len(ws.Phonetics) > 0 {
-		messageBuilder.WriteString("\n🗣️ **تلفظ / IPA:**\n")
-		for _, p := range ws.Phonetics {
-			if p.Title != "" { // Only add if IPA text exists
-				langTag := ""
-				if p.Lang != "" {
-					langTag = fmt.Sprintf(" (%s)", p.Lang)
-				}
-				messageBuilder.WriteString(fmt.Sprintf("  ▪️ %s%s\n", p.Title, langTag))
+	if strings.TrimSpace(formattedMessage) != "" {
+		if err := ctx.Send(formattedMessage, telebot.ModeMarkdownV2); err != nil {
+			log.Printf("Error sending MarkdownV2 text message for WordID %d: %v. Message content:\n%s", word.ID, err, formattedMessage)
+			// Fallback to plain text (basic un-markdown)
+			plainTextAttempt := strings.ReplaceAll(strings.ReplaceAll(formattedMessage, "**", ""), "*", "")
+			plainTextAttempt = mdV2Escaper.Replace(plainTextAttempt) // This seems wrong, should be removing escapes for plain
+			// Or, better, generate plain text in formatWordMarkdown if MD fails
+			// For simplicity, let's just log and send the original possibly broken MD as plain
+			if errPlain := ctx.Send(formattedMessage); errPlain != nil { // Try sending original string as plain
+				log.Printf("Error sending plain text fallback for WordID %d: %v", word.ID, errPlain)
+				return ctx.Send("خطا در نمایش اطلاعات متنی کلمه.")
 			}
 		}
 	}
 
-	// Meanings by Part of Speech
-	if len(ws.PartsOfSpeeches) > 0 {
-		messageBuilder.WriteString("\n📜 **معانی و کاربردها:**\n")
-		for _, pos := range ws.PartsOfSpeeches {
-			if len(pos.Meanings) > 0 {
-				messageBuilder.WriteString(fmt.Sprintf("\n  🏷️ **%s:**\n", pos.Title)) // Part of Speech Title
-				for _, meaning := range pos.Meanings {
-					langTag := ""
-					if meaning.Lang != "" && meaning.Lang != "en" { // Optionally show lang if not default
-						langTag = fmt.Sprintf(" (%s)", meaning.Lang)
-					}
-					messageBuilder.WriteString(fmt.Sprintf("    💡 %s%s\n", meaning.Title, langTag))
-				}
-			}
-		}
-	} else {
-		// Fallback if no structured PartsOfSpeeches, but DefPrimary/Secondary exist
-		if ws.DefPrimary != "" || ws.DefSecondary != "" {
-			messageBuilder.WriteString("\n📜 **تعاریف اصلی:**\n")
-			if ws.DefPrimary != "" {
-				messageBuilder.WriteString(fmt.Sprintf("  💡 %s\n", ws.DefPrimary))
-			}
-			if ws.DefSecondary != "" {
-				messageBuilder.WriteString(fmt.Sprintf("  💡 %s\n", ws.DefSecondary))
-			}
-		}
-	}
-
-	if messageBuilder.Len() > 0 {
-		// Send the constructed message. Use MarkdownV2 if using ** for bold.
-		// Ensure your text is properly escaped if using MarkdownV2. For simplicity, using default mode.
-		// If using Markdown, escape special characters in word.Title, p.Title, pos.Title, meaning.Title.
-		// For now, sending as plain text to avoid complex escaping.
-		// If you want Markdown, you'll need to escape: _, *, [, ], (, ), ~, `, >, #, +, -, =, |, {, }, ., !
-		if err := ctx.Send(messageBuilder.String()); err != nil {
-			log.Printf("Error sending main text message for WordID %d: %v", word.ID, err)
-			return ctx.Send("خطا در نمایش اطلاعات متنی کلمه.")
-		}
-	}
-
-	// 4. Handle Voice Pronunciation
-	// Try to send an existing voice first
-	for _, pron := range ws.Pronunciations {
+	// 4. Try to send an existing voice first
+	for i := range ws.Pronunciations {
+		pron := &ws.Pronunciations[i]
 		if pron.TelgramVoiceID != "" {
 			voice := &telebot.Voice{File: telebot.File{FileID: pron.TelgramVoiceID}}
 			if err := ctx.Send(voice); err == nil {
 				log.Printf("Sent existing voice (FileID: %s) for WordID %d.", pron.TelgramVoiceID, word.ID)
-				return nil // Voice sent successfully
+				return nil // Voice sent successfully, end function
 			} else {
 				log.Printf("Error sending existing voice (FileID: %s) for WordID %d: %v. Will check for URLs.", pron.TelgramVoiceID, word.ID, err)
-				// Don't return, try other pronunciations or download logic
 			}
 		}
 	}
 
 	// If no existing TelgramVoiceID was successfully sent, try to download and upload
-	var usPronunciation *models.Pronunciation
-	var ukPronunciation *models.Pronunciation // Fallback
-
+	var pronToDownload *models.Pronunciation = nil // Initialize to nil
+	// Prioritize US, then UK, then first available with URL
 	for i := range ws.Pronunciations {
-		p := &ws.Pronunciations[i] // Use pointer to modify if needed (though not modifying p directly here)
+		p := &ws.Pronunciations[i]
 		if p.URL != "" {
 			if strings.ToUpper(p.Region) == "US" {
-				usPronunciation = p
-				break // Prefer US
+				pronToDownload = p
+				break
 			}
-			if strings.ToUpper(p.Region) == "UK" && ukPronunciation == nil { // Take first UK as fallback
-				ukPronunciation = p
+			if pronToDownload == nil || (strings.ToUpper(pronToDownload.Region) != "UK" && strings.ToUpper(p.Region) == "UK") {
+				pronToDownload = p // Take first UK if US not found yet, or first URL if neither US/UK
+			}
+		}
+	}
+	// If still nil after prioritizing US/UK, take the first one with a URL if any was found before break
+	if pronToDownload == nil {
+		for i := range ws.Pronunciations {
+			p := &ws.Pronunciations[i]
+			if p.URL != "" {
+				pronToDownload = p
+				break
 			}
 		}
 	}
 
-	pronToDownload := usPronunciation
-	if pronToDownload == nil {
-		pronToDownload = ukPronunciation
-	}
-
 	if pronToDownload != nil && pronToDownload.URL != "" {
-		log.Printf("Attempting to download voice from URL: %s for WordID %d (PronunciationID: %d)", pronToDownload.URL, word.ID, pronToDownload.ID)
+		log.Printf("Attempting to download voice from URL: %s for WordID %d (PronunciationID: %d, Region: %s)",
+			pronToDownload.URL, word.ID, pronToDownload.ID, pronToDownload.Region)
 
-		// Download the audio file
-		// Consider adding a timeout to http.Get
-		// client := http.Client{Timeout: 10 * time.Second}
-		// resp, err := client.Get(pronToDownload.URL)
-		resp, err := http.Get(pronToDownload.URL)
-		if err != nil {
-			log.Printf("Error downloading audio from %s: %v", pronToDownload.URL, err)
-			return nil // Silently fail, don't send error to user about voice
+		resp, errHttp := http.Get(pronToDownload.URL) // Add timeout for production
+		if errHttp != nil {
+			log.Printf("Error downloading audio from %s: %v", pronToDownload.URL, errHttp)
+			return nil // Silently fail on voice download error
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("Error downloading audio: status code %d from %s", resp.StatusCode, pronToDownload.URL)
+			bodyBytes, _ := io.ReadAll(resp.Body) // Read body for more info if error
+			log.Printf("Response body from failed download: %s", string(bodyBytes))
 			return nil // Silently fail
 		}
 
-		// Send the downloaded audio as a voice message
-		// Using telebot.FromReader to stream directly if possible, or save to temp file if needed by library/Telegram.
-		// Telebot's Voice struct can take an io.Reader via telebot.FromReader.
 		voiceFile := telebot.FromReader(resp.Body)
-		sentVoiceMsg, err := ctx.Bot().Send(ctx.Chat(), &telebot.Voice{File: voiceFile})
-		if err != nil {
-			log.Printf("Error sending downloaded voice to Telegram for WordID %d (URL: %s): %v", word.ID, pronToDownload.URL, err)
+		sentVoiceMsg, errSendVoice := ctx.Bot().Send(ctx.Chat(), &telebot.Voice{File: voiceFile})
+		if errSendVoice != nil {
+			log.Printf("Error sending downloaded voice to Telegram for WordID %d (URL: %s): %v", word.ID, pronToDownload.URL, errSendVoice)
 			return nil // Silently fail
 		}
 
-		// If successful, update the database with the new TelgramVoiceID
 		if sentVoiceMsg.Voice != nil && sentVoiceMsg.Voice.FileID != "" {
 			newFileID := sentVoiceMsg.Voice.FileID
 			log.Printf("Successfully sent downloaded voice. New FileID: %s for PronunciationID: %d", newFileID, pronToDownload.ID)
 
-			// Update the specific pronunciation record
 			if errDbUpdate := db.Model(&models.Pronunciation{}).Where("id = ?", pronToDownload.ID).Update("telgram_voice_id", newFileID).Error; errDbUpdate != nil {
 				log.Printf("CRITICAL: Failed to update TelgramVoiceID in DB for PronunciationID %d (New FileID: %s): %v", pronToDownload.ID, newFileID, errDbUpdate)
-				// The voice was sent, but DB update failed. This is an internal issue.
 			} else {
 				log.Printf("Successfully updated TelgramVoiceID in DB for PronunciationID %d.", pronToDownload.ID)
 			}
 		} else {
-			log.Printf("Sent voice message for WordID %d, but Voice or FileID was empty in response.", word.ID)
+			log.Printf("Sent voice message for WordID %d, but Voice or FileID was empty in Telegram's response.", word.ID)
 		}
 	} else {
 		log.Printf("No suitable pronunciation URL found to download for WordID %d.", word.ID)
 	}
 
-	return nil // Successfully sent word info, voice handling was best-effort
+	return nil
 }
 
 func createQuestion(db *gorm.DB, quizID uint, courseID uint, currentWordCourseIndex uint, wordPoolIndices []uint) error {

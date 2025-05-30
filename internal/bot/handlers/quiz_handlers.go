@@ -3,8 +3,11 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
+	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
@@ -18,7 +21,6 @@ func findActiveQuizAttemptForBlock(db *gorm.DB, userID uint, courseID uint, prog
 	err := db.Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
 		Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ?",
 			userID, courseID, progressAtBlockEnd, false).
-		// Preload("Quiz.QuizQuesetions.Options"). // Not strictly needed here, will load Quiz in sendCurrentQuizQuestion
 		Order("quiz_attempts.created_at DESC").
 		First(&attempt).Error
 
@@ -79,22 +81,16 @@ func startQuizFlow(ctx telebot.Context, db *gorm.DB, userID uint, courseID uint,
 	return sendCurrentQuizQuestion(ctx, db, currentAttempt.ID)
 }
 
-// sendCurrentQuizQuestion will now try to edit the message
-// In internal/bot/handlers/quiz_handler.go
-
-// sendCurrentQuizQuestion will now try to edit the message and use ctx.Bot().Send/Edit
 func sendCurrentQuizQuestion(ctx telebot.Context, db *gorm.DB, attemptID uint) error {
 	var attempt models.QuizAttempt
 	if err := db.First(&attempt, attemptID).Error; err != nil {
-		// It's better to log internal errors and send a generic message to the user.
 		fmt.Printf("sendCurrentQuizQuestion: Error fetching attempt %d: %v\n", attemptID, err)
 		return ctx.Send("خطا در بارگذاری وضعیت آزمون شما.")
 	}
 
 	if attempt.IsCompleted {
-		// This quiz attempt is done. Finalize might have already run or should run.
 		fmt.Printf("sendCurrentQuizQuestion: Attempt %d is already completed.\n", attemptID)
-		user, _ := fetchUser(ctx, db) // fetchUser might return an error if ctx is unusual
+		user, _ := fetchUser(ctx, db) // Best to handle error from fetchUser
 		return finalizeQuizAttempt(ctx, db, user, attemptID)
 	}
 
@@ -108,66 +104,81 @@ func sendCurrentQuizQuestion(ctx telebot.Context, db *gorm.DB, attemptID uint) e
 	if questionNum < 0 || questionNum >= int(quiz.QuestionCount) {
 		fmt.Printf("sendCurrentQuizQuestion: Invalid questionNum %d for quiz %d (attempt %d). Total questions: %d. Finalizing.\n",
 			questionNum, quiz.ID, attemptID, quiz.QuestionCount)
-		user, _ := fetchUser(ctx, db)
+		user, _ := fetchUser(ctx, db) // Best to handle error from fetchUser
 		return finalizeQuizAttempt(ctx, db, user, attemptID)
 	}
 
 	currentQuestion := quiz.QuizQuesetions[questionNum]
 	questionText := fmt.Sprintf("سوال %d از %d:\n\n%s", questionNum+1, quiz.QuestionCount, currentQuestion.Text)
-	optionsMarkup := keyboards.QuizQuestionOptions(currentQuestion.Options, attemptID, currentQuestion.ID)
 
-	var finalMessage *telebot.Message
+	shuffledOptions := make([]models.QuizQuestionOption, len(currentQuestion.Options))
+	copy(shuffledOptions, currentQuestion.Options)
+	rand.Seed(time.Now().UnixNano()) // Ensure rand and time are imported
+	rand.Shuffle(len(shuffledOptions), func(i, j int) {
+		shuffledOptions[i], shuffledOptions[j] = shuffledOptions[j], shuffledOptions[i]
+	})
+
+	optionsMarkup := keyboards.QuizQuestionOptions(shuffledOptions, attemptID, currentQuestion.ID)
+
+	var finalMessage *telebot.Message // Stores the message that was successfully sent or edited
 	var operationError error
 
 	if attempt.CurrentQuestionMessageID != 0 && ctx.Chat() != nil {
+		// --- Try to EDIT the existing quiz message ---
 		targetToEdit := telebot.StoredMessage{
 			MessageID: strconv.Itoa(attempt.CurrentQuestionMessageID),
 			ChatID:    ctx.Chat().ID,
 		}
-		// Use ctx.Bot().Edit() to get the *telebot.Message object back
 		editedMessage, errEdit := ctx.Bot().Edit(targetToEdit, questionText, optionsMarkup)
 		if errEdit == nil {
 			finalMessage = editedMessage
+			fmt.Printf("sendCurrentQuizQuestion: Successfully edited quiz message ID %s for attempt %d.\n", targetToEdit.MessageID, attemptID)
 		} else {
-			fmt.Printf("Error editing message ID %s for attempt %d: %v. Will send a new message.\n",
+			// Editing failed (e.g., message too old, deleted by user, permissions changed, etc.)
+			fmt.Printf("sendCurrentQuizQuestion: Failed to edit quiz message ID %s for attempt %d: %v. Will send a new message.\n",
 				targetToEdit.MessageID, attemptID, errEdit)
-			// If editing failed, we must send a new message.
-			// Clear the old message ID from the database attempt so we don't try to edit it again if this function is re-entered.
-			if dbErr := db.Model(&models.QuizAttempt{}).Where("id = ?", attempt.ID).Update("current_question_message_id", 0).Error; dbErr != nil {
-				fmt.Printf("Failed to clear CurrentQuestionMessageID for attempt %d after edit failure: %v\n", attemptID, dbErr)
-				// This is an internal state issue, but we'll still try to send a new message for the user.
-			}
-			// No need to update attempt.CurrentQuestionMessageID in memory here, the next block handles it.
+			// The old message ID is now considered invalid for editing.
+			// The new message (if sent successfully) will get a new ID.
+			// No need to explicitly delete the old message here; if it's uneditable,
+			// it might also be undeletable or already gone. Sending a new one is cleaner.
 		}
 	}
 
-	// If no message has been successfully set yet (i.e., it's the first question or editing failed)
+	// If no message was successfully edited (either no previous ID was stored, or editing failed)
 	if finalMessage == nil {
-		// Use ctx.Bot().Send() to get the *telebot.Message object back
+		// --- Send a NEW quiz message ---
 		sentMessage, errSend := ctx.Bot().Send(ctx.Chat(), questionText, optionsMarkup)
 		if errSend == nil {
 			finalMessage = sentMessage
+			fmt.Printf("sendCurrentQuizQuestion: Sent new quiz message for attempt %d, new ID: %d.\n", attemptID, finalMessage.ID)
 		} else {
-			operationError = errSend // Store the sending error
+			operationError = errSend // Store the sending error if sending new also fails
 		}
 	}
 
-	// If there was any error in the process and we don't have a final message
+	// If there was an overall error and we don't have a final message
+	// (i.e., both edit (if attempted) and send new failed)
 	if finalMessage == nil {
-		if operationError == nil { // Should not happen if finalMessage is nil, indicates a logic flaw
-			operationError = errors.New("unknown error in sendCurrentQuizQuestion, no message was sent or edited")
+		if operationError == nil {
+			// This case implies attempt.CurrentQuestionMessageID was 0, and sending new was not even tried, or logic error.
+			// More robustly, if finalMessage is nil after both blocks, there's an issue.
+			operationError = errors.New("sendCurrentQuizQuestion: unknown error, no message was sent or edited successfully")
 		}
-		fmt.Printf("Error in sendCurrentQuizQuestion for attempt %d: %v\n", attemptID, operationError)
+		fmt.Printf("sendCurrentQuizQuestion: Error for attempt %d: %v\n", attemptID, operationError)
 		return ctx.Send("مشکلی در نمایش سوال آزمون پیش آمد.")
 	}
 
 	// We have a finalMessage (either newly sent or successfully edited).
-	// Update the attempt with its ID if it's different from what's stored,
-	// or if the stored one was just cleared due to edit failure.
+	// Update the database with its ID if it's different from what's stored,
+	// or if the old ID was invalid and a new message was sent.
 	if attempt.CurrentQuestionMessageID != finalMessage.ID {
 		if saveErr := db.Model(&models.QuizAttempt{}).Where("id = ?", attempt.ID).Update("current_question_message_id", finalMessage.ID).Error; saveErr != nil {
-			fmt.Printf("Error saving CurrentQuestionMessageID %d for attempt %d: %v\n", finalMessage.ID, attemptID, saveErr)
-			// This is not immediately fatal for the user at this stage, but the next edit might fail or send new.
+			fmt.Printf("sendCurrentQuizQuestion: CRITICAL: Failed to save new CurrentQuestionMessageID %d for attempt %d: %v\n",
+				finalMessage.ID, attemptID, saveErr)
+			// Non-fatal for the user for this question, but next question's edit might fail.
+		} else {
+			// Optionally update the in-memory attempt struct if it's used later in the same request flow.
+			// attempt.CurrentQuestionMessageID = finalMessage.ID
 		}
 	}
 
@@ -250,10 +261,6 @@ func handleQuizAnswerCallback(ctx telebot.Context, db *gorm.DB) error {
 		fmt.Printf("Error saving quiz answer for attempt %d: %v\n", attempt.ID, err)
 		return nil // Error saving answer, don't proceed.
 	}
-
-	// --- NO IMMEDIATE FEEDBACK ---
-	// The message containing the clicked button will be edited by the next call to sendCurrentQuizQuestion
-	// or by finalizeQuizAttempt. No need to delete ctx.Callback().Message here.
 
 	// Move to the next question or finalize
 	attempt.CurrentQuestionNum++
@@ -418,7 +425,9 @@ func finalizeQuizAttempt(ctx telebot.Context, db *gorm.DB, user *models.User, at
 	wordsInBlock := WordsPerQuizBlock                // Ensure this constant is defined
 
 	if attempt.Score >= passThreshold {
-		ctx.Send(fmt.Sprintf("🎉 تبریک! شما آزمون را با موفقیت گذراندید و می‌توانید به یادگیری ادامه دهید."), keyboards.Course())
+		ctx.Send(fmt.Sprintf("🎉 تبریک! شما آزمون را با موفقیت گذراندید و می‌توانید به یادگیری ادامه دهید."))
+		return handleNextWord(ctx, db)
+
 	} else {
 		ctx.Send(fmt.Sprintf("😔 متاسفانه حد نصاب قبولی (%d پاسخ صحیح) را کسب نکردید.", passThreshold))
 
@@ -428,6 +437,10 @@ func finalizeQuizAttempt(ctx telebot.Context, db *gorm.DB, user *models.User, at
 		}
 
 		startOfBlockProgress := triggerProgressForThisQuiz - uint(wordsInBlock) + 1
+		log.Printf("start of block: %d \n", startOfBlockProgress)
+		log.Printf("triggerProgressForthisQuiz block: %d \n", triggerProgressForThisQuiz)
+		log.Printf("words in block: %d \n", wordsInBlock)
+
 		if triggerProgressForThisQuiz < uint(wordsInBlock) { // Quiz was for the first block
 			startOfBlockProgress = 1
 		}
@@ -443,6 +456,21 @@ func finalizeQuizAttempt(ctx telebot.Context, db *gorm.DB, user *models.User, at
 			return ctx.Send("خطا در به‌روزرسانی پیشرفت شما پس از آزمون.")
 		}
 		ctx.Send(fmt.Sprintf("پیشرفت شما به کلمه شماره %d بازگردانده شد. لطفا دوباره کلمات را مطالعه کنید.", uc.Progress), keyboards.Course())
+		return sendCourseWord(ctx, db, uc.CourseID, uc.Progress)
+
 	}
 	return nil
+}
+
+func findAnyActiveQuizAttempt(db *gorm.DB, userID uint) (*models.QuizAttempt, error) {
+	var attempt models.QuizAttempt
+	err := db.Where("user_id = ? AND is_completed = ?", userID, false).
+		Order("created_at DESC").First(&attempt).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // No active quiz attempt found, not an "error" for this function's purpose
+		}
+		return nil, err // Other DB error
+	}
+	return &attempt, nil
 }
