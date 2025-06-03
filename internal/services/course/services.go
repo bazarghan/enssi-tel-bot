@@ -1,4 +1,3 @@
-// internal/services/course/service.go
 package course
 
 import (
@@ -11,6 +10,10 @@ import (
 	"log"
 	"strings"
 )
+
+//==============================================================================
+//  Service Definition & Initialization
+//==============================================================================
 
 // Service implements the CourseService interface.
 type Service struct {
@@ -31,9 +34,18 @@ func NewService(db *gorm.DB, qs quiz.QuizService, ws word.WordService) *Service 
 // Ensure Service implements CourseService interface
 var _ CourseService = (*Service)(nil)
 
-// --- Helper Functions ---
+//==============================================================================
+//  Core Internal Helper Functions
+//==============================================================================
 
-func (s *Service) getOrCreateUserCourseInternal(tx *gorm.DB, userID uint, courseID uint) (*models.UserCourse, bool, error) {
+// --- UserCourse Management (Internal) ---
+
+func (s *Service) getOrCreateUserCourseInternal(
+	tx *gorm.DB,
+	userID uint,
+	courseID uint,
+) (*models.UserCourse, bool, error) {
+
 	var uc models.UserCourse
 	isNew := false
 	err := tx.Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
@@ -52,6 +64,8 @@ func (s *Service) getOrCreateUserCourseInternal(tx *gorm.DB, userID uint, course
 	return &uc, isNew, nil
 }
 
+// --- Course Data Retrieval (Internal) ---
+
 func (s *Service) getTotalWordsInCourseInternal(courseID uint) (int64, error) {
 	var totalWords int64
 	if err := s.db.Model(&models.CourseWord{}).Where("course_id = ?", courseID).Count(&totalWords).Error; err != nil {
@@ -60,38 +74,97 @@ func (s *Service) getTotalWordsInCourseInternal(courseID uint) (int64, error) {
 	return totalWords, nil
 }
 
-// determineNextLearningStep is the core logic for deciding what to show the user.
-func (s *Service) determineNextLearningStep(userID uint, courseID uint, userCourse *models.UserCourse, totalWordsInCourse int64) (*LearningContext, error) {
-	currentProgress := userCourse.Progress // This is the index of the *next* word to study, or a quiz trigger point.
+//==============================================================================
+//  Learning Step Determination Logic
+//==============================================================================
 
-	// If progress is 0 (fresh start/reset), advance to the first word.
-	// The caller (StartOrResumeLearningSession) should set progress to 1 if it's 0.
-	if currentProgress == 0 {
-		// This state means the user has literally no progress.
-		// The caller should advance it to 1 to attempt fetching the first word.
-		// For safety, if determineNextLearningStep is called with progress 0,
-		// we can assume the intent is to start with word 1.
-		if totalWordsInCourse > 0 {
-			currentProgress = 1
-		} else { // No words in course
-			return &LearningContext{
-				UserID: userID, CourseID: courseID, UserProgress: 0,
-				IsCourseEnded: true, MessageToUser: MsgCourseNoContent,
-			}, nil
-		}
+// --- Main Orchestrator for Learning Steps ---
+
+func (s *Service) determineNextLearningStep(
+	userID uint,
+	courseID uint,
+	userCourse *models.UserCourse,
+	totalWordsInCourse int64,
+) (*LearningContext, error) {
+
+	// -----------------------------------------
+	// 1. Handle initial progress or empty course
+	if lc, handled := s.handleInitialOrEmptyCourse(
+		userID,
+		courseID,
+		userCourse,
+		totalWordsInCourse,
+	); handled {
+		return lc, nil
 	}
 
-	// Check if user has "seen" all words (progress points beyond the last word)
+	// -----------------------------------------
+	// 2. Check if course is completed (all words seen, potential final quiz)
+	if lc, err := s.checkCourseCompletion(
+		userID,
+		courseID,
+		userCourse,
+		totalWordsInCourse,
+	); err != nil || lc != nil {
+		return lc, err
+	}
+
+	// -----------------------------------------
+	// 3. Check if a regular quiz is due
+	if lc, err := s.checkQuizDue(userID, courseID, userCourse); err != nil || lc != nil {
+		return lc, err
+	}
+
+	// -----------------------------------------
+	// 4. If no quiz and not completed, present the next word
+	return s.presentNextWord(userID, courseID, userCourse)
+}
+
+// --- Helper: Initial State or Empty Course ---
+
+func (s *Service) handleInitialOrEmptyCourse(
+	userID uint,
+	courseID uint,
+	userCourse *models.UserCourse,
+	totalWordsInCourse int64,
+) (*LearningContext, bool) {
+
+	currentProgress := userCourse.Progress
+	if totalWordsInCourse == 0 {
+		return &LearningContext{
+			UserID:        userID,
+			CourseID:      courseID,
+			UserProgress:  currentProgress,
+			IsCourseEnded: true,
+			MessageToUser: MsgCourseNoContent,
+		}, true
+	}
+
+	if currentProgress == 0 && totalWordsInCourse > 0 {
+		userCourse.Progress = 1
+	}
+	return nil, false
+}
+
+// --- Helper: Course Completion Check ---
+
+func (s *Service) checkCourseCompletion(
+	userID uint,
+	courseID uint,
+	userCourse *models.UserCourse,
+	totalWordsInCourse int64,
+) (*LearningContext, error) {
+
+	currentProgress := userCourse.Progress
 	if currentProgress > uint(totalWordsInCourse) && totalWordsInCourse > 0 {
-		// All words studied. Check if a final quiz is due for the block ending at totalWordsInCourse
+		// Check for final quiz
 		finalQuizTriggerProgress := uint(totalWordsInCourse)
-		// Align with block logic: if totalWords is a multiple of block size
 		if finalQuizTriggerProgress > 0 && finalQuizTriggerProgress%wordsPerQuizBlock == 0 {
 			quizState, err := s.quizService.StartOrResumeQuiz(userID, courseID, finalQuizTriggerProgress)
 			if err != nil {
 				return nil, fmt.Errorf("%w: checking final quiz: %w", ErrQuizIntegration, err)
 			}
-			if quizState != nil && !quizState.IsCompleted { // Quiz is active or starting
+			if quizState != nil && !quizState.IsCompleted {
 				return &LearningContext{
 					UserID:        userID,
 					CourseID:      courseID,
@@ -102,7 +175,7 @@ func (s *Service) determineNextLearningStep(userID uint, courseID uint, userCour
 				}, nil
 			}
 		}
-		// If no final quiz, or it's done, the course is truly ended.
+		// No final quiz or it's done
 		return &LearningContext{
 			UserID:        userID,
 			CourseID:      courseID,
@@ -111,28 +184,25 @@ func (s *Service) determineNextLearningStep(userID uint, courseID uint, userCour
 			MessageToUser: MsgCourseCompleted,
 		}, nil
 	}
+	return nil, nil // Not completed, or no error
+}
 
-	if totalWordsInCourse == 0 { // Empty course, already handled if progress was 0. If progress > 0 on empty course, it's an anomaly.
-		return &LearningContext{
-			UserID:        userID,
-			CourseID:      courseID,
-			UserProgress:  userCourse.Progress,
-			IsCourseEnded: true, MessageToUser: MsgCourseIsEmpty,
-		}, nil
-	}
+// --- Helper: Quiz Due Check ---
 
-	// Check if a quiz is due *at* the currentProgress point
-	// This means the user has just completed the words leading up to this quiz trigger point.
+func (s *Service) checkQuizDue(userID uint, courseID uint, userCourse *models.UserCourse) (*LearningContext, error) {
+	currentProgress := userCourse.Progress
 	if currentProgress > 0 && currentProgress%wordsPerQuizBlock == 0 {
+		// This is the check before fetching a word AT currentProgress. If a quiz is due AT currentProgress.
 		quizState, err := s.quizService.StartOrResumeQuiz(userID, courseID, currentProgress)
 		if err != nil {
 			return nil, fmt.Errorf("%w: checking quiz at progress %d: %w", ErrQuizIntegration, currentProgress, err)
 		}
 
-		MessageToUser := fmt.Sprintf(MsgQuizDueAfterBlockPromptFmt, wordsPerQuizBlock)
-		if quizState.CurrentQuestionNum != 0 {
-			MessageToUser = "😕"
+		messageToUser := fmt.Sprintf(MsgQuizDueAfterBlockPromptFmt, wordsPerQuizBlock)
+		if quizState.CurrentQuestionNum != 0 { // Quiz in progress
+			messageToUser = "ادامه آزمون... ✍️" // Or a more appropriate message
 		}
+
 		if quizState != nil && !quizState.IsCompleted {
 			return &LearningContext{
 				UserID:        userID,
@@ -140,45 +210,57 @@ func (s *Service) determineNextLearningStep(userID uint, courseID uint, userCour
 				UserProgress:  currentProgress,
 				IsQuizDue:     true,
 				QuizState:     quizState,
-				MessageToUser: MessageToUser,
+				MessageToUser: messageToUser,
 			}, nil
 		}
-		// If quiz for this block is already completed, user should be trying to access the word *after* this block.
-		// This case should be handled by progress already being currentProgress+1.
-		// If execution reaches here, it means we should try to present the word at currentProgress (if currentProgress is not also end of course).
+		// Quiz completed for this block. Logic should proceed to word after this block.
+		// This indicates that UserCourse.Progress should likely already be currentProgress + 1
+		// if the quiz for 'currentProgress' was just completed.
+		// If we are here, it implies the quiz is done and we're checking for the next thing.
 	}
+	return nil, nil // No quiz due, or no error
+}
 
-	// If no quiz is due, present the word at currentProgress
+// --- Helper: Word Presentation ---
+
+func (s *Service) presentNextWord(userID uint, courseID uint, userCourse *models.UserCourse) (*LearningContext, error) {
+	currentProgress := userCourse.Progress // This is the word index to fetch.
+
 	wordData, err := s.wordService.GetWordDetailsForCourse(courseID, currentProgress, userID)
 	if err != nil {
 		if errors.Is(err, word.ErrCourseWordLinkNotFound) || errors.Is(err, word.ErrWordNotFound) {
-			log.Printf("CourseService: Word not found for course %d at index %d. Considering end of course.", courseID, currentProgress)
-			// This means currentProgress is beyond the actual available words.
-			// This logic is similar to the (currentProgress > uint(totalWordsInCourse)) check.
+			log.Printf("CourseService: Word not found for course %d at index %d. Considering end of course (or gap in words).", courseID, currentProgress)
 			return &LearningContext{
-				UserID: userID, CourseID: courseID, UserProgress: currentProgress,
-				IsCourseEnded: true, MessageToUser: MsgEndOfAvailableWords,
+				UserID:        userID,
+				CourseID:      courseID,
+				UserProgress:  currentProgress,
+				IsCourseEnded: true, // Or maybe a specific "word not found" state?
+				MessageToUser: MsgEndOfAvailableWords,
 			}, nil
 		}
 		return nil, fmt.Errorf("%w: fetching word at progress %d: %w", ErrWordIntegration, currentProgress, err)
 	}
 
-	// Mark the word as studied (handlers used to do this implicitly, now CourseService can manage it)
-	// This could be optional, or based on user action. For now, let's assume seeing is studying.
-	// If WordService.MarkWordAsStudied is slow, consider doing it async or after sending message to user.
-	// If errMark := s.wordService.MarkWordAsStudied(userID, wordData.WordID, courseID); errMark != nil {
-	// 	log.Printf("CourseService: Failed to mark word %d as studied for user %d: %v", wordData.WordID, userID, errMark)
-	//     // Non-fatal for presenting the word, but log it.
-	// }
+	// The decision to MarkWordAsStudied when presenting vs. when advancing is important.
+	// Current AdvanceToNextWord marks the *previous* word. StartOrResume doesn't mark.
+	// If presenting means "seen", it could be marked here.
+	// However, explicit marking on "next" action is safer.
 
 	return &LearningContext{
-		UserID: userID, CourseID: courseID, UserProgress: currentProgress,
-		IsQuizDue: false, WordToDisplay: wordData,
+		UserID:        userID,
+		CourseID:      courseID,
+		UserProgress:  currentProgress,
+		IsQuizDue:     false,
+		WordToDisplay: wordData,
 		MessageToUser: MsgHereIsYourNextWord,
 	}, nil
 }
 
-// --- Public Methods ---
+//==============================================================================
+//  Public API Methods
+//==============================================================================
+
+// --- Course Information & User Progress Retrieval ---
 
 func (s *Service) ListAvailableCourses(userID uint) ([]CourseSummaryView, error) {
 	log.Printf("CourseService: ListAvailableCourses called for UserID: %d", userID)
@@ -277,6 +359,23 @@ func (s *Service) GetCourseOverview(courseID uint, userID uint) (*CourseOverview
 		ProgressPercentage: progressPercentage, IsCompletedByUser: isCompleted,
 	}, nil
 }
+
+func (s *Service) GetUserCourse(userID uint, courseID uint) (*models.UserCourse, error) {
+	log.Printf("CourseService: GetUserCourse called for UserID %d, CourseID %d", userID, courseID)
+	var uc models.UserCourse
+	err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Return a zero-value UserCourse and ErrUserCourseNotFound if strict about it
+			// Or return nil, ErrUserCourseNotFound
+			return nil, ErrUserCourseNotFound
+		}
+		return nil, fmt.Errorf("failed to get UserCourse for UserID %d, CourseID %d: %w", userID, courseID, err)
+	}
+	return &uc, nil
+}
+
+// --- Learning Session Lifecycle ---
 
 func (s *Service) StartOrResumeLearningSession(courseID uint, userID uint) (*LearningContext, error) {
 	log.Printf("CourseService: StartOrResumeLearningSession for CourseID: %d, UserID: %d", courseID, userID)
@@ -381,8 +480,8 @@ func (s *Service) AdvanceToNextWord(courseID uint, userID uint) (*LearningContex
 	return learningContext, nil
 }
 
-// HandleQuizCompletion is called by the handler after a quiz is finished.
-// It updates course progress if needed and determines the next learning step.
+// --- Quiz Result Processing ---
+
 func (s *Service) HandleQuizCompletion(userID uint, courseID uint, quizOutcome *quiz.QuizResult) (*LearningContext, error) {
 	log.Printf("CourseService: HandleQuizCompletion for UserID %d, CourseID %d. Quiz Passed: %t", userID, courseID, quizOutcome.Passed)
 
@@ -417,6 +516,8 @@ func (s *Service) HandleQuizCompletion(userID uint, courseID uint, quizOutcome *
 	}
 }
 
+// --- Direct User Progress Updates ---
+
 func (s *Service) UpdateUserCourseProgress(userID uint, courseID uint, newProgress uint) (*models.UserCourse, error) {
 	log.Printf("CourseService: UpdateUserCourseProgress UserID %d, CourseID %d, NewProgress %d", userID, courseID, newProgress)
 	var uc models.UserCourse
@@ -437,20 +538,5 @@ func (s *Service) UpdateUserCourseProgress(userID uint, courseID uint, newProgre
 		return nil, err
 	}
 	log.Printf("CourseService: Successfully updated progress for UserID %d, CourseID %d to %d.", userID, courseID, uc.Progress)
-	return &uc, nil
-}
-
-func (s *Service) GetUserCourse(userID uint, courseID uint) (*models.UserCourse, error) {
-	log.Printf("CourseService: GetUserCourse called for UserID %d, CourseID %d", userID, courseID)
-	var uc models.UserCourse
-	err := s.db.Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Return a zero-value UserCourse and ErrUserCourseNotFound if strict about it
-			// Or return nil, ErrUserCourseNotFound
-			return nil, ErrUserCourseNotFound
-		}
-		return nil, fmt.Errorf("failed to get UserCourse for UserID %d, CourseID %d: %w", userID, courseID, err)
-	}
 	return &uc, nil
 }
