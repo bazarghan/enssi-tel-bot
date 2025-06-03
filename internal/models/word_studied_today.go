@@ -9,6 +9,5 @@ type WordStudiedToday struct {
 	UserID   uint
 	WordID   uint
 	CourseID uint
-
-	point int
+	Point    int
 }
