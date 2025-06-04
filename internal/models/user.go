@@ -19,5 +19,6 @@ type User struct {
 	LastActive time.Time
 	LastOnline time.Time
 
-	LastMenu string `gorm:"type:varchar(100);not null;default:''"`
+	LastMenu                     string    `gorm:"type:varchar(100);not null;default:''"`
+	LastReviewSessionCompletedAt time.Time `gorm:"null;comment:Timestamp of the last completed mandatory review session"`
 }

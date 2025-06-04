@@ -11,3 +11,4 @@ type Word struct {
 	Lang  string `gorm:"not null"`
 	Title string `gorm:"not null"`
 }
+
