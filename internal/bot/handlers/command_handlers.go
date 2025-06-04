@@ -27,7 +27,7 @@ func HandleStartCommand(c telebot.Context, appServices *services.AppServices) er
 	reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)
 	if reviewErr != nil {
 		// Error already logged by CheckAndInitiateReview, send a generic message to user
-		return sendServiceError(c, "checking for daily review", reviewErr)
+		return SendServiceError(c, "checking for daily review", reviewErr)
 	}
 	if reviewHandled {
 		return nil // Review process has taken over
@@ -60,13 +60,13 @@ func HandleMyProfileCommand(c telebot.Context, appServices *services.AppServices
 		c.Sender().LastName,
 	)
 	if err != nil {
-		return sendServiceError(c, "fetching user for profile", err)
+		return SendServiceError(c, "fetching user for profile", err)
 	}
 
 	// Check for mandatory daily review
 	reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)
 	if reviewErr != nil {
-		return sendServiceError(c, "checking for daily review (profile)", reviewErr)
+		return SendServiceError(c, "checking for daily review (profile)", reviewErr)
 	}
 	if reviewHandled {
 		return nil // Review process has taken over
@@ -75,7 +75,7 @@ func HandleMyProfileCommand(c telebot.Context, appServices *services.AppServices
 	// Proceed with profile display
 	userProfileView, err := appServices.User().GetUserProfile(dbUser.ID)
 	if err != nil {
-		return sendServiceError(c, "fetching user profile data", err)
+		return SendServiceError(c, "fetching user profile data", err)
 	}
 
 	formattedProfile := formatters.FormatUserProfile(userProfileView)

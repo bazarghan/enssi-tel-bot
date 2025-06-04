@@ -139,7 +139,7 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 			nextLc, errHc := appServices.Course().HandleQuizCompletion(dbUser.ID, finalResult.CourseID, finalResult)
 			if errHc != nil {
 				log.Printf("[HandleQuizAnswerCallback] UserID %d, CourseID %d: Error in CourseService.HandleQuizCompletion: %v", dbUser.ID, finalResult.CourseID, errHc)
-				return sendServiceError(c, "handling course quiz completion", errHc)
+				return SendServiceError(c, "handling course quiz completion", errHc)
 			}
 			return sendLearningContext(c, nextLc, appServices)
 		}
@@ -215,13 +215,13 @@ func HandleCourseSelectionCallback(c telebot.Context, appServices *services.AppS
 
 	dbUser, err := appServices.User().GetOrCreateUserByTelegramID(c.Sender().ID, c.Sender().Username, c.Sender().FirstName, c.Sender().LastName)
 	if err != nil {
-		return sendServiceError(c, "identifying user for course selection", err)
+		return SendServiceError(c, "identifying user for course selection", err)
 	}
 
 	// Check for mandatory daily review
 	reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)
 	if reviewErr != nil {
-		return sendServiceError(c, "checking for daily review (course selection)", reviewErr)
+		return SendServiceError(c, "checking for daily review (course selection)", reviewErr)
 	}
 	if reviewHandled {
 		// If review was handled, it might have sent messages.
@@ -260,4 +260,3 @@ func HandleCourseSelectionCallback(c telebot.Context, appServices *services.AppS
 
 	return displayCourseOverview(c, dbUser.ID, courseID, appServices)
 }
-

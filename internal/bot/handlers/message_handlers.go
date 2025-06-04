@@ -26,13 +26,13 @@ func HandleTextMessage(c telebot.Context, appServices *services.AppServices) err
 		c.Sender().LastName,
 	)
 	if err != nil {
-		return sendServiceError(c, "identifying user (text message)", err)
+		return SendServiceError(c, "identifying user (text message)", err)
 	}
 
 	// Check for mandatory daily review FIRST for any text message interaction
 	reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)
 	if reviewErr != nil {
-		return sendServiceError(c, "checking for daily review (text message)", reviewErr)
+		return SendServiceError(c, "checking for daily review (text message)", reviewErr)
 	}
 	if reviewHandled {
 		return nil // Review process has taken over
@@ -123,7 +123,7 @@ func HandleStartLearningJourney(c telebot.Context, userID uint, appServices *ser
 
 	courses, err := appServices.Course().ListAvailableCourses(userID)
 	if err != nil {
-		return sendServiceError(c, "listing available courses", err)
+		return SendServiceError(c, "listing available courses", err)
 	}
 
 	if len(courses) == 0 {
@@ -149,7 +149,7 @@ func displayCourseOverview(c telebot.Context, userID uint, courseID uint, appSer
 		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, course.ErrCourseNotFound) {
 			return c.Send("دوره مورد نظر یافت نشد.", keyboards.MainMenu)
 		}
-		return sendServiceError(c, fmt.Sprintf("getting overview for course %d", courseID), err)
+		return SendServiceError(c, fmt.Sprintf("getting overview for course %d", courseID), err)
 	}
 
 	formattedOverview := formatters.FormatCourseOverview(courseOverview)
@@ -173,7 +173,7 @@ func handleStartOrResumeCourse(c telebot.Context, userID uint, courseID uint, ap
 		if errors.Is(err, course.ErrCourseNotFound) {
 			return c.Send("دوره مورد نظر برای شروع یافت نشد.", keyboards.MainMenu)
 		}
-		return sendServiceError(c, fmt.Sprintf("starting/resuming course %d", courseID), err)
+		return SendServiceError(c, fmt.Sprintf("starting/resuming course %d", courseID), err)
 	}
 	return sendLearningContext(c, learningContext, appServices)
 }
@@ -199,7 +199,7 @@ func HandleAdvanceWord(c telebot.Context, userID uint, courseID uint, appService
 		// If learningContext is not nil but there was an error (e.g., word formatting failed but context exists),
 		// sendLearningContext might still be able to show something or an error message from the context.
 		if learningContext == nil {
-			return sendServiceError(c, fmt.Sprintf("advancing to next word in course %d", courseID), err)
+			return SendServiceError(c, fmt.Sprintf("advancing to next word in course %d", courseID), err)
 		}
 	}
 	// sendLearningContext will handle nil lc or lc with error messages.
