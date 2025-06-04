@@ -8,8 +8,10 @@ import (
 
 // Callback Data Prefixes
 const (
-	CourseSelectCallbackPrefix = "cs:"       // cs:<course_id>
+	CourseSelectCallbackPrefix = "cs:"       // cs:<course_id> - DEPRECATED if using CourseDetailsCallbackPrefix
 	QuizAnswerCallbackPrefix   = "quiz_ans:" // quiz_ans:<attempt_ID>:<option_ID>
+	// Example for a new callback type if needed:
+	// ReviewActionCallbackPrefix = "rev_action:"
 )
 
 // User state values for `LastMenu` (base states)
@@ -18,14 +20,16 @@ const (
 	StateCourseList        = "course_list"
 	StateCourseDetailsBase = "course_details" // Base for "course_details:<id>"
 	StateInCourseBase      = "in_course"      // Base for "in_course:<id>"
-	StateInQuizBase        = "in_quiz"        // Base for "in_quiz:<id>"
+	StateInQuizBase        = "in_quiz"        // Base for "in_quiz:<attempt_id>" - for course block quizzes
+	StateInReviewQuiz      = "in_review_quiz" // Base for "in_review_quiz:<attempt_id>" - for review quizzes
 )
 
 // Prefixes for parsing states with IDs
 const (
 	StateCourseDetailsPrefix = StateCourseDetailsBase + ":"
 	StateInCoursePrefix      = StateInCourseBase + ":"
-	StateInQuizPrefix        = StateInQuizBase + ":"
+	StateInQuizPrefix        = StateInQuizBase + ":"   // For regular quizzes
+	StateInReviewQuizPrefix  = StateInReviewQuiz + ":" // For review quizzes
 )
 
 // Functions to generate full state strings
@@ -37,8 +41,14 @@ func InCourseMenuState(courseID uint) string {
 	return StateInCoursePrefix + strconv.FormatUint(uint64(courseID), 10)
 }
 
+// InQuizMenuState now takes attemptID for course quizzes
 func InQuizMenuState(attemptID uint) string {
 	return StateInQuizPrefix + strconv.FormatUint(uint64(attemptID), 10)
+}
+
+// InReviewQuizMenuState for review quizzes
+func InReviewQuizMenuState(attemptID uint) string {
+	return StateInReviewQuizPrefix + strconv.FormatUint(uint64(attemptID), 10)
 }
 
 // ParseIDFromState extracts an ID from a menu state string given a prefix.
@@ -48,9 +58,10 @@ func ParseIDFromState(menuState string, prefix string) (uint, error) {
 		return 0, fmt.Errorf("invalid menu state format: expected prefix '%s', got '%s'", prefix, menuState)
 	}
 	idStr := strings.TrimPrefix(menuState, prefix)
-	id, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.ParseUint(idStr, 10, 32) // Assuming IDs fit in uint32
 	if err != nil {
 		return 0, fmt.Errorf("invalid ID in menu state '%s': %w", menuState, err)
 	}
 	return uint(id), nil
 }
+

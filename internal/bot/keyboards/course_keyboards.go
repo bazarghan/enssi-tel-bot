@@ -7,68 +7,50 @@ import (
 )
 
 // CourseListKeyboard generates a reply keyboard listing available courses.
-// Each course title button will be handled by a text handler.
 func CourseListKeyboard(courses []course.CourseSummaryView) *telebot.ReplyMarkup {
-	menu := &telebot.ReplyMarkup{ResizeKeyboard: true, OneTimeKeyboard: true} // OneTimeKeyboard might be good here
+	menu := &telebot.ReplyMarkup{ResizeKeyboard: true, OneTimeKeyboard: true}
 
-	rows := make([]telebot.Row, 0, len(courses)+1)
+	rows := make([]telebot.Row, 0, len(courses)+1) // +1 for the main menu button
 	for _, c := range courses {
-		// Button text combines Title (and PersianTitle if significantly different or for clarity)
-		// User selects based on this text.
 		btnText := c.PersianTitle
-		if c.Title != "" && c.Title != c.PersianTitle {
-			btnText = fmt.Sprintf("%s (%s)", c.PersianTitle, c.Title)
-		}
 		rows = append(rows, menu.Row(menu.Text(btnText)))
 	}
-	rows = append(rows, menu.Row(BtnReturnToMainMenu)) // Shared button from keyboards.go
+	rows = append(rows, menu.Row(BtnReturnToMainMenu))
 	menu.Reply(rows...)
 	return menu
 }
 
+// Constants for callback prefixes and button actions
 const (
-	BtnStartCoursePrefix        = "شروع دوره:"      // For button text, payload contains ID
-	BtnContinueCoursePrefix     = "ادامه دوره:"     // For button text, payload contains ID
-	BtnViewCoursePrefix         = "مشاهده دوره:"    // Payload contains ID (alternative to full text match for selection)
-	CourseDetailsCallbackPrefix = "course_details:" // course_details:<course_id>
-	BtnNextWordAction           = "کلمه بعدی"
+	CourseDetailsCallbackPrefix = "course_details:"
 )
 
 // CourseDetailsKeyboard generates reply keyboard for course overview.
-// progressPercentage: <0 means not started, 0-100 for started/in progress.
 func CourseDetailsKeyboard(courseID uint, progressPercentage int, isCompleted bool) *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 
-	// These are reply buttons, their text will be matched by text handlers.
-	// The callback data pattern is more for inline buttons, but shown for conceptual clarity.
-	// The actual handler for these text buttons will need to parse the courseID from user's LastMenu or context.
-	// For simplicity with text handlers, we can just use generic text and derive courseID from state.
-
-	// Let's make the buttons simpler for text matching and rely on user.LastMenu for courseID context.
-	var simpleActionText string
+	var actionButtonText string
 	if isCompleted {
-		simpleActionText = "مرور دوره" // Review Course
-	} else if progressPercentage >= 0 {
-		simpleActionText = fmt.Sprintf("ادامه دوره (%d%%)", progressPercentage) // Continue Course (X%)
+		actionButtonText = ReviewCourseButtonText
+	} else if progressPercentage > 0 {
+		actionButtonText = fmt.Sprintf("%s (%d%%)", ContinueCourseButtonText, progressPercentage)
 	} else {
-		simpleActionText = "شروع دوره" // Start Course
+		actionButtonText = StartCourseButtonText
 	}
 
 	menu.Reply(
-		menu.Row(menu.Text(simpleActionText)), // This text will be handled
-		menu.Row(BtnReturnToMainMenu),         // Text for "Return to Course List" or "Return to Main Menu"
-		// If you want "Return to Course List", define a new button and handler.
-		// For now, BtnReturnToMainMenu will take them to the absolute main menu.
-		// A "BackToCourseList" button would be: menu.Text("بازگشت به لیست دوره‌ها")
+		menu.Row(menu.Text(actionButtonText)),
+		menu.Row(BtnReturnToMainMenu),
 	)
 	return menu
 }
 
+// InCourseNavigationKeyboard provides navigation within a course (e.g., next word).
 func InCourseNavigationKeyboard() *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 	menu.Reply(
-		menu.Row(menu.Text(BtnNextWordAction)),
-		menu.Row(BtnReturnToMainMenu), // Or a more contextual "Exit Course" button
+		menu.Row(menu.Text(NextWordButtonText)),
+		menu.Row(BtnReturnToMainMenu),
 	)
 	return menu
 }
@@ -77,20 +59,23 @@ func InCourseNavigationKeyboard() *telebot.ReplyMarkup {
 func CourseCompletedKeyboard() *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 	menu.Reply(
-		menu.Row(BtnReturnToMainMenu), // Or "Back to Course List"
+		menu.Row(BtnReturnToMainMenu),
 	)
 	return menu
 }
 
-// Helper to generate callback data for selecting a course from an inline list
+// Helper to generate callback data for selecting a course from an INLINE list
 func CourseSelectionCallbackData(courseID uint) string {
-	return fmt.Sprintf("%s%d", BtnViewCoursePrefix, courseID)
+	return fmt.Sprintf("%s%d", CourseDetailsCallbackPrefix, courseID)
 }
 
-// InlineCourseListKeyboard (Optional, if you prefer inline for course selection)
+// InlineCourseListKeyboard (Example if you were to use inline keyboards for course listing)
 func InlineCourseListKeyboard(courses []course.CourseSummaryView) *telebot.ReplyMarkup {
+	// Create a new ReplyMarkup for an inline keyboard.
+	// The actual inline keyboard is built by adding telebot.InlineButton elements.
 	markup := &telebot.ReplyMarkup{}
-	rows := make([]telebot.Row, 0, len(courses))
+
+	var inlineKeyboardRows [][]telebot.InlineButton // A slice of button rows
 
 	for _, c := range courses {
 		btnText := c.PersianTitle
@@ -99,18 +84,26 @@ func InlineCourseListKeyboard(courses []course.CourseSummaryView) *telebot.Reply
 		} else if c.IsCompletedByUser {
 			btnText = fmt.Sprintf("%s (تکمیل شده)", btnText)
 		}
-		rows = append(rows, markup.Row(markup.Data(btnText, CourseSelectionCallbackData(c.ID))))
+
+		// Create an inline button
+		inlineBtn := telebot.InlineButton{
+			Unique: CourseDetailsCallbackPrefix + fmt.Sprintf("%d", c.ID), // Unique identifier for the button
+			Text:   btnText,
+			Data:   CourseSelectionCallbackData(c.ID), // Callback data
+		}
+		// Add the button as a new row (each button on its own row for this example)
+		inlineKeyboardRows = append(inlineKeyboardRows, []telebot.InlineButton{inlineBtn})
 	}
-	// markup.Inline(rows...) // This would create an inline keyboard
-	// For now, sticking to ReplyKeyboards as per original structure.
-	// If you want to switch, uncomment markup.Inline(rows...) and ensure handlers for BtnViewCoursePrefix exist.
-	return markup // Placeholder if not used as inline.
+
+	// Set the InlineKeyboard field of the markup
+	markup.InlineKeyboard = inlineKeyboardRows
+	return markup
 }
 
-// Constants for course-related button texts that might be matched directly.
+// Constants for course-related button texts that might be matched directly by text handlers.
 const (
 	StartCourseButtonText      = "شروع دوره"
-	ContinueCourseButtonText   = "ادامه دوره" // Often with % appended
+	ContinueCourseButtonText   = "ادامه دوره"
 	ReviewCourseButtonText     = "مرور دوره"
 	NextWordButtonText         = "کلمه بعدی"
 	BackToCourseListButtonText = "بازگشت به لیست دوره‌ها"

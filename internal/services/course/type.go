@@ -26,12 +26,12 @@ var (
 const (
 	wordsPerQuizBlock = 12 // Example value
 
-	MsgCourseNoContent     = "این دوره محتوایی ندارد. 🤷‍♂️"
-	MsgCourseCompleted     = "تبریک! 🎉 شما این دوره را با موفقیت به پایان رساندید."
-	MsgCourseIsEmpty       = "این دوره خالی است. 📂"
-	MsgEndOfAvailableWords = "شما به پایان کلمات موجود رسیده‌اید. 🏁"
-	MsgHereIsYourNextWord  = "کلمه بعدی شما اینجاست: 👇"
-
+	MsgCourseNoContent            = "این دوره محتوایی ندارد. 🤷‍♂️"
+	MsgCourseCompleted            = "تبریک! 🎉 شما این دوره را با موفقیت به پایان رساندید."
+	MsgCourseIsEmpty              = "این دوره خالی است. 📂"
+	MsgEndOfAvailableWords        = "شما به پایان کلمات موجود رسیده‌اید. 🏁"
+	MsgHereIsYourNextWord         = "کلمه بعدی شما اینجاست: 👇"
+	msgResumeActiveQuiz           = "شما یک آزمون نیمه‌تمام برای این بخش دارید. ادامه می‌دهیم..."
 	MsgFinalQuizForBlockPrompt    = "شما دوازده کلمه این بخش را کامل کرده‌اید. وقت آزمون نهایی است! 🧐"
 	MsgQuizDueAfterBlockPromptFmt = "شما %d کلمه در این بخش مطالعه کرده‌اید. وقت آزمون است! 🤓"
 )

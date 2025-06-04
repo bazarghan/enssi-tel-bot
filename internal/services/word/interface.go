@@ -1,5 +1,7 @@
 package word
 
+import "time"
+
 // WordService defines the interface for word-related operations.
 type WordService interface {
 	// GetWordDetailsForCourse retrieves and prepares a specific word from a course for display.
@@ -10,9 +12,13 @@ type WordService interface {
 	CacheTelegramFileIDForPronunciation(pronunciationID uint, telegramFileID string) error
 
 	// CacheTelegramFileIDForCourseWordImage updates a CourseWord model with Telegram File IDs for its image.
-	CacheTelegramFileIDForCourseWordImage(courseWordID uint, imageFileID string, imageDocFileID string) error // Assuming CourseWord has a direct ID
+	CacheTelegramFileIDForCourseWordImage(courseWordID uint, imageFileID string, imageDocFileID string) error
 
-	// MarkWordAsStudied records that a user has studied a specific word in a course context.
 	MarkWordAsStudied(userID uint, wordID uint, courseID uint) error
-}
 
+	// UpdateWordReviewSchedule updates the spaced repetition schedule for a word based on review performance.
+	UpdateWordReviewSchedule(userID uint, wordID uint, wasCorrect bool) error
+
+	// GetWordsDueForReview retrieves all WordStudied records for a user that are due for review by 'now'.
+	GetWordsDueForReview(userID uint, now time.Time) ([]WordStudiedView, error) // Changed return type
+}

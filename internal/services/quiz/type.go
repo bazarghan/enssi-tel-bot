@@ -19,31 +19,36 @@ var (
 	ErrFinalization            = errors.New("quiz service: failed to finalize quiz attempt")
 	ErrCourseInteraction       = errors.New("quiz service: failed to interact with course service for progress update")
 	ErrInvalidInput            = errors.New("quiz service: invalid input provided")
+	ErrWordServiceInteraction  = errors.New("quiz service: failed to interact with word service")
 )
 
 // --- Quiz Specific Constants ---
-
 const (
-	// These should ideally come from a configuration shared or app config.
-	quizPassThresholdCorrectAnswers = 9
-	wordsPerQuizBlock               = 12 // Used to calculate reset progress
+	quizPassThresholdCorrectAnswers = 9 // For course block quizzes
+	wordsPerQuizBlock               = 12
 	quizDefaultQuestionCount        = 12
+	reviewQuizMaxOptions            = 4 // Number of options for a review quiz question (1 correct + 3 distractors)
 
 	// User Messages
 	msgResumeActiveQuiz     = "شما یک آزمون نیمه‌تمام برای این بخش دارید. ادامه می‌دهیم..."
 	msgQuizTime             = "🎉 زمان آزمون! (برای کلمات تا شماره %d)"
+	msgReviewQuizTime       = "📝 وقت مرور کلمات! آماده‌ای؟"
 	msgQuizNoQuestions      = "این آزمون سوالی ندارد. لطفا به ادمین اطلاع دهید."
 	msgQuizAlreadyCompleted = "این آزمون قبلا تکمیل شده است."
 	msgInvalidQuestionNum   = "خطا در شماره سوال، آزمون پایان می‌یابد."
 	msgStartNewQuizDefault  = "🎉 شروع آزمون جدید! (برای کلمات تا %d)"
+	msgStartNewReviewQuiz   = "🚀 شروع جلسه مرور!"
 	msgResumeQuizDefault    = "ادامه آزمون..."
 	msgQuizPassed           = "\n🎉 تبریک! شما آزمون را با موفقیت گذراندید."
+	msgReviewQuizPassed     = "\n👍 مرور عالی بود!" // Simpler message for review quiz pass
 	msgQuizFailed           = "\n😔 متاسفانه حد نصاب قبولی (%d پاسخ صحیح) را کسب نکردید."
+	msgReviewQuizFailed     = "\nعیبی نداره، بعضی کلمات نیاز به تمرین بیشتر دارن." // Simpler for review
 	msgQuizFinished         = "🏁 آزمون تمام شد!\n\nشما به %d سوال از %d سوال پاسخ صحیح دادید."
+	msgReviewQuizFinished   = "🏁 جلسه مرور تمام شد!\n\nشما به %d سوال از %d سوال پاسخ صحیح دادید."
 	msgReviewHeader         = "\n\n📝 مرور سوالات:\n"
 	msgReviewQuestion       = "\n%d. سوال: %s\n"
-	msgReviewUserAnswer     = "   شما پاسخ دادید: %s (%s)\n"
-	msgReviewCorrectAnswer  = "   پاسخ صحیح: %s\n"
+	msgReviewUserAnswer     = "   شما پاسخ دادید: %s (%s)\n"
+	msgReviewCorrectAnswer  = "   پاسخ صحیح: %s\n"
 	msgReviewNotAnswered    = "پاسخ نداده"
 	msgCorrectMarker        = "✅"
 	msgIncorrectMarker      = "❌"
@@ -56,7 +61,8 @@ type QuizState struct {
 	AttemptID                uint
 	QuizID                   uint
 	UserID                   uint
-	CourseID                 uint
+	CourseID                 uint // May be 0 for review quizzes
+	QuizType                 models.QuizType
 	IsCompleted              bool // True if this call determined the quiz is already complete
 	CurrentQuestionNum       int  // 0-indexed
 	TotalQuestionsInQuiz     uint
@@ -72,7 +78,8 @@ type AnswerSubmissionResult struct {
 	AttemptID                uint
 	QuizID                   uint
 	UserID                   uint
-	CourseID                 uint
+	CourseID                 uint // May be 0 for review quizzes
+	QuizType                 models.QuizType
 	IsQuizNowCompleted       bool
 	NextQuestionState        *QuizState  // Populated if quiz is not completed
 	FinalQuizResult          *QuizResult // Populated if quiz is completed
@@ -83,12 +90,13 @@ type QuizResult struct {
 	AttemptID            uint
 	QuizID               uint
 	UserID               uint
-	CourseID             uint // Course ID is important here
+	CourseID             uint // May be 0 for review quizzes
+	QuizType             models.QuizType
 	Score                int
 	TotalQuestions       int
-	Passed               bool
+	Passed               bool // For review quizzes, "Passed" might just mean completed. SRS handles actual learning.
 	ReviewText           string
 	ResultMessage        string
-	ShouldResetProgress  bool // True if user failed and progress should be reset
-	SuggestedNewProgress uint // The progress value the user should be reset to
+	ShouldResetProgress  bool // True if user failed a COURSE_BLOCK quiz and progress should be reset
+	SuggestedNewProgress uint // The progress value the user should be reset to (for COURSE_BLOCK)
 }

@@ -2,7 +2,7 @@ package word
 
 import (
 	"errors"
-	// "yourproject/internal/models" // Only if types here directly embed full models
+	"time"
 )
 
 // --- Service-Specific Errors ---
@@ -15,6 +15,7 @@ var (
 	ErrFileCacheFailed        = errors.New("word service: failed to cache Telegram file ID")
 	ErrMarkStudiedFailed      = errors.New("word service: failed to mark word as studied")
 	ErrInvalidInput           = errors.New("word service: invalid input provided")
+	ErrWordStudiedNotFound    = errors.New("word service: word studied record not found for user and word")
 )
 
 // --- Data Transfer Objects (DTOs) / View Models ---
@@ -39,4 +40,15 @@ type PronunciationData struct {
 	Region          string
 	TelegramVoiceID string // Existing Telegram File ID
 	AudioURL        string // Fallback URL to download if File ID not available
+}
+
+// WordStudiedView is a DTO for words due for review.
+// It includes the WordID and any other info needed by QuizService to create a review question.
+type WordStudiedView struct {
+	UserID             uint
+	WordID             uint
+	WordTitle          string    // Title of the word for quick reference or display
+	NextReviewAt       time.Time // For information or sorting, if needed by caller
+	ReviewIntervalDays uint      // Current interval
+	// Add other fields if QuizService needs them for question generation for this word.
 }

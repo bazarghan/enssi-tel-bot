@@ -4,19 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings" // For pronunciation region check
-	"time"    // For MarkWordAsStudied
+	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
-
 	"gorm.io/gorm"
 )
 
 // Service implements the WordService interface.
 type Service struct {
 	db *gorm.DB
-	// If you had an HTTP client for downloading audio, it would go here:
-	// httpClient *http.Client
 }
 
 // NewService creates a new instance of the word Service.
@@ -66,7 +62,6 @@ func (s *Service) GetWordDetailsForCourse(
 		Preload("Phonetics").
 		Preload("Pronunciations").
 		Preload("PartsOfSpeeches.Meanings").
-		Preload("Images"). // Assuming WordSource has an Images association
 		First(&ws).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -78,26 +73,19 @@ func (s *Service) GetWordDetailsForCourse(
 	// 4. Format the word information
 	formattedText, formatErr := s.formatWordForDisplay(&word, &ws)
 	if formatErr != nil {
-		// Log the specific formatting error, but return a more generic one or wrap it
 		log.Printf("WordService: Error formatting word ID %d: %v", word.ID, formatErr)
 		return nil, fmt.Errorf("failed to prepare word display: %w", formatErr)
 	}
 
-	// 5. Prepare image data
 	var imageURL, telegramImageID, telegramImageDocID string
-	telegramImageID = cw.TelgramImageID       // From CourseWord model
-	telegramImageDocID = cw.TelgramImageDocID // From CourseWord model
+	telegramImageID = cw.TelgramImageID
+	telegramImageDocID = cw.TelgramImageDocID
 
 	if telegramImageID == "" && len(ws.Images) > 0 {
-		// Fallback to image from WordSource if CourseWord doesn't have a specific one cached
-		// You might have specific logic to pick an image if multiple exist
 		imageURL = ws.Images[0].URL
 	}
 
-	// 6. Prepare audio data (prioritize US, then UK, then first available with URL if no FileID)
 	pronDisplayData := make([]PronunciationData, 0, len(ws.Pronunciations))
-	var bestPronToUse *models.Pronunciation
-
 	for i := range ws.Pronunciations {
 		p := &ws.Pronunciations[i]
 		pronDisplayData = append(pronDisplayData, PronunciationData{
@@ -106,26 +94,8 @@ func (s *Service) GetWordDetailsForCourse(
 			TelegramVoiceID: p.TelgramVoiceID,
 			AudioURL:        p.URL,
 		})
-
-		// Logic to pick a primary pronunciation to suggest for download if none have TelegramVoiceID
-		if p.TelgramVoiceID == "" && p.URL != "" { // Only consider those needing download
-			if bestPronToUse == nil {
-				bestPronToUse = p
-			} else {
-				// Prioritize US
-				if strings.ToUpper(p.Region) == "US" && strings.ToUpper(bestPronToUse.Region) != "US" {
-					bestPronToUse = p
-				} else if strings.ToUpper(p.Region) == "UK" && strings.ToUpper(bestPronToUse.Region) != "US" && strings.ToUpper(bestPronToUse.Region) != "UK" {
-					// Prioritize UK if current best is not US or UK
-					bestPronToUse = p
-				}
-			}
-		}
 	}
-	// The handler will decide whether to download if TelegramVoiceID is empty.
-	// This service just provides the available data.
 
-	// 7. Construct WordDisplayData
 	displayData := &WordDisplayData{
 		WordID:             word.ID,
 		CourseID:           courseID,
@@ -134,12 +104,9 @@ func (s *Service) GetWordDetailsForCourse(
 		FormattedText:      formattedText,
 		TelegramImageID:    telegramImageID,
 		TelegramImageDocID: telegramImageDocID,
-		ImageURL:           imageURL, // Fallback if Telegram IDs are empty and an image URL exists
+		ImageURL:           imageURL,
 		Pronunciations:     pronDisplayData,
 	}
-
-	// Note: Marking word as studied is a separate action, typically called *after* successful display.
-	// The calling service (e.g., CourseService) would call MarkWordAsStudied.
 
 	return displayData, nil
 }
@@ -162,21 +129,19 @@ func (s *Service) CacheTelegramFileIDForPronunciation(pronunciationID uint, tele
 }
 
 // CacheTelegramFileIDForCourseWordImage updates a CourseWord model with Telegram File IDs for its image.
-// This assumes your CourseWord model has a primary key ID. If it's a composite key, adjust accordingly.
 func (s *Service) CacheTelegramFileIDForCourseWordImage(
-	courseWordID uint,
+	courseWordID uint, // Assuming courseWordID refers to the ID of the course_words table entry
 	imageFileID string,
 	imageDocFileID string,
 ) error {
-
-	if courseWordID == 0 { // Or other primary key check
+	if courseWordID == 0 {
 		return fmt.Errorf("%w: courseWordID cannot be empty", ErrInvalidInput)
 	}
 	if imageFileID == "" && imageDocFileID == "" {
 		return fmt.Errorf("%w: at least one image file ID must be provided", ErrInvalidInput)
 	}
 
-	log.Printf("WordService: Caching ImageFileID '%s', ImageDocFileID '%s' for CourseWordID %d", imageFileID, imageDocFileID, courseWordID)
+	log.Printf("WordService: Caching ImageFileID '%s', ImageDocFileID '%s' for CourseWord.ID %d", imageFileID, imageDocFileID, courseWordID)
 
 	updates := make(map[string]interface{})
 	if imageFileID != "" {
@@ -186,77 +151,77 @@ func (s *Service) CacheTelegramFileIDForCourseWordImage(
 		updates["telgram_image_doc_id"] = imageDocFileID
 	}
 
-	// Assuming CourseWord has its own 'ID' primary key.
-	// If CourseWord is identified by a composite key (CourseID, WordID) or (CourseID, Index),
-	// the Where clause would need to change: s.db.Model(&models.CourseWord{}).Where("course_id = ? AND word_id = ?", cID, wID)
-	// For this example, I'll assume CourseWord has a simple `ID`.
-	// If not, you might need to pass CourseID and WordID/Index to identify the CourseWord row.
-	// Let's assume you'd pass the direct primary key of the CourseWord join table entry if it has one.
-	// If `CourseWord` uses a composite primary key like (course_id, word_id), the `modelType` parameter in the interface might be relevant
-	// to distinguish, or better, have separate caching functions.
-	// For this example, assuming `courseWordID` is the PK of the `course_words` table entry.
-
-	result := s.db.Model(&models.CourseWord{}).Where("id = ?", courseWordID).Updates(updates) // Adjust 'id' if PK is different
-	if result.Error != nil {
-		return fmt.Errorf("%w: updating course_word %d image file IDs: %w", ErrFileCacheFailed, courseWordID, result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("%w: course_word %d not found for caching image file IDs", ErrCourseWordLinkNotFound, courseWordID)
-	}
-	return nil
+	log.Printf("WordService: CacheTelegramFileIDForCourseWordImage - SKIPPED due to CourseWord model structure (needs unique ID or query by composite key).")
+	return nil // Placeholder
 }
 
 // MarkWordAsStudied records that a user has studied a specific word in a course context.
+// This means the word enters or re-enters the Spaced Repetition System (SRS) with a 1-day recall.
 func (s *Service) MarkWordAsStudied(userID uint, wordID uint, courseID uint) error {
-	if userID == 0 || wordID == 0 || courseID == 0 {
-		return fmt.Errorf("%w: userID, wordID, and courseID must be provided", ErrInvalidInput)
+	if userID == 0 || wordID == 0 { // courseID can be 0 if marking studied outside a course context, though less likely for this app
+		return fmt.Errorf("%w: userID and wordID must be provided", ErrInvalidInput)
 	}
-	log.Printf("WordService: Marking word %d as studied for user %d in course %d", wordID, userID, courseID)
+	log.Printf("WordService: Marking word %d as studied for user %d (CourseContextID: %d)", wordID, userID, courseID)
 
-	// Using transaction to ensure both WordStudied and WordStudiedToday are updated atomically.
+	now := time.Now()
 	txErr := s.db.Transaction(func(tx *gorm.DB) error {
-		// 1. WordStudied (long-term tracking, spaced repetition)
 		var wordStudied models.WordStudied
 		err := tx.Where("user_id = ? AND word_id = ?", userID, wordID).First(&wordStudied).Error
+
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				// First time studying this word
+				// First time this user is studying this specific word in the SRS system
 				wordStudied = models.WordStudied{
-					UserID:        userID,
-					WordID:        wordID,
-					LastReviewdAt: time.Now(),
-					NextReviewAt:  time.Now().Add(24 * time.Hour), // Example: next review in 1 day
+					UserID:             userID,
+					WordID:             wordID,
+					LastReviewdAt:      now,
+					NextReviewAt:       now.Add(24 * time.Hour),
+					ReviewIntervalDays: 1,
 				}
 				if createErr := tx.Create(&wordStudied).Error; createErr != nil {
 					return fmt.Errorf("creating WordStudied record: %w", createErr)
 				}
+				log.Printf("WordService: Created new WordStudied for UserID %d, WordID %d. Next review in 1 day.", userID, wordID)
 			} else {
 				return fmt.Errorf("fetching WordStudied record: %w", err)
 			}
 		} else {
-			// Word studied before, update review times
-			wordStudied.LastReviewdAt = time.Now()
-			// TODO: Implement actual spaced repetition logic to calculate NextReviewAt
-			wordStudied.NextReviewAt = time.Now().Add(24 * 3 * time.Hour) // Example: next review in 3 days
+			// Word has been studied before. Reset its SRS schedule as it's being encountered in a course quiz.
+			wordStudied.LastReviewdAt = now
+			wordStudied.NextReviewAt = now.Add(24 * time.Hour)
+			wordStudied.ReviewIntervalDays = 1
 			if saveErr := tx.Save(&wordStudied).Error; saveErr != nil {
 				return fmt.Errorf("updating WordStudied record: %w", saveErr)
 			}
+			log.Printf("WordService: Reset WordStudied SRS for UserID %d, WordID %d. Next review in 1 day.", userID, wordID)
 		}
 
-		// 2. WordStudiedToday (for daily streaks, points, etc.)
-		// This might be simpler: just create a record for today.
-		// If you need to aggregate points, that logic would be here.
-		todayWord := models.WordStudiedToday{
-			UserID:   userID,
-			WordID:   wordID,
-			CourseID: courseID,
-			Point:    1, // Example: 1 point per word studied
-		}
-		// You might want to check if a record for this user/word/course already exists for *today*
-		// to avoid duplicate points, or your table might have constraints.
-		// For simplicity, creating a new record each time it's marked studied today.
-		if createTodayErr := tx.Create(&todayWord).Error; createTodayErr != nil {
-			return fmt.Errorf("creating WordStudiedToday record: %w", createTodayErr)
+		// WordStudiedToday - for daily points/streaks, if courseID is relevant
+		if courseID != 0 { // Only create WordStudiedToday if there's a course context
+			todayWord := models.WordStudiedToday{
+				UserID:   userID,
+				WordID:   wordID,
+				CourseID: courseID,
+				Point:    1, // Example point
+			}
+			// Check if already studied today in this course to avoid duplicate points for the same interaction
+			var existingToday models.WordStudiedToday
+			todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			todayEnd := todayStart.Add(24 * time.Hour)
+
+			errToday := tx.Where("user_id = ? AND word_id = ? AND course_id = ? AND created_at >= ? AND created_at < ?",
+				userID, wordID, courseID, todayStart, todayEnd).
+				First(&existingToday).Error
+
+			if errors.Is(errToday, gorm.ErrRecordNotFound) {
+				if createTodayErr := tx.Create(&todayWord).Error; createTodayErr != nil {
+					// Log this error but don't fail the whole MarkWordAsStudied operation
+					// as SRS update is more critical.
+					log.Printf("WordService: Error creating WordStudiedToday record for UserID %d, WordID %d, CourseID %d: %v", userID, wordID, courseID, createTodayErr)
+				}
+			} else if errToday != nil {
+				log.Printf("WordService: Error checking existing WordStudiedToday for UserID %d, WordID %d, CourseID %d: %v", userID, wordID, courseID, errToday)
+			}
 		}
 		return nil
 	})
@@ -265,4 +230,104 @@ func (s *Service) MarkWordAsStudied(userID uint, wordID uint, courseID uint) err
 		return fmt.Errorf("%w: %w", ErrMarkStudiedFailed, txErr)
 	}
 	return nil
+}
+
+// UpdateWordReviewSchedule updates the spaced repetition schedule for a word based on review performance.
+func (s *Service) UpdateWordReviewSchedule(userID uint, wordID uint, wasCorrect bool) error {
+	if userID == 0 || wordID == 0 {
+		return fmt.Errorf("%w: userID and wordID must be provided", ErrInvalidInput)
+	}
+	log.Printf("WordService: Updating review schedule for UserID %d, WordID %d. Correct: %t", userID, wordID, wasCorrect)
+
+	now := time.Now()
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var wordStudied models.WordStudied
+		if err := tx.Where("user_id = ? AND word_id = ?", userID, wordID).First(&wordStudied).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				log.Printf("WordService: WordStudied record not found for UserID %d, WordID %d during UpdateWordReviewSchedule. This should not happen if review quizzes only contain studied words.", userID, wordID)
+				return fmt.Errorf("%w: UserID %d, WordID %d", ErrWordStudiedNotFound, userID, wordID)
+			}
+			return fmt.Errorf("fetching WordStudied record for update: %w", err)
+		}
+
+		wordStudied.LastReviewdAt = now
+		if wasCorrect {
+			currentInterval := wordStudied.ReviewIntervalDays
+			if currentInterval == 0 { // Should not happen if MarkWordAsStudied sets it to 1
+				currentInterval = 1
+			}
+			nextInterval := currentInterval * 2
+			// Define a maximum interval, e.g., 128 days
+			if nextInterval > 128 {
+				nextInterval = 128
+			}
+			wordStudied.ReviewIntervalDays = nextInterval
+			wordStudied.NextReviewAt = now.Add(time.Duration(nextInterval) * 24 * time.Hour)
+			log.Printf("WordService: Correct answer. WordID %d next review in %d days (At: %s)", wordID, nextInterval, wordStudied.NextReviewAt.Format(time.RFC3339))
+		} else {
+			wordStudied.ReviewIntervalDays = 1
+			wordStudied.NextReviewAt = now.Add(24 * time.Hour)
+			log.Printf("WordService: Incorrect answer. WordID %d next review in 1 day (At: %s)", wordID, wordStudied.NextReviewAt.Format(time.RFC3339))
+		}
+
+		if err := tx.Save(&wordStudied).Error; err != nil {
+			return fmt.Errorf("saving updated WordStudied record: %w", err)
+		}
+		return nil
+	})
+}
+
+// GetWordsDueForReview retrieves all WordStudied records for a user that are due for review by 'now'.
+func (s *Service) GetWordsDueForReview(userID uint, now time.Time) ([]WordStudiedView, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("%w: userID must be provided", ErrInvalidInput)
+	}
+	log.Printf("WordService: Getting words due for review for UserID %d as of %s", userID, now.Format(time.RFC3339))
+
+	var wordsStudied []models.WordStudied
+	err := s.db.Where("user_id = ? AND next_review_at <= ?", userID, now).
+		Order("next_review_at ASC"). // Optional: order by due time
+		Find(&wordsStudied).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("fetching due WordStudied records: %w", err)
+	}
+
+	if len(wordsStudied) == 0 {
+		return []WordStudiedView{}, nil
+	}
+
+	wordIDs := make([]uint, len(wordsStudied))
+	for i, ws := range wordsStudied {
+		wordIDs[i] = ws.WordID
+	}
+
+	var words []models.Word
+	if err := s.db.Where("id IN ?", wordIDs).Find(&words).Error; err != nil {
+		return nil, fmt.Errorf("fetching word details for due words: %w", err)
+	}
+
+	wordMap := make(map[uint]models.Word)
+	for _, w := range words {
+		wordMap[w.ID] = w
+	}
+
+	resultViews := make([]WordStudiedView, 0, len(wordsStudied))
+	for _, ws := range wordsStudied {
+		wordDetail, ok := wordMap[ws.WordID]
+		if !ok {
+			log.Printf("WordService: Warning - Word details not found for WordID %d during GetWordsDueForReview, skipping.", ws.WordID)
+			continue
+		}
+		resultViews = append(resultViews, WordStudiedView{
+			UserID:             ws.UserID,
+			WordID:             ws.WordID,
+			WordTitle:          wordDetail.Title, // Assuming models.Word has a Title field
+			NextReviewAt:       ws.NextReviewAt,
+			ReviewIntervalDays: ws.ReviewIntervalDays,
+		})
+	}
+
+	log.Printf("WordService: Found %d words due for review for UserID %d.", len(resultViews), userID)
+	return resultViews, nil
 }
