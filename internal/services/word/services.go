@@ -28,7 +28,12 @@ func NewService(db *gorm.DB) *Service {
 var _ WordService = (*Service)(nil)
 
 // GetWordDetailsForCourse retrieves and prepares a specific word from a course for display.
-func (s *Service) GetWordDetailsForCourse(courseID uint, courseWordIndex uint, userID uint) (*WordDisplayData, error) {
+func (s *Service) GetWordDetailsForCourse(
+	courseID uint,
+	courseWordIndex uint,
+	userID uint,
+) (*WordDisplayData, error) {
+
 	log.Printf("WordService: GetWordDetailsForCourse called for CourseID: %d, Index: %d, UserID: %d", courseID, courseWordIndex, userID)
 
 	if courseID == 0 || courseWordIndex == 0 {
@@ -158,7 +163,12 @@ func (s *Service) CacheTelegramFileIDForPronunciation(pronunciationID uint, tele
 
 // CacheTelegramFileIDForCourseWordImage updates a CourseWord model with Telegram File IDs for its image.
 // This assumes your CourseWord model has a primary key ID. If it's a composite key, adjust accordingly.
-func (s *Service) CacheTelegramFileIDForCourseWordImage(courseWordID uint, imageFileID string, imageDocFileID string) error {
+func (s *Service) CacheTelegramFileIDForCourseWordImage(
+	courseWordID uint,
+	imageFileID string,
+	imageDocFileID string,
+) error {
+
 	if courseWordID == 0 { // Or other primary key check
 		return fmt.Errorf("%w: courseWordID cannot be empty", ErrInvalidInput)
 	}

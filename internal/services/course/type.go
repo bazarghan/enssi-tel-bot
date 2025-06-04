@@ -11,12 +11,16 @@ var (
 	ErrCourseNotFound         = errors.New("course service: course not found")
 	ErrUserCourseNotFound     = errors.New("course service: user progress in this course not found")
 	ErrCourseCompleted        = errors.New("course service: all words in this course have been studied")
-	ErrEnrollmentFailed       = errors.New("course service: failed to enroll user in course")
-	ErrProgressUpdateFailed   = errors.New("course service: failed to update user progress")
 	ErrInvalidCourseData      = errors.New("course service: invalid course data provided")
 	ErrQuizIntegration        = errors.New("course service: error interacting with quiz service")
 	ErrWordIntegration        = errors.New("course service: error interacting with word service")
 	ErrCannotAdvanceNoSession = errors.New("course service: cannot advance, no active learning session or course progress found")
+
+	ErrProgressUpdateFailed  = errors.New("course service: failed to update user progress")
+	ErrEnrollmentFailed      = errors.New("course service: failed to enroll user in course")
+	ErrUserCourseQueryFailed = errors.New("course service: database query for user course failed")
+	ErrTotalWordCountFailed  = errors.New("course service: failed to count the total word in course")
+	ErrCourseFetchFailed     = errors.New("course service: faied to fetch courses")
 )
 
 const (

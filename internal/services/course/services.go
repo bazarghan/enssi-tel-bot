@@ -58,7 +58,13 @@ func (s *Service) getOrCreateUserCourseInternal(
 			}
 			isNew = true
 		} else {
-			return nil, false, fmt.Errorf("failed to fetch UserCourse (UID %d, CID %d): %w", userID, courseID, err)
+			return nil, false, fmt.Errorf(
+				"%w (UID %d, CID %d): %w",
+				ErrUserCourseQueryFailed,
+				userID,
+				courseID,
+				err,
+			)
 		}
 	}
 	return &uc, isNew, nil
@@ -69,7 +75,7 @@ func (s *Service) getOrCreateUserCourseInternal(
 func (s *Service) getTotalWordsInCourseInternal(courseID uint) (int64, error) {
 	var totalWords int64
 	if err := s.db.Model(&models.CourseWord{}).Where("course_id = ?", courseID).Count(&totalWords).Error; err != nil {
-		return 0, fmt.Errorf("failed to count total words for course %d: %w", courseID, err)
+		return 0, fmt.Errorf("%w %d: %w", ErrTotalWordCountFailed, courseID, err)
 	}
 	return totalWords, nil
 }
@@ -189,7 +195,12 @@ func (s *Service) checkCourseCompletion(
 
 // --- Helper: Quiz Due Check ---
 
-func (s *Service) checkQuizDue(userID uint, courseID uint, userCourse *models.UserCourse) (*LearningContext, error) {
+func (s *Service) checkQuizDue(
+	userID uint,
+	courseID uint,
+	userCourse *models.UserCourse,
+) (*LearningContext, error) {
+
 	currentProgress := userCourse.Progress
 	if currentProgress > 0 && currentProgress%wordsPerQuizBlock == 0 {
 		// This is the check before fetching a word AT currentProgress. If a quiz is due AT currentProgress.
@@ -213,17 +224,19 @@ func (s *Service) checkQuizDue(userID uint, courseID uint, userCourse *models.Us
 				MessageToUser: messageToUser,
 			}, nil
 		}
-		// Quiz completed for this block. Logic should proceed to word after this block.
-		// This indicates that UserCourse.Progress should likely already be currentProgress + 1
-		// if the quiz for 'currentProgress' was just completed.
-		// If we are here, it implies the quiz is done and we're checking for the next thing.
+
 	}
 	return nil, nil // No quiz due, or no error
 }
 
 // --- Helper: Word Presentation ---
 
-func (s *Service) presentNextWord(userID uint, courseID uint, userCourse *models.UserCourse) (*LearningContext, error) {
+func (s *Service) presentNextWord(
+	userID uint,
+	courseID uint,
+	userCourse *models.UserCourse,
+) (*LearningContext, error) {
+
 	currentProgress := userCourse.Progress // This is the word index to fetch.
 
 	wordData, err := s.wordService.GetWordDetailsForCourse(courseID, currentProgress, userID)
@@ -240,11 +253,6 @@ func (s *Service) presentNextWord(userID uint, courseID uint, userCourse *models
 		}
 		return nil, fmt.Errorf("%w: fetching word at progress %d: %w", ErrWordIntegration, currentProgress, err)
 	}
-
-	// The decision to MarkWordAsStudied when presenting vs. when advancing is important.
-	// Current AdvanceToNextWord marks the *previous* word. StartOrResume doesn't mark.
-	// If presenting means "seen", it could be marked here.
-	// However, explicit marking on "next" action is safer.
 
 	return &LearningContext{
 		UserID:        userID,
@@ -266,7 +274,7 @@ func (s *Service) ListAvailableCourses(userID uint) ([]CourseSummaryView, error)
 	log.Printf("CourseService: ListAvailableCourses called for UserID: %d", userID)
 	var courses []models.Course
 	if err := s.db.Order("id ASC").Find(&courses).Error; err != nil { // Added Order for consistency
-		return nil, fmt.Errorf("failed to fetch courses: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrCourseFetchFailed, err)
 	}
 
 	summaries := make([]CourseSummaryView, 0, len(courses))
@@ -482,7 +490,12 @@ func (s *Service) AdvanceToNextWord(courseID uint, userID uint) (*LearningContex
 
 // --- Quiz Result Processing ---
 
-func (s *Service) HandleQuizCompletion(userID uint, courseID uint, quizOutcome *quiz.QuizResult) (*LearningContext, error) {
+func (s *Service) HandleQuizCompletion(
+	userID uint,
+	courseID uint,
+	quizOutcome *quiz.QuizResult,
+) (*LearningContext, error) {
+
 	log.Printf("CourseService: HandleQuizCompletion for UserID %d, CourseID %d. Quiz Passed: %t", userID, courseID, quizOutcome.Passed)
 
 	if !quizOutcome.Passed && quizOutcome.ShouldResetProgress {

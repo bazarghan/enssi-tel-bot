@@ -29,7 +29,12 @@ var _ QuizService = (*Service)(nil)
 
 // --- Private Helper Methods for Quiz Creation ---
 
-func (s *Service) findActiveQuizAttemptForBlockInternal(userID uint, courseID uint, progressAtBlockEnd uint) (*models.QuizAttempt, error) {
+func (s *Service) findActiveQuizAttemptForBlockInternal(
+	userID uint,
+	courseID uint,
+	progressAtBlockEnd uint,
+) (*models.QuizAttempt, error) {
+
 	var attempt models.QuizAttempt
 	err := s.db.Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
 		Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ?",
@@ -645,4 +650,3 @@ func (s *Service) UpdateQuizAttemptMessageID(attemptID uint, messageID int) erro
 	}
 	return nil
 }
-
