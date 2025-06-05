@@ -13,4 +13,6 @@ type Course struct {
 	PersianTitle       string `gorm:"not null;check:length(title) >= 2"`
 	Description        string
 	PersianDescription string
+
+	LinkedAchievementID uint `gorm:"null;comment:ID of an Achievement linked to this course's progression"`
 }
