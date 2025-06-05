@@ -83,6 +83,24 @@ func (s *Service) GetUserProfile(userID uint) (*UserProfileView, error) {
 		return nil, ErrProfileNotFound
 	}
 
+	// ---> START OF CALCULATIONS <---
+
+	// Calculate WordsStudied
+	var wordsStudiedCount int64 // GORM's Count returns int64
+	if err := s.db.Model(&models.WordStudied{}).Where("user_id = ?", userID).Count(&wordsStudiedCount).Error; err != nil {
+		log.Printf("UserService: Error counting words studied for UserID %d: %v", userID, err)
+		// Decide how to handle this error: return error, or proceed with 0, or log and proceed.
+		// For now, let's log and proceed, wordsStudiedCount will remain 0 if there's an error.
+	}
+
+	// Calculate CoursesActive
+	var userCourses []models.UserCourse
+	if err := s.db.Where("user_id = ?", userID).Find(&userCourses).Error; err != nil {
+		log.Printf("UserService: Error fetching user courses for UserID %d: %v", userID, err)
+	}
+	activeCoursesCount := len(userCourses)
+	// ---> END OF CALCULATIONS <---
+
 	profileView := UserProfileView{
 		UserID:        user.ID,
 		Username:      user.Profile.Username,
@@ -90,8 +108,8 @@ func (s *Service) GetUserProfile(userID uint) (*UserProfileView, error) {
 		LastName:      user.Profile.LastName,
 		DateOfBirth:   nil,
 		Score:         user.Profile.Score,
-		WordsStudied:  0,
-		CoursesActive: 0,
+		WordsStudied:  int(wordsStudiedCount),
+		CoursesActive: activeCoursesCount,
 		// this is just place holder later ToDo fix this part
 		Achievements: make([]AchievementView, 0, len(user.Profile.Achievements)),
 	}

@@ -129,6 +129,27 @@ func sendWordDisplay(c telebot.Context, wordData *word.WordDisplayData, wordServ
 		}
 	}
 
+	// ---> ADD THIS NEW BLOCK FOR SENDING THE IMAGE AS A DOCUMENT <---
+	if wordData.TelegramImageDocID != "" {
+		log.Printf("[ViewHelper INFO] UserID %d, WordID %d: Attempting to send image as document using FileID: %s", c.Sender().ID, wordData.WordID, wordData.TelegramImageDocID)
+		// Send the image as a document
+		docToSend := &telebot.Document{
+			File: telebot.File{FileID: wordData.TelegramImageDocID},
+			// You can add a Caption here if you want, e.g., wordData.Title
+		}
+		if err := c.Send(docToSend); err != nil {
+			log.Printf("[ViewHelper WARN] UserID %d, WordID %d: Sending cached image document (FileID: %s) failed: %v.", c.Sender().ID, wordData.WordID, wordData.TelegramImageDocID, err)
+			// Optional: Fallback logic if you also have a URL specifically for the document version
+			// and want to send it via URL if the FileID fails, then cache the new FileID.
+			// For now, we'll just handle sending by existing FileID.
+		} else {
+			log.Printf("[ViewHelper INFO] UserID %d, WordID %d: Successfully sent image document with FileID: %s", c.Sender().ID, wordData.WordID, wordData.TelegramImageDocID)
+		}
+	} else {
+		log.Printf("[ViewHelper INFO] UserID %d, WordID %d: No TelegramImageDocID available to send image as document.", c.Sender().ID, wordData.WordID)
+	}
+	// ---> END OF NEW BLOCK <---
+
 	if imageFileIDToCache != "" || imageDocFileIDToCache != "" {
 		// The interface for CacheTelegramFileIDForCourseWordImage is (courseWordID uint, imageFileID string, imageDocFileID string)
 		// Assuming courseWordID here refers to the actual WordID for the purpose of this cache operation.
