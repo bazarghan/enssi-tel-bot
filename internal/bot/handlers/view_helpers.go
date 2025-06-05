@@ -215,7 +215,14 @@ func sendQuizQuestion(c telebot.Context, qs *quiz.QuizState, quizService quiz.Qu
 
 // editPreviousMessage edits a previously sent message.
 // Changed newMarkup type to *telebot.ReplyMarkup
-func editPreviousMessage(c telebot.Context, chatID int64, messageIDStr string, newText string, newMarkup *telebot.ReplyMarkup) {
+func editPreviousMessage(
+	c telebot.Context,
+	chatID int64,
+	messageIDStr string,
+	newText string, // Caller should ensure this is MarkdownV2 escaped if sending as Markdown
+	newReplyMarkup *telebot.ReplyMarkup,
+) {
+
 	if messageIDStr == "" || chatID == 0 {
 		log.Printf("[ViewHelper WARN] editPreviousMessage: messageIDStr or chatID is empty/zero. Cannot edit.")
 		return
@@ -228,22 +235,29 @@ func editPreviousMessage(c telebot.Context, chatID int64, messageIDStr string, n
 	}
 
 	editable := &telebot.Message{ID: messageID, Chat: &telebot.Chat{ID: chatID}}
-	var opts []interface{} // Use []interface{} for SendOptions
 
-	if newMarkup != nil {
-		opts = append(opts, newMarkup)
+	if newReplyMarkup != nil {
+		// Case 1: A newReplyMarkup is provided.
+		_, errMd := c.Bot().Edit(editable, newText, telebot.ModeMarkdownV2, newReplyMarkup)
+		if errMd != nil {
+			log.Printf("[ViewHelper WARN] Failed to edit message with MarkdownV2 (and new markup) (ChatID: %d, MsgID: %d). Error: %v. Text: %s. Trying plain text.", chatID, messageID, errMd, newText)
+			// Fallback: Try to edit with plain text and the newReplyMarkup.
+			// If newText was MarkdownV2 escaped, it will be sent as is here.
+			// Consider unescaping newText if you want a cleaner plain text fallback.
+			if _, errPlain := c.Bot().Edit(editable, newText, newReplyMarkup); errPlain != nil {
+				log.Printf("[ViewHelper WARN] Failed to edit message with plain text (and new markup) (ChatID: %d, MsgID: %d). Error: %v.", chatID, messageID, errPlain)
+			}
+		}
 	} else {
-		// To remove markup, pass an empty ReplyMarkup with RemoveKeyboard: true
-		opts = append(opts, &telebot.ReplyMarkup{RemoveKeyboard: true})
-	}
-	// Always try MarkdownV2 first
-	mdOpts := append(opts, telebot.ModeMarkdownV2)
-
-	if _, err := c.Bot().Edit(editable, newText, mdOpts...); err != nil {
-		log.Printf("[ViewHelper WARN] Failed to edit message (ChatID: %d, MsgID: %d) as MarkdownV2. Error: %v. Text: %s. Trying plain text.", chatID, messageID, err, newText)
-		// Fallback to plain text editing if MarkdownV2 fails
-		if _, errPlain := c.Bot().Edit(editable, newText, opts...); errPlain != nil { // opts without ModeMarkdownV2
-			log.Printf("[ViewHelper WARN] Failed to edit message (ChatID: %d, MsgID: %d) as PLAIN TEXT. Error: %v.", chatID, messageID, errPlain)
+		// Case 2: newReplyMarkup is nil.
+		_, errMd := c.Bot().Edit(editable, newText, telebot.ModeMarkdownV2)
+		if errMd != nil {
+			log.Printf("[ViewHelper WARN] Failed to edit message with MarkdownV2 (text-only) (ChatID: %d, MsgID: %d). Error: %v. Text: %s. Trying plain text.", chatID, messageID, errMd, newText)
+			// Fallback: Try to edit with plain text only.
+			// If newText was MarkdownV2 escaped, it will be sent as is here.
+			if _, errPlain := c.Bot().Edit(editable, newText); errPlain != nil {
+				log.Printf("[ViewHelper WARN] Failed to edit message with plain text (text-only) (ChatID: %d, MsgID: %d). Error: %v.", chatID, messageID, errPlain)
+			}
 		}
 	}
 }

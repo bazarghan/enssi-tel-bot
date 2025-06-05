@@ -187,11 +187,11 @@ func (s *Service) checkQuizDue(
 	courseID uint,
 	userCourse *models.UserCourse,
 ) (*LearningContext, error) {
+
 	currentProgress := userCourse.Progress
 	if currentProgress > 1 {
-		wordsCompleted := currentProgress - 1
-		if wordsCompleted > 0 && wordsCompleted%wordsPerQuizBlock == 0 {
-			quizTriggerPoint := wordsCompleted
+		if currentProgress > 0 && currentProgress%wordsPerQuizBlock == 0 {
+			quizTriggerPoint := currentProgress
 			quizState, err := s.quizService.StartOrResumeQuiz(userID, courseID, quizTriggerPoint)
 			if err != nil {
 				return nil, fmt.Errorf("%w: checking quiz at progress %d (trigger %d): %w", ErrQuizIntegration, currentProgress, quizTriggerPoint, err)
@@ -224,8 +224,9 @@ func (s *Service) presentNextWord(
 	courseID uint,
 	userCourse *models.UserCourse,
 ) (*LearningContext, error) {
+
 	currentProgress := userCourse.Progress
-	wordData, err := s.wordService.GetWordDetailsForCourse(courseID, currentProgress, userID)
+	wordData, err := s.wordService.GetWordDetailsForCourse(courseID, currentProgress+1, userID)
 	if err != nil {
 		if errors.Is(err, word.ErrCourseWordLinkNotFound) || errors.Is(err, word.ErrWordNotFound) {
 			log.Printf("CourseService: Word not found for course %d at index %d. UserID %d. Considering end of available words.", courseID, currentProgress, userID)
@@ -271,7 +272,11 @@ func (s *Service) ListAvailableCourses(userID uint) ([]CourseSummaryView, error)
 		progressPercentage := 0
 		wordsActuallyCompleted := uint(0)
 		if uc.ID != 0 && uc.Progress > 0 {
-			wordsActuallyCompleted = uc.Progress - 1
+			wordsActuallyCompleted = uc.Progress
+		}
+		isStartedByUser := false
+		if uc.ID != 0 {
+			isStartedByUser = true
 		}
 
 		if totalWords > 0 {
@@ -292,12 +297,15 @@ func (s *Service) ListAvailableCourses(userID uint) ([]CourseSummaryView, error)
 		}
 
 		summaries = append(summaries, CourseSummaryView{
-			ID: course.ID, Title: course.Title, PersianTitle: course.PersianTitle,
+			ID:                 course.ID,
+			Title:              course.Title,
+			PersianTitle:       course.PersianTitle,
 			ShortDescription:   course.Description,
 			TotalWords:         totalWords,
 			UserProgressWords:  wordsActuallyCompleted,
 			ProgressPercentage: progressPercentage,
 			IsCompletedByUser:  isCompleted,
+			IsStartedByUser:    isStartedByUser,
 		})
 	}
 	return summaries, nil
@@ -321,7 +329,11 @@ func (s *Service) GetCourseOverview(courseID uint, userID uint) (*CourseOverview
 	progressPercentage := 0
 	wordsActuallyCompleted := uint(0)
 	if uc.ID != 0 && uc.Progress > 0 {
-		wordsActuallyCompleted = uc.Progress - 1
+		wordsActuallyCompleted = uc.Progress
+	}
+	isStartedByUser := false
+	if uc.ID != 0 {
+		isStartedByUser = true
 	}
 
 	if totalWords > 0 {
@@ -342,10 +354,16 @@ func (s *Service) GetCourseOverview(courseID uint, userID uint) (*CourseOverview
 	}
 
 	return &CourseOverview{
-		ID: course.ID, Title: course.Title, PersianTitle: course.PersianTitle,
-		FullDescription: course.Description, PersianFullDescription: course.PersianDescription,
-		TotalWords: totalWords, UserProgressWords: wordsActuallyCompleted,
-		ProgressPercentage: progressPercentage, IsCompletedByUser: isCompleted,
+		ID:                     course.ID,
+		Title:                  course.Title,
+		PersianTitle:           course.PersianTitle,
+		FullDescription:        course.Description,
+		PersianFullDescription: course.PersianDescription,
+		TotalWords:             totalWords,
+		UserProgressWords:      wordsActuallyCompleted,
+		ProgressPercentage:     progressPercentage,
+		IsCompletedByUser:      isCompleted,
+		IsStartedByUser:        isStartedByUser,
 	}, nil
 }
 
@@ -367,7 +385,7 @@ func (s *Service) StartOrResumeLearningSession(courseID uint, userID uint) (*Lea
 	var learningContext *LearningContext
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		uc, isNewUc, errUc := s.getOrCreateUserCourseInternal(tx, userID, courseID)
+		uc, _, errUc := s.getOrCreateUserCourseInternal(tx, userID, courseID)
 		if errUc != nil {
 			return errUc
 		}
@@ -375,18 +393,6 @@ func (s *Service) StartOrResumeLearningSession(courseID uint, userID uint) (*Lea
 		totalWords, errTw := s.getTotalWordsInCourseInternal(courseID)
 		if errTw != nil {
 			return errTw
-		}
-
-		if isNewUc || uc.Progress == 0 {
-			if totalWords > 0 {
-				uc.Progress = 1
-				if errSave := tx.Save(uc).Error; errSave != nil {
-					return fmt.Errorf("%w: setting initial progress for UserID %d, CourseID %d: %w", ErrProgressUpdateFailed, userID, courseID, errSave)
-				}
-				log.Printf("CourseService: Set initial progress for UserID %d, CourseID %d to 1.", userID, courseID)
-			} else {
-				log.Printf("CourseService: Course %d is empty. UserID %d progress remains 0.", courseID, userID)
-			}
 		}
 
 		nextStep, errNext := s.determineNextLearningStep(userID, courseID, uc, totalWords)
@@ -403,6 +409,7 @@ func (s *Service) StartOrResumeLearningSession(courseID uint, userID uint) (*Lea
 }
 
 func (s *Service) AdvanceToNextWord(courseID uint, userID uint) (*LearningContext, error) {
+
 	log.Printf("CourseService: AdvanceToNextWord for CourseID: %d, UserID: %d", courseID, userID)
 	var learningContext *LearningContext
 
@@ -422,9 +429,20 @@ func (s *Service) AdvanceToNextWord(courseID uint, userID uint) (*LearningContex
 
 		uc.Progress++
 		if errSave := tx.Save(uc).Error; errSave != nil {
-			return fmt.Errorf("%w: advancing progress for UserID %d, CourseID %d: %w", ErrProgressUpdateFailed, userID, courseID, errSave)
+			return fmt.Errorf(
+				"%w: advancing progress for UserID %d, CourseID %d: %w",
+				ErrProgressUpdateFailed,
+				userID,
+				courseID,
+				errSave,
+			)
 		}
-		log.Printf("CourseService: Advanced progress for UserID %d, CourseID %d to %d.", userID, courseID, uc.Progress)
+		log.Printf(
+			"CourseService: Advanced progress for UserID %d, CourseID %d to %d.",
+			userID,
+			courseID,
+			uc.Progress,
+		)
 
 		nextStep, errNext := s.determineNextLearningStep(userID, courseID, uc, totalWords)
 		if errNext != nil {
@@ -445,7 +463,14 @@ func (s *Service) HandleQuizCompletion(
 	courseID uint,
 	quizOutcome *quiz.QuizResult,
 ) (*LearningContext, error) {
-	log.Printf("CourseService: HandleQuizCompletion for UserID %d, CourseID %d. Quiz Type: %s, Passed: %t", userID, courseID, quizOutcome.QuizType, quizOutcome.Passed)
+
+	log.Printf(
+		"CourseService: HandleQuizCompletion for UserID %d, CourseID %d. Quiz Type: %s, Passed: %t",
+		userID,
+		courseID,
+		quizOutcome.QuizType,
+		quizOutcome.Passed,
+	)
 
 	if quizOutcome.QuizType == models.QuizTypeReview {
 		log.Printf("CourseService: Review quiz (ID: %d) completed for UserID %d. No course progress change.", quizOutcome.QuizID, userID)
@@ -467,7 +492,13 @@ func (s *Service) HandleQuizCompletion(
 		}
 
 		if quizOutcome.Passed {
-			log.Printf("CourseService: COURSE_BLOCK Quiz (ID %d) passed for UserID %d, CourseID %d.", quizOutcome.QuizID, userID, courseID)
+
+			log.Printf(
+				"CourseService: COURSE_BLOCK Quiz (ID %d) passed for UserID %d, CourseID %d.",
+				quizOutcome.QuizID,
+				userID,
+				courseID,
+			)
 
 			quizBlockEndIndex := completedQuizModels.TriggerProgress // Use TriggerProgress from the fetched Quiz model
 			quizBlockStartIndex := uint(1)
@@ -490,8 +521,18 @@ func (s *Service) HandleQuizCompletion(
 					}
 				}
 			}
-			log.Printf("CourseService: Quiz passed. Determining next step from current progress for UserID %d, CourseID %d.", userID, courseID)
-			return s.StartOrResumeLearningSession(courseID, userID)
+
+			log.Printf("CourseService: Quiz passed. Directly presenting next word for UserID %d, CourseID %d.", userID, courseID)
+
+			// Fetch the most up-to-date UserCourse record to get the current progress.
+			uc, err := s.GetUserCourse(userID, courseID)
+			if err != nil {
+				log.Printf("CourseService: Failed to get UserCourse for UserID %d, CourseID %d after quiz pass: %v", userID, courseID, err)
+				// Fallback to StartOrResumeLearningSession if we can't get the user course.
+				return s.StartOrResumeLearningSession(courseID, userID)
+			}
+
+			return s.presentNextWord(userID, courseID, uc)
 
 		} else {
 			log.Printf("CourseService: COURSE_BLOCK Quiz (ID %d) failed for UserID %d, CourseID %d.", quizOutcome.QuizID, userID, courseID)
@@ -531,4 +572,3 @@ func (s *Service) UpdateUserCourseProgress(userID uint, courseID uint, newProgre
 	log.Printf("CourseService: Successfully updated progress for UserID %d, CourseID %d to %d.", userID, courseID, uc.Progress)
 	return &uc, nil
 }
-

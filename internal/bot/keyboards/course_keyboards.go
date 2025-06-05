@@ -26,13 +26,19 @@ const (
 )
 
 // CourseDetailsKeyboard generates reply keyboard for course overview.
-func CourseDetailsKeyboard(courseID uint, progressPercentage int, isCompleted bool) *telebot.ReplyMarkup {
+func CourseDetailsKeyboard(
+	courseID uint,
+	progressPercentage int,
+	userHasProgressRecord bool,
+	isCompleted bool,
+) *telebot.ReplyMarkup {
+
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 
 	var actionButtonText string
 	if isCompleted {
 		actionButtonText = ReviewCourseButtonText
-	} else if progressPercentage > 0 {
+	} else if userHasProgressRecord {
 		actionButtonText = fmt.Sprintf("%s (%d%%)", ContinueCourseButtonText, progressPercentage)
 	} else {
 		actionButtonText = StartCourseButtonText

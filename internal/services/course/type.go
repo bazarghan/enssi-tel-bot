@@ -46,6 +46,7 @@ type CourseSummaryView struct {
 	UserProgressWords  uint
 	ProgressPercentage int
 	IsCompletedByUser  bool
+	IsStartedByUser    bool
 }
 
 // CourseOverview provides detailed information about a course for a specific user.
@@ -59,6 +60,7 @@ type CourseOverview struct {
 	UserProgressWords      uint
 	ProgressPercentage     int
 	IsCompletedByUser      bool
+	IsStartedByUser        bool
 }
 
 // LearningContext represents the current state when a user is actively learning in a course.

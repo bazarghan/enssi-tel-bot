@@ -32,19 +32,15 @@ var _ QuizService = (*Service)(nil)
 
 // --- Private Helper Methods for Quiz Creation ---
 
-// createQuestionInternal generates a question for a given word (from course or review).
-// For review quizzes, wordToReview is non-nil. For course quizzes, courseID and wordCourseIndex are used.
 func (s *Service) createQuestionInternal(
 	tx *gorm.DB,
 	quizID uint,
-	wordID uint, // The ID of the word this question is about
-	questionTextSeed string, // Typically the word's title
-	courseID uint, // Optional: 0 if not a course-specific context (e.g. for global distractors)
-	distractorSourceIndices []uint, // Optional: indices of words in a course block for distractors
+	wordID uint,
+	questionTextSeed string,
+	courseID uint,
+	distractorSourceIndices []uint,
 ) error {
 	localRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	// Fetch the primary word for the question
 	var questionWord models.Word
 	if err := tx.First(&questionWord, wordID).Error; err != nil {
 		return fmt.Errorf("createQuestion: failed to fetch word (ID: %d) for question: %w", wordID, err)
@@ -61,8 +57,7 @@ func (s *Service) createQuestionInternal(
 	var allMeanings []string
 	for _, pos := range questionWS.PartsOfSpeeches {
 		for _, m := range pos.Meanings {
-			// Prefer Persian meanings if available, otherwise English
-			if strings.TrimSpace(m.Title) != "" && (m.Lang == "fa" || m.Lang == "en" || m.Lang == "") {
+			if strings.TrimSpace(m.Title) != "" && (m.Lang == "Fa" || m.Lang == "En" || m.Lang == "") {
 				allMeanings = append(allMeanings, m.Title)
 			}
 		}
@@ -79,8 +74,8 @@ func (s *Service) createQuestionInternal(
 
 	newQuestion := models.QuizQuestion{
 		QuizID: quizID,
-		Text:   questionTextSeed, // Use the provided seed (e.g., word title)
-		WordID: wordID,           // Link question to the word
+		Text:   questionTextSeed,
+		WordID: wordID,
 	}
 	if err := tx.Create(&newQuestion).Error; err != nil {
 		return fmt.Errorf("failed to create quiz question entry: %w", err)
@@ -91,18 +86,13 @@ func (s *Service) createQuestionInternal(
 		return fmt.Errorf("failed to create correct quiz option: %w", err)
 	}
 
-	// --- Distractor Generation ---
-	numDistractorsNeeded := reviewQuizMaxOptions - 1 // e.g., 3
+	numDistractorsNeeded := reviewQuizMaxOptions - 1
 	var potentialDistractorMeanings []string
-
-	// Strategy 1: Use distractorSourceIndices if provided (for course quizzes)
 	if courseID != 0 && len(distractorSourceIndices) > 0 {
 		for _, poolWordIdx := range distractorSourceIndices {
-			// Skip if it's the current question's word index (though wordID is the primary check now)
-			// This logic might need adjustment if distractorSourceIndices refers to actual WordIDs
 			var poolCW models.CourseWord
 			if err := tx.Where("course_id = ? AND index = ?", courseID, poolWordIdx).First(&poolCW).Error; err == nil {
-				if poolCW.WordID == wordID { // Don't use the same word for distractors
+				if poolCW.WordID == wordID {
 					continue
 				}
 				var poolWord models.Word
@@ -112,7 +102,6 @@ func (s *Service) createQuestionInternal(
 						for _, pos := range poolWS.PartsOfSpeeches {
 							for _, m := range pos.Meanings {
 								trimmed := strings.TrimSpace(m.Title)
-								// Add if it's a valid meaning and not the correct answer for the current question
 								if trimmed != "" && trimmed != correctMeaningText {
 									potentialDistractorMeanings = append(potentialDistractorMeanings, trimmed)
 								}
@@ -124,12 +113,9 @@ func (s *Service) createQuestionInternal(
 		}
 	}
 
-	// Strategy 2: If not enough distractors, fetch random words from DB (primarily for review quizzes)
 	if len(potentialDistractorMeanings) < numDistractorsNeeded {
 		var randomWords []models.Word
-		// Fetch more words than needed to increase chances of getting unique meanings
-		// Exclude the current question's word ID
-		err := tx.Not("id = ?", wordID).Order(gorm.Expr("RANDOM()")).Limit(numDistractorsNeeded * 2).Find(&randomWords).Error
+		err := tx.Not("id = ?", wordID).Order(gorm.Expr("RANDOM()")).Limit(numDistractorsNeeded * 3).Find(&randomWords).Error // Fetch more for better variety
 		if err == nil {
 			for _, rWord := range randomWords {
 				var rWS models.WordSource
@@ -154,7 +140,7 @@ func (s *Service) createQuestionInternal(
 	})
 
 	seenDistractors := make(map[string]bool)
-	seenDistractors[correctMeaningText] = true // Don't pick the correct answer as a distractor
+	seenDistractors[correctMeaningText] = true
 	distractorsCreated := 0
 	for _, meaning := range potentialDistractorMeanings {
 		if distractorsCreated >= numDistractorsNeeded {
@@ -173,16 +159,14 @@ func (s *Service) createQuestionInternal(
 
 	if distractorsCreated < numDistractorsNeeded {
 		log.Printf("Warning: created only %d/%d distractors for question '%s' (WordID %d, QID %d)", distractorsCreated, numDistractorsNeeded, questionTextSeed, wordID, newQuestion.ID)
-		// Optionally, fill with generic distractors if absolutely needed, e.g., "None of the above" - but this is usually not great.
 	}
 	return nil
 }
 
-// createCourseBlockQuizStructureInternal creates the quiz structure for a course block.
 func (s *Service) createCourseBlockQuizStructureInternal(tx *gorm.DB, courseID uint, userProgressAtTrigger uint) (*models.Quiz, error) {
 	questionCountTarget := quizDefaultQuestionCount
 	lastWordIndexInBlock := userProgressAtTrigger
-	firstWordIndexInBlock := uint(1) // Default to 1
+	firstWordIndexInBlock := uint(1)
 	if lastWordIndexInBlock >= wordsPerQuizBlock {
 		firstWordIndexInBlock = lastWordIndexInBlock - wordsPerQuizBlock + 1
 	}
@@ -206,15 +190,12 @@ func (s *Service) createCourseBlockQuizStructureInternal(tx *gorm.DB, courseID u
 		return nil, fmt.Errorf("%w: no words available to form questions for course %d, block ending at %d", ErrNoWordsForQuiz, courseID, userProgressAtTrigger)
 	}
 
-	// Shuffle course words to pick from for questions
 	localRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	localRand.Shuffle(len(courseWordsInBlock), func(i, j int) {
 		courseWordsInBlock[i], courseWordsInBlock[j] = courseWordsInBlock[j], courseWordsInBlock[i]
 	})
 
-	// Words to be used for questions
 	questionWordsFromBlock := courseWordsInBlock[:numQuestionsToGenerate]
-	// Indices of all words in the block, for distractor pool
 	distractorPoolIndices := make([]uint, len(courseWordsInBlock))
 	for i, cw := range courseWordsInBlock {
 		distractorPoolIndices[i] = cw.Index
@@ -223,7 +204,7 @@ func (s *Service) createCourseBlockQuizStructureInternal(tx *gorm.DB, courseID u
 	newQuiz := models.Quiz{
 		CourseID:        courseID,
 		Type:            models.QuizTypeCourseBlock,
-		QuestionCount:   uint(numQuestionsToGenerate), // Tentative, will be updated
+		QuestionCount:   uint(numQuestionsToGenerate),
 		TriggerProgress: userProgressAtTrigger,
 	}
 	if err := tx.Create(&newQuiz).Error; err != nil {
@@ -232,13 +213,11 @@ func (s *Service) createCourseBlockQuizStructureInternal(tx *gorm.DB, courseID u
 
 	questionsCreatedSuccessfully := 0
 	for _, cw := range questionWordsFromBlock {
-		// Fetch the word title to use as question text seed
 		var wordForQuestion models.Word
 		if err := tx.First(&wordForQuestion, cw.WordID).Error; err != nil {
 			log.Printf("Error fetching word (ID %d) for question text seed: %v. Skipping question.", cw.WordID, err)
 			continue
 		}
-
 		if err := s.createQuestionInternal(tx, newQuiz.ID, cw.WordID, wordForQuestion.Title, courseID, distractorPoolIndices); err != nil {
 			log.Printf("Error creating course block question for CourseWord (Index %d, WordID %d, QuizID: %d): %v. Skipping.", cw.Index, cw.WordID, newQuiz.ID, err)
 		} else {
@@ -247,9 +226,7 @@ func (s *Service) createCourseBlockQuizStructureInternal(tx *gorm.DB, courseID u
 	}
 
 	if questionsCreatedSuccessfully == 0 {
-		// Attempt to delete the quiz if no questions were made? Or leave it empty?
-		// For now, returning an error is safer.
-		tx.Delete(&newQuiz) // Rollback will handle this if transaction fails, but explicit delete if this path is taken.
+		tx.Delete(&newQuiz)
 		return nil, fmt.Errorf("%w: no questions could be generated for course block quiz", ErrQuizCreation)
 	}
 
@@ -257,33 +234,34 @@ func (s *Service) createCourseBlockQuizStructureInternal(tx *gorm.DB, courseID u
 		newQuiz.QuestionCount = uint(questionsCreatedSuccessfully)
 		if err := tx.Model(&newQuiz).Update("question_count", newQuiz.QuestionCount).Error; err != nil {
 			log.Printf("Warning: Failed to update actual question count for CourseBlock QuizID %d: %v", newQuiz.ID, err)
-			// Non-fatal, proceed with the questions made.
 		}
 	}
+	// IMPORTANT: newQuiz struct here does NOT have QuizQuestions preloaded.
 	return &newQuiz, nil
 }
 
 // createQuizAndAttemptInternal is for COURSE_BLOCK quizzes
 func (s *Service) createQuizAndAttemptInternal(tx *gorm.DB, userID uint, courseID uint, userProgressAtTrigger uint) (*models.QuizAttempt, *models.Quiz, error) {
-	quiz, err := s.createCourseBlockQuizStructureInternal(tx, courseID, userProgressAtTrigger)
+	quizStruct, err := s.createCourseBlockQuizStructureInternal(tx, courseID, userProgressAtTrigger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating course block quiz structure: %w", err)
 	}
-	if quiz == nil || quiz.QuestionCount == 0 {
-		return nil, nil, fmt.Errorf("%w: course block quiz structure is empty or nil after creation attempt", ErrQuizCreation)
+	// quizStruct returned here does not have QuizQuestions loaded in the Go struct itself.
+	if quizStruct == nil || quizStruct.QuestionCount == 0 { // Rely on QuestionCount field.
+		return nil, nil, fmt.Errorf("%w: course block quiz structure indicates no questions or is nil after creation attempt", ErrQuizCreation)
 	}
 
 	quizAttempt := models.QuizAttempt{
-		QuizID:             quiz.ID,
+		QuizID:             quizStruct.ID, // Use ID from the created quiz
 		UserID:             userID,
 		Score:              0,
 		IsCompleted:        false,
 		CurrentQuestionNum: 0,
 	}
 	if err := tx.Create(&quizAttempt).Error; err != nil {
-		return nil, quiz, fmt.Errorf("failed to create quiz attempt for course block quiz: %w", err)
+		return nil, quizStruct, fmt.Errorf("failed to create quiz attempt for course block quiz: %w", err)
 	}
-	return &quizAttempt, quiz, nil
+	return &quizAttempt, quizStruct, nil
 }
 
 // --- Public Service Methods ---
@@ -292,30 +270,28 @@ func (s *Service) StartOrResumeQuiz(userID uint, courseID uint, userCourseProgre
 	log.Printf("QuizService: StartOrResumeQuiz (COURSE_BLOCK) called for UserID: %d, CourseID: %d, ProgressTrigger: %d", userID, courseID, userCourseProgress)
 
 	var currentAttempt *models.QuizAttempt
-	var quizForAttempt models.Quiz // To store the quiz associated with the attempt
+	// Removed: var newlyCreatedQuizStruct *models.Quiz
 	var messageToUser string
 	isNewAttempt := false
 
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	// Transaction for finding or creating the attempt
+	txErr := s.db.Transaction(func(tx *gorm.DB) error {
 		var activeAttempt models.QuizAttempt
-		// Find active attempt for THIS specific course block quiz trigger
 		err := tx.Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
 			Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ? AND quizzes.type = ?",
 				userID, courseID, userCourseProgress, false, models.QuizTypeCourseBlock).
 			Order("quiz_attempts.created_at DESC").
-			Preload("Quiz"). // Preload the Quiz model
 			First(&activeAttempt).Error
 
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				// No active attempt, create new one
 				log.Printf("QuizService: No active COURSE_BLOCK quiz. Creating new one for progress trigger %d.", userCourseProgress)
-				newAttempt, newQuiz, createErr := s.createQuizAndAttemptInternal(tx, userID, courseID, userCourseProgress)
+				// Pass nil for the *models.Quiz return as it's not used by the caller of createQuizAndAttemptInternal directly in this path
+				newAttempt, _, createErr := s.createQuizAndAttemptInternal(tx, userID, courseID, userCourseProgress)
 				if createErr != nil {
-					return fmt.Errorf("%w: %w", ErrQuizCreation, createErr)
+					return fmt.Errorf("from createQuizAndAttemptInternal: %w", createErr)
 				}
 				currentAttempt = newAttempt
-				quizForAttempt = *newQuiz // Store the newly created quiz
 				messageToUser = fmt.Sprintf(msgQuizTime, userCourseProgress)
 				isNewAttempt = true
 			} else {
@@ -324,29 +300,25 @@ func (s *Service) StartOrResumeQuiz(userID uint, courseID uint, userCourseProgre
 		} else {
 			log.Printf("QuizService: Resuming active COURSE_BLOCK quiz attempt %d.", activeAttempt.ID)
 			currentAttempt = &activeAttempt
-			// Fetch the quiz details if not preloaded correctly or if needed separately
-			if err := tx.Preload("QuizQuesetions.Options").First(&quizForAttempt, currentAttempt.QuizID).Error; err != nil {
-				return fmt.Errorf("%w: loading quiz details for active attempt %d: %w", ErrQuizNotFound, currentAttempt.ID, err)
-			}
 			messageToUser = msgResumeActiveQuiz
 		}
 		return nil
 	})
 
-	if err != nil {
-		return nil, err
+	if txErr != nil {
+		return nil, txErr
 	}
-	if currentAttempt == nil { // Should be caught by transaction error handling
-		return nil, errors.New("internal error: quiz attempt not initialized after transaction for course block quiz")
+	if currentAttempt == nil {
+		return nil, errors.New("internal error: quiz attempt not initialized after transaction")
 	}
-	if quizForAttempt.ID == 0 { // Ensure quizForAttempt is populated
-		if errDb := s.db.Preload("QuizQuesetions.Options").First(&quizForAttempt, currentAttempt.QuizID).Error; errDb != nil {
-			return nil, fmt.Errorf("%w: loading quiz details for attempt %d: %w", ErrQuizNotFound, currentAttempt.ID, errDb)
-		}
+
+	var quizForAttempt models.Quiz
+	if errDb := s.db.Preload("QuizQuesetions.Options").First(&quizForAttempt, currentAttempt.QuizID).Error; errDb != nil {
+		log.Printf("QuizService: Critical error - Failed to load Quiz (ID: %d) for Attempt (ID: %d): %v", currentAttempt.QuizID, currentAttempt.ID, errDb)
+		return nil, fmt.Errorf("%w: loading quiz (ID %d) details for attempt %d: %w", ErrQuizNotFound, currentAttempt.QuizID, currentAttempt.ID, errDb)
 	}
 
 	if quizForAttempt.QuestionCount == 0 {
-		// Attempt to mark as complete if it's empty to avoid loops
 		s.db.Model(&currentAttempt).Update("is_completed", true)
 		return &QuizState{
 			AttemptID: currentAttempt.ID, QuizID: currentAttempt.QuizID, UserID: userID, CourseID: courseID, QuizType: models.QuizTypeCourseBlock,
@@ -359,10 +331,11 @@ func (s *Service) StartOrResumeQuiz(userID uint, courseID uint, userCourseProgre
 			IsCompleted: true, MessageToUser: msgQuizAlreadyCompleted, CurrentQuestionMessageID: currentAttempt.CurrentQuestionMessageID,
 		}, nil
 	}
-	if currentAttempt.CurrentQuestionNum < 0 || currentAttempt.CurrentQuestionNum >= int(quizForAttempt.QuestionCount) {
-		log.Printf("QuizService: Invalid CurrentQuestionNum %d for COURSE_BLOCK attempt %d. Finalizing.", currentAttempt.CurrentQuestionNum, currentAttempt.ID)
-		// This state signals to the handler to fetch full results.
-		s.db.Model(&currentAttempt).Updates(map[string]interface{}{"is_completed": true, "score": currentAttempt.Score}) // Ensure it's marked completed
+
+	if currentAttempt.CurrentQuestionNum < 0 || currentAttempt.CurrentQuestionNum >= len(quizForAttempt.QuizQuesetions) {
+		log.Printf("QuizService: Invalid CurrentQuestionNum %d for COURSE_BLOCK attempt %d (Total questions in slice: %d). Finalizing.",
+			currentAttempt.CurrentQuestionNum, currentAttempt.ID, len(quizForAttempt.QuizQuesetions))
+		s.db.Model(&currentAttempt).Updates(map[string]interface{}{"is_completed": true, "score": currentAttempt.Score})
 		return &QuizState{
 			AttemptID: currentAttempt.ID, QuizID: currentAttempt.QuizID, UserID: userID, CourseID: courseID, QuizType: models.QuizTypeCourseBlock,
 			IsCompleted: true, MessageToUser: msgInvalidQuestionNum, CurrentQuestionMessageID: currentAttempt.CurrentQuestionMessageID,
@@ -387,7 +360,7 @@ func (s *Service) StartOrResumeQuiz(userID uint, courseID uint, userCourseProgre
 		AttemptID:                currentAttempt.ID,
 		QuizID:                   currentAttempt.QuizID,
 		UserID:                   userID,
-		CourseID:                 quizForAttempt.CourseID, // From the quiz model
+		CourseID:                 quizForAttempt.CourseID,
 		QuizType:                 models.QuizTypeCourseBlock,
 		IsCompleted:              false,
 		CurrentQuestionNum:       currentAttempt.CurrentQuestionNum,
@@ -411,44 +384,38 @@ func (s *Service) CreateReviewQuiz(userID uint, wordsToReview []word.WordStudied
 	var messageToUser string = msgStartNewReviewQuiz
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Create the Quiz model entry
-		newQuiz = models.Quiz{
+		createdQuizStruct := models.Quiz{
 			Type:          models.QuizTypeReview,
-			QuestionCount: uint(len(wordsToReview)), // Tentative
-			// CourseID is not set for general review quizzes
+			QuestionCount: uint(len(wordsToReview)),
 		}
-		if err := tx.Create(&newQuiz).Error; err != nil {
+		if err := tx.Create(&createdQuizStruct).Error; err != nil {
 			return fmt.Errorf("failed to create REVIEW Quiz DB entry: %w", err)
 		}
 
 		questionsCreatedSuccessfully := 0
 		for _, wordView := range wordsToReview {
-			// For review quizzes, distractorSourceIndices is nil/empty as distractors are fetched globally/randomly.
-			// CourseID is also 0 for createQuestionInternal in this context if distractors are global.
-			if err := s.createQuestionInternal(tx, newQuiz.ID, wordView.WordID, wordView.WordTitle, 0, nil); err != nil {
-				log.Printf("Error creating REVIEW question for WordID %d (QuizID: %d): %v. Skipping.", wordView.WordID, newQuiz.ID, err)
+			if err := s.createQuestionInternal(tx, createdQuizStruct.ID, wordView.WordID, wordView.WordTitle, 0, nil); err != nil {
+				log.Printf("Error creating REVIEW question for WordID %d (QuizID: %d): %v. Skipping.", wordView.WordID, createdQuizStruct.ID, err)
 			} else {
 				questionsCreatedSuccessfully++
 			}
 		}
 
 		if questionsCreatedSuccessfully == 0 {
-			tx.Delete(&newQuiz) // Clean up quiz if no questions
+			tx.Delete(&createdQuizStruct)
 			return fmt.Errorf("%w: no questions could be generated for review quiz", ErrQuizCreation)
 		}
-		if uint(questionsCreatedSuccessfully) != newQuiz.QuestionCount {
-			newQuiz.QuestionCount = uint(questionsCreatedSuccessfully)
-			if err := tx.Model(&newQuiz).Update("question_count", newQuiz.QuestionCount).Error; err != nil {
-				log.Printf("Warning: Failed to update actual question count for REVIEW QuizID %d: %v", newQuiz.ID, err)
+		if uint(questionsCreatedSuccessfully) != createdQuizStruct.QuestionCount {
+			createdQuizStruct.QuestionCount = uint(questionsCreatedSuccessfully)
+			if err := tx.Model(&createdQuizStruct).Update("question_count", createdQuizStruct.QuestionCount).Error; err != nil {
+				log.Printf("Warning: Failed to update actual question count for REVIEW QuizID %d: %v", createdQuizStruct.ID, err)
 			}
 		}
 
-		// Reload newQuiz to get all its associations, especially QuizQuestions
-		if err := tx.Preload("QuizQuesetions.Options").First(&newQuiz, newQuiz.ID).Error; err != nil {
-			return fmt.Errorf("failed to reload review quiz with questions: %w", err)
+		if err := tx.Preload("QuizQuesetions.Options").First(&newQuiz, createdQuizStruct.ID).Error; err != nil {
+			return fmt.Errorf("failed to reload review quiz (ID: %d) with questions: %w", createdQuizStruct.ID, err)
 		}
 
-		// Create the QuizAttempt
 		currentAttempt = models.QuizAttempt{
 			QuizID:             newQuiz.ID,
 			UserID:             userID,
@@ -465,8 +432,10 @@ func (s *Service) CreateReviewQuiz(userID uint, wordsToReview []word.WordStudied
 	if err != nil {
 		return nil, err
 	}
-	if newQuiz.QuestionCount == 0 { // Should be caught by transaction error
-		return &QuizState{UserID: userID, IsCompleted: true, MessageToUser: msgQuizNoQuestions, QuizType: models.QuizTypeReview}, nil
+	if newQuiz.QuestionCount == 0 || len(newQuiz.QuizQuesetions) == 0 {
+		log.Printf("QuizService: Review quiz (ID %d) created with no questions, though QuestionCount field is %d.", newQuiz.ID, newQuiz.QuestionCount)
+		s.db.Model(&currentAttempt).Update("is_completed", true)
+		return &QuizState{UserID: userID, AttemptID: currentAttempt.ID, QuizID: newQuiz.ID, IsCompleted: true, MessageToUser: msgQuizNoQuestions, QuizType: models.QuizTypeReview}, nil
 	}
 
 	currentQuestionModel := newQuiz.QuizQuesetions[currentAttempt.CurrentQuestionNum]
@@ -482,7 +451,7 @@ func (s *Service) CreateReviewQuiz(userID uint, wordsToReview []word.WordStudied
 		AttemptID:                currentAttempt.ID,
 		QuizID:                   currentAttempt.QuizID,
 		UserID:                   userID,
-		CourseID:                 0, // No specific course for a general review quiz
+		CourseID:                 0,
 		QuizType:                 models.QuizTypeReview,
 		IsCompleted:              false,
 		CurrentQuestionNum:       currentAttempt.CurrentQuestionNum,
@@ -491,7 +460,7 @@ func (s *Service) CreateReviewQuiz(userID uint, wordsToReview []word.WordStudied
 		QuestionText:             questionText,
 		Options:                  shuffledOptions,
 		MessageToUser:            messageToUser,
-		CurrentQuestionMessageID: currentAttempt.CurrentQuestionMessageID, // Will be 0 initially
+		CurrentQuestionMessageID: currentAttempt.CurrentQuestionMessageID,
 	}, nil
 }
 
@@ -513,14 +482,14 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 
 		var quizForAttempt models.Quiz
 		if err := tx.
-			Preload("QuizQuesetions.Options"). // Preload questions and their options
+			Preload("QuizQuesetions.Options").
 			First(&quizForAttempt, attempt.QuizID).
 			Error; err != nil {
 			return fmt.Errorf("loading quiz %d for attempt %d: %w", attempt.QuizID, attempt.ID, err)
 		}
 
 		if attempt.IsCompleted {
-			finalResults, err := s.getQuizResultsInternal(tx, &attempt, &quizForAttempt) // Pass loaded quizForAttempt
+			finalResults, err := s.getQuizResultsInternal(tx, &attempt, &quizForAttempt)
 			if err != nil {
 				return fmt.Errorf("getting results for completed attempt %d: %w", attemptID, err)
 			}
@@ -539,9 +508,8 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 			return fmt.Errorf("fetching option %d: %w", chosenOptionID, err)
 		}
 
-		// Ensure question number is valid before accessing QuizQuestions slice
-		if attempt.CurrentQuestionNum < 0 || attempt.CurrentQuestionNum >= int(quizForAttempt.QuestionCount) || len(quizForAttempt.QuizQuesetions) <= attempt.CurrentQuestionNum {
-			log.Printf("QuizService: Invalid CurrentQuestionNum %d for attempt %d. Total questions: %d. Finalizing.", attempt.CurrentQuestionNum, attempt.ID, quizForAttempt.QuestionCount)
+		if attempt.CurrentQuestionNum < 0 || attempt.CurrentQuestionNum >= len(quizForAttempt.QuizQuesetions) {
+			log.Printf("QuizService: Invalid CurrentQuestionNum %d for attempt %d. Total questions: %d. Finalizing.", attempt.CurrentQuestionNum, attempt.ID, len(quizForAttempt.QuizQuesetions))
 			finalResults, err := s.getQuizResultsInternal(tx, &attempt, &quizForAttempt)
 			if err != nil {
 				return fmt.Errorf("finalizing attempt %d with invalid q_num: %w", attemptID, err)
@@ -569,7 +537,6 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 			return fmt.Errorf("saving quiz answer for attempt %d: %w", attempt.ID, err)
 		}
 
-		// If it's a REVIEW quiz, update SRS schedule for the answered word
 		if quizForAttempt.Type == models.QuizTypeReview {
 			if currentQuestionModel.WordID == 0 {
 				log.Printf("Error: Review quiz question (ID: %d) has no WordID associated. Cannot update SRS.", currentQuestionModel.ID)
@@ -577,13 +544,11 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 				errSRS := s.wordService.UpdateWordReviewSchedule(userID, currentQuestionModel.WordID, quizAnswer.IsCorrect)
 				if errSRS != nil {
 					log.Printf("Error updating SRS for WordID %d after review answer (AttemptID %d): %v", currentQuestionModel.WordID, attemptID, errSRS)
-					// Non-fatal for quiz flow, but log it.
-					// Potentially return a wrapped error if SRS update failure should halt things.
 				}
 			}
 		}
 
-		attempt.CurrentQuestionNum++ // Increment after processing current question
+		attempt.CurrentQuestionNum++
 		if err := tx.Model(&attempt).Update("current_question_num", attempt.CurrentQuestionNum).Error; err != nil {
 			return fmt.Errorf("updating CurrentQuestionNum for attempt %d: %w", attempt.ID, err)
 		}
@@ -604,6 +569,19 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 				CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
 			}
 		} else {
+			if attempt.CurrentQuestionNum >= len(quizForAttempt.QuizQuesetions) {
+				log.Printf("QuizService: CurrentQuestionNum (%d) became out of bounds after increment for attempt %d (len: %d). Finalizing.", attempt.CurrentQuestionNum, attempt.ID, len(quizForAttempt.QuizQuesetions))
+				finalResults, err := s.getQuizResultsInternal(tx, &attempt, &quizForAttempt)
+				if err != nil {
+					return fmt.Errorf("finalizing quiz attempt %d (bounds error): %w", attemptID, err)
+				}
+				submissionResult = &AnswerSubmissionResult{
+					AttemptID: attempt.ID, QuizID: attempt.QuizID, UserID: userID, CourseID: quizForAttempt.CourseID, QuizType: quizForAttempt.Type,
+					IsQuizNowCompleted: true, FinalQuizResult: finalResults, CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
+				}
+				return nil
+			}
+
 			nextQuestionModel := quizForAttempt.QuizQuesetions[attempt.CurrentQuestionNum]
 			shuffledOptions := make([]models.QuizQuestionOption, len(nextQuestionModel.Options))
 			copy(shuffledOptions, nextQuestionModel.Options)
@@ -631,7 +609,7 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 					QuestionModelID:          nextQuestionModel.ID,
 					QuestionText:             questionText,
 					Options:                  shuffledOptions,
-					CurrentQuestionMessageID: attempt.CurrentQuestionMessageID, // This is the ID of the *previous* question message
+					CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
 				},
 				CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
 			}
@@ -640,13 +618,11 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 	})
 
 	if txErr != nil {
-		// Wrap specific GORM errors if needed, or just return the processed error
 		return nil, fmt.Errorf("%w: %w", ErrAnswerProcessing, txErr)
 	}
 	return submissionResult, nil
 }
 
-// getQuizResultsInternal finalizes an attempt and prepares results.
 func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttempt, quizInfo *models.Quiz) (*QuizResult, error) {
 	if !attempt.IsCompleted {
 		var quizAnswers []models.QuizAnswer
@@ -669,10 +645,10 @@ func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttemp
 
 	totalQuestions := int(quizInfo.QuestionCount)
 	var reviewBuilder strings.Builder
-	if quizInfo.Type == models.QuizTypeCourseBlock { // Only build detailed review for course block quizzes for now
+	if quizInfo.Type == models.QuizTypeCourseBlock && len(quizInfo.QuizQuesetions) > 0 {
 		reviewBuilder.WriteString(msgReviewHeader)
 		var answersForReview []models.QuizAnswer
-		tx.Where("quiz_attempt_id = ?", attempt.ID).Find(&answersForReview) // Re-fetch for safety if not on attempt
+		tx.Where("quiz_attempt_id = ?", attempt.ID).Find(&answersForReview)
 
 		userAnswersMap := make(map[uint]models.QuizAnswer)
 		var allChosenOptionIDs []uint
@@ -730,19 +706,18 @@ func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttemp
 			resultMessage += fmt.Sprintf(msgQuizFailed, quizPassThresholdCorrectAnswers)
 			shouldResetProgress = true
 			if quizInfo.TriggerProgress >= wordsPerQuizBlock {
-				suggestedNewProgress = quizInfo.TriggerProgress - wordsPerQuizBlock + 1
+				suggestedNewProgress = quizInfo.TriggerProgress - wordsPerQuizBlock
 			} else {
-				suggestedNewProgress = 1
+				suggestedNewProgress = 0
 			}
-			if suggestedNewProgress <= 0 { // Should not happen if logic above is correct
-				suggestedNewProgress = 1
+			if suggestedNewProgress <= 0 {
+				suggestedNewProgress = 0
 			}
 		}
 	} else if quizInfo.Type == models.QuizTypeReview {
-		passed = true // For review, "passed" means completed the session. SRS handles word status.
+		passed = true
 		resultMessage = fmt.Sprintf(msgReviewQuizFinished, attempt.Score, totalQuestions)
-		// Add a generic positive message or based on score.
-		if attempt.Score == totalQuestions && totalQuestions > 0 {
+		if totalQuestions > 0 && attempt.Score == totalQuestions {
 			resultMessage += "\n🎉 عالی بود! همه رو درست جواب دادی!"
 		} else if attempt.Score > 0 {
 			resultMessage += "\n👍 خوب بود! به مرور ادامه بده."
@@ -804,7 +779,7 @@ func (s *Service) FindAnyActiveQuizAttempt(userID uint) (*models.QuizAttempt, er
 		Order("created_at DESC").First(&attempt).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // No active attempt is not an error in this context
+			return nil, nil
 		}
 		return nil, fmt.Errorf("db error finding active quiz: %w", err)
 	}
@@ -816,17 +791,12 @@ func (s *Service) UpdateQuizAttemptMessageID(attemptID uint, messageID int) erro
 	if attemptID == 0 {
 		return fmt.Errorf("%w: attemptID cannot be zero", ErrInvalidInput)
 	}
-	// Ensure messageID is not 0 if we are setting it, to avoid clearing a valid ID with an uninitialized one.
-	// However, Telegram message IDs can be 0 if a message was deleted or never sent.
-	// The handler should be responsible for providing a valid messageID.
 	result := s.db.Model(&models.QuizAttempt{}).Where("id = ?", attemptID).Update("current_question_message_id", messageID)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update message_id for attempt %d: %w", attemptID, result.Error)
 	}
 	if result.RowsAffected == 0 {
-		// This might happen if the attemptID is invalid.
 		log.Printf("QuizService: UpdateQuizAttemptMessageID - No rows affected for attempt %d. Attempt may not exist.", attemptID)
-		// Consider returning ErrAttemptNotFound or a similar error if strictness is required.
 	}
 	return nil
 }

@@ -43,12 +43,15 @@ func HandleStartCommand(c telebot.Context, appServices *services.AppServices) er
 	// Fetch start text - assuming it's defined elsewhere or using a fallback
 	// For example, from a localization service or embedded texts.
 	// startText := appServices.Text().Get("start_command_greeting", dbUser.Profile.FirstName)
-	startText := fmt.Sprintf("سلام %s! 👋 به ربات آموزش زبان خوش آمدید. برای شروع یادگیری از دکمه‌های زیر استفاده کنید.", formatters.EscapeMarkdownV2(dbUser.Profile.FirstName))
+	startText := fmt.Sprintf(
+		"سلام %s! 👋 به ربات آموزش زبان خوش آمدید. برای شروع یادگیری از دکمه‌های زیر استفاده کنید.",
+		dbUser.Profile.FirstName,
+	)
 	if dbUser.Profile.FirstName == "" { // Fallback if first name is empty
 		startText = "سلام! 👋 به ربات آموزش زبان خوش آمدید. برای شروع یادگیری از دکمه‌های زیر استفاده کنید."
 	}
 
-	return c.Send(startText, keyboards.MainMenu, telebot.ModeMarkdownV2)
+	return c.Send(formatters.EscapeMarkdownV2(startText), keyboards.MainMenu, telebot.ModeMarkdownV2)
 }
 
 // HandleMyProfileCommand displays the user's profile.

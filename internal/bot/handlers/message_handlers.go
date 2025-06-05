@@ -62,7 +62,7 @@ func HandleTextMessage(c telebot.Context, appServices *services.AppServices) err
 			case strings.HasPrefix(userInput, keyboards.ReviewCourseButtonText): // "مرور دوره"
 				// TODO: Implement actual course review logic (e.g., different type of quiz or content)
 				log.Printf("[HandleTextMessage] UserID %d selected 'Review Course' for CourseID %d. Not yet implemented.", dbUser.ID, courseID)
-				return c.Send("مرور دوره هنوز پیاده‌سازی نشده است.", keyboards.CourseDetailsKeyboard(courseID, 0, false)) // Placeholder
+				return c.Send("مرور دوره هنوز پیاده‌سازی نشده است.", keyboards.CourseDetailsKeyboard(courseID, 0, true, false)) // Placeholder
 			}
 		} else {
 			log.Printf("[HandleTextMessage] UserID %d, LastMenu '%s' implies course details, but failed to parse CourseID. Input: '%s'", dbUser.ID, dbUser.LastMenu, userInput)
@@ -156,13 +156,22 @@ func displayCourseOverview(c telebot.Context, userID uint, courseID uint, appSer
 	// ProgressPercentage and IsCompletedByUser are now on courseOverview directly
 	return c.Send(
 		formattedOverview,
-		keyboards.CourseDetailsKeyboard(courseID, courseOverview.ProgressPercentage, courseOverview.IsCompletedByUser),
+		keyboards.CourseDetailsKeyboard(
+			courseID,
+			courseOverview.ProgressPercentage,
+			courseOverview.IsStartedByUser,
+			courseOverview.IsCompletedByUser),
 		telebot.ModeMarkdownV2,
 	)
 }
 
 // handleStartOrResumeCourse starts or resumes a course.
-func handleStartOrResumeCourse(c telebot.Context, userID uint, courseID uint, appServices *services.AppServices) error {
+func handleStartOrResumeCourse(
+	c telebot.Context,
+	userID uint,
+	courseID uint,
+	appServices *services.AppServices,
+) error {
 	// Review check should happen before calling this.
 	// If called from HandleTextMessage, HandleTextMessage already did the check.
 
@@ -235,7 +244,9 @@ func HandleReturnToMainMenu(c telebot.Context, userID uint, appServices *service
 			// Edit to something neutral and remove keyboard instead of deleting,
 			// as deleting might fail or look abrupt.
 			neutralText := "آزمون لغو شد."
-			editPreviousMessage(c, messageToDelete.ChatID, messageToDelete.MessageID, neutralText, &telebot.ReplyMarkup{RemoveKeyboard: true})
+			neutralText = formatters.EscapeMarkdownV2(neutralText)
+
+			editPreviousMessage(c, messageToDelete.ChatID, messageToDelete.MessageID, neutralText, nil)
 			log.Printf("[HandleReturnToMainMenu] UserID %d: Edited active quiz message (MsgID: %s) to neutral and removed keyboard.", userID, messageToDelete.MessageID)
 
 			// Optionally, you might want to mark the quiz attempt as "abandoned" or reset its CurrentQuestionMessageID
@@ -249,5 +260,7 @@ func HandleReturnToMainMenu(c telebot.Context, userID uint, appServices *service
 	}
 
 	returnText := "به منوی اصلی بازگشتید."
+	returnText = formatters.EscapeMarkdownV2(returnText)
+
 	return c.Send(returnText, keyboards.MainMenu, telebot.ModeMarkdownV2)
 }

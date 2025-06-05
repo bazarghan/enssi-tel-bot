@@ -30,7 +30,12 @@ func (s *Service) GetWordDetailsForCourse(
 	userID uint,
 ) (*WordDisplayData, error) {
 
-	log.Printf("WordService: GetWordDetailsForCourse called for CourseID: %d, Index: %d, UserID: %d", courseID, courseWordIndex, userID)
+	log.Printf(
+		"WordService: GetWordDetailsForCourse called for CourseID: %d, Index: %d, UserID: %d",
+		courseID,
+		courseWordIndex,
+		userID,
+	)
 
 	if courseID == 0 || courseWordIndex == 0 {
 		return nil, fmt.Errorf("%w: courseID and courseWordIndex must be positive", ErrInvalidInput)
