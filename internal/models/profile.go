@@ -8,8 +8,9 @@ import (
 
 type Profile struct {
 	gorm.Model
-	UserID       uint
-	Achievements []UserAchievement
+	UserID uint
+
+	Achievements []ProfileAchievement `gorm:"foreignKey:ProfileID"`
 
 	Username    string
 	FirstName   string

@@ -93,10 +93,13 @@ func (GormBitSet) GormDataType() string {
 	return "BIT VARYING"
 }
 
-// UserAchievement model using the custom GormBitSet type
-type UserAchievement struct {
+type ProfileAchievement struct {
 	gorm.Model
 	ProfileID     uint
 	AchievementID uint
-	State         GormBitSet // Use the custom type
+	State         GormBitSet // Your custom payload data
+
+	// Belongs To relationships for preloading
+	Profile     Profile     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Achievement Achievement `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }

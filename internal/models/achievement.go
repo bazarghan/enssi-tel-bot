@@ -6,7 +6,8 @@ import (
 
 type Achievement struct {
 	gorm.Model
-	Profiles []UserAchievement
+
+	Profiles []ProfileAchievement `gorm:"foreignKey:AchievementID"`
 
 	Title           string `gorm:"not null;unique"`
 	Description     string

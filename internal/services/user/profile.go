@@ -57,6 +57,7 @@ func (s *Service) UpdateUserProfile(userID uint, req UpdateProfileRequest) error
 
 // GetUserProfile retrieves the profile information for a user.
 func (s *Service) GetUserProfile(userID uint) (*UserProfileView, error) {
+
 	log.Printf("UserService: GetUserProfile called for UserID: %d", userID)
 	if userID == 0 {
 		return nil, ErrInvalidUserID
