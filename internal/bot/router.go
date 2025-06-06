@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/bot/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/handlers"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards" // For button text constants
 	"github.com/2000ostd/enssi-tel-bot/internal/models"        // For dbUser
@@ -27,6 +28,36 @@ func RegisterRoutes(b *telebot.Bot, appServices *services.AppServices) {
 	b.Handle("/profile", func(c telebot.Context) error { // Assuming /profile for MyProfile
 		return handlers.HandleMyProfileCommand(c, appServices)
 	})
+
+	// ---> ADD ADMIN PANEL BUTTON HANDLER <---
+	b.Handle(keyboards.BtnAdminPanel.Text, func(c telebot.Context) error {
+		dbUser, ok := c.Get(string(DBUserKey)).(*models.User)
+		if !ok || dbUser == nil {
+			log.Printf("[Router] BtnAdminPanel: User not found in context.")
+			return c.Send("خطا: اطلاعات کاربری یافت نشد.")
+		}
+
+		if !dbUser.IsAdmin {
+			log.Printf("[Router] BtnAdminPanel: Non-admin UserID %d attempted to access admin panel.", dbUser.ID)
+			return c.Send("شما اجازه دسترسی به این بخش را ندارید.")
+		}
+
+		// Update user's state to indicate they are in the admin panel
+		err := appServices.User().UpdateUserLastMenu(dbUser.ID, handlers.StateInAdminPanel)
+		if err != nil {
+			log.Printf("[Router] BtnAdminPanel: Error updating last menu for UserID %d: %v", dbUser.ID, err)
+			return handlers.SendServiceError(c, "entering admin panel", err)
+		}
+
+		adminPanelMessage := "به پنل ادمین خوش آمدید. 👨‍💻\n" +
+			"اکنون می‌توانید کوئری‌های SQL خام را مستقیماً ارسال کنید.\n" +
+			"هشدار: اجرای کوئری‌های نادرست می‌تواند به داده‌ها آسیب برساند.\n" +
+			"برای خروج از پنل ادمین، از دکمه 'بازگشت به منوی اصلی' استفاده کنید."
+
+		// Send message with only "Return to Main Menu" keyboard
+		return c.Send(formatters.EscapeMarkdownV2(adminPanelMessage), keyboards.BackToMainMenuKeyboard(), telebot.ModeMarkdownV2)
+	})
+	// ---> END OF ADMIN PANEL BUTTON HANDLER <---
 
 	// --- Text Handlers for specific Reply Keyboard Buttons ---
 	// These are matched before the general telebot.OnText handler.
@@ -142,4 +173,3 @@ func RegisterRoutes(b *telebot.Bot, appServices *services.AppServices) {
 
 	log.Println("Bot routes registered.")
 }
-

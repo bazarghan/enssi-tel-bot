@@ -7,6 +7,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/services/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/word"
 	"gorm.io/gorm"
+	"log"
 )
 
 // AppServices provides access to all application services.
@@ -15,6 +16,8 @@ type AppServices struct {
 	courseServiceInstance course.Service
 	quizServiceInstance   quiz.Service
 	wordServiceInstance   word.Service
+
+	dbInstance *gorm.DB // Store the DB instance
 }
 
 // NewAppServices creates and initializes all application services and their dependencies.
@@ -22,6 +25,8 @@ func NewAppServices(db *gorm.DB) (*AppServices, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database instance is required to initialize AppServices")
 	}
+
+	log.Printf("NewAppServices: Received db instance: %p. Storing it.", db) // %p prints pointer address
 
 	userService := user.NewService(db)
 	wordService := word.NewService(db)
@@ -37,6 +42,7 @@ func NewAppServices(db *gorm.DB) (*AppServices, error) {
 		courseServiceInstance: *courseService,
 		quizServiceInstance:   *quizService,
 		wordServiceInstance:   *wordService,
+		dbInstance:            db,
 	}, nil
 }
 
@@ -60,3 +66,8 @@ func (as *AppServices) Word() word.WordService {
 	return &as.wordServiceInstance
 }
 
+// DB returns the raw GORM database instance.
+// Use with caution, primarily for admin functionalities or specific raw queries.
+func (as *AppServices) DB() *gorm.DB {
+	return as.dbInstance
+}

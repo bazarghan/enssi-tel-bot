@@ -19,6 +19,7 @@ var (
 	ErrUserCreationFailed = errors.New("user service: failed to create new user and profile")
 	ErrProfileFetchFailed = errors.New("user service: failed to fetch profile data")
 	ErrUserFetchFailed    = errors.New("user service: failed to fetch user data")
+	ErrInvalidInput       = errors.New("user service: the input is invalid")
 )
 
 // --- Request/Response Structs for Service Methods ---

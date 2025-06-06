@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"encoding/json" // For formatting query results
+
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/services"
@@ -28,6 +30,74 @@ func HandleTextMessage(c telebot.Context, appServices *services.AppServices) err
 	if err != nil {
 		return SendServiceError(c, "identifying user (text message)", err)
 	}
+
+	// ---> ADD SQL EXECUTION LOGIC FOR ADMIN PANEL STATE <---
+	if dbUser.LastMenu == StateInAdminPanel {
+		if !dbUser.IsAdmin { // Double check admin status
+			log.Printf("[HandleTextMessage-Admin] Non-admin UserID %d in admin state. Resetting.", dbUser.ID)
+			appServices.User().UpdateUserLastMenu(dbUser.ID, StateMain)
+			return c.Send("خطای دسترسی. به منوی اصلی بازگشتید.", keyboards.NewMainMenu(false))
+		}
+
+		log.Printf("[HandleTextMessage-Admin] UserID %d (Admin) executing SQL query: %s", dbUser.ID, userInput)
+
+		// Basic safety: disallow very common destructive commands if sent plainly.
+		// This is NOT a robust security measure but a simple guard.
+		lowerInput := strings.ToLower(userInput)
+		if strings.HasPrefix(lowerInput, "drop ") || strings.HasPrefix(lowerInput, "delete from ") || strings.HasPrefix(lowerInput, "truncate ") {
+			if !strings.Contains(lowerInput, "where") && (strings.HasPrefix(lowerInput, "delete from ") || strings.HasPrefix(lowerInput, "update ")) {
+				// Basic check for DELETE/UPDATE without WHERE, still very rudimentary
+				c.Send(formatters.EscapeMarkdownV2("⚠️ هشدار: کوئری‌های DELETE/UPDATE بدون WHERE بسیار خطرناک هستند. با احتیاط ادامه دهید."), telebot.ModeMarkdownV2, keyboards.BackToMainMenuKeyboard())
+				// return nil // Or let it proceed if admin confirms
+			} else if strings.HasPrefix(lowerInput, "drop ") || strings.HasPrefix(lowerInput, "truncate ") {
+				return c.Send(formatters.EscapeMarkdownV2("⛔️ دستورات DROP و TRUNCATE از طریق این پنل مجاز نیستند."), telebot.ModeMarkdownV2, keyboards.BackToMainMenuKeyboard())
+			}
+		}
+
+		var results []map[string]interface{}
+		var rawSQLMessage string
+
+		// Use the AppServices DB accessor
+		db := appServices.DB()
+		tx := db.Raw(userInput).Scan(&results) // .Scan works well for SELECT returning rows
+
+		// ... inside the admin panel logic in HandleTextMessage ...
+		if tx.Error != nil {
+			log.Printf("[HandleTextMessage-Admin] SQL Error for UserID %d: %v", dbUser.ID, tx.Error)
+			// Error message part: The error itself IS escaped. The prefix "❌ خطای SQL:\n" is static and safe.
+			rawSQLMessage = fmt.Sprintf("❌ خطای SQL:\n```\n%s\n```", formatters.EscapeMarkdownV2(tx.Error.Error()))
+		} else {
+			if len(results) > 0 {
+				jsonResult, err := json.MarshalIndent(results, "", "  ")
+				if err != nil {
+					// This message needs its static parts escaped
+					messagePart := fmt.Sprintf("✅ کوئری اجرا شد. %d ردیف تحت تاثیر. نمایش نتیجه با خطا مواجه شد: %v", tx.RowsAffected, err)
+					rawSQLMessage = formatters.EscapeMarkdownV2(messagePart)
+				} else {
+					resultStr := string(jsonResult)
+					if len(resultStr) > 4000 {
+						resultStr = resultStr[:4000] + "\n... (نتیجه طولانی‌تر از حد مجاز است)"
+					}
+					// This is the key part: The text OUTSIDE the json block needs escaping
+					// if it contains special chars like '.'
+					prefixText := fmt.Sprintf("✅ کوئری اجرا شد. %d ردیف تحت تاثیر / بازگردانده شد.\nنتیجه:\n", tx.RowsAffected)
+					escapedPrefixText := formatters.EscapeMarkdownV2(prefixText)
+					rawSQLMessage = escapedPrefixText + "```json\n" + resultStr + "\n```"
+				}
+			} else if tx.RowsAffected > 0 {
+				// This message needs its static parts escaped
+				messagePart := fmt.Sprintf("✅ کوئری اجرا شد. %d ردیف تحت تاثیر قرار گرفت.", tx.RowsAffected)
+				rawSQLMessage = formatters.EscapeMarkdownV2(messagePart)
+			} else {
+				// This static message needs escaping
+				rawSQLMessage = formatters.EscapeMarkdownV2("✅ کوئری اجرا شد. هیچ ردیفی بازگردانده نشد یا تحت تاثیر قرار نگرفت.")
+			}
+		}
+		// Now send rawSQLMessage WITHOUT an overall escape, because parts of it are already escaped
+		// and the JSON part is intentionally not.
+		return c.Send(rawSQLMessage, telebot.ModeMarkdownV2, keyboards.BackToMainMenuKeyboard())
+	}
+	// ---> END OF SQL EXECUTION LOGIC <---
 
 	// Check for mandatory daily review FIRST for any text message interaction
 	reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)

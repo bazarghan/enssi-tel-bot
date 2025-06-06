@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
+	"github.com/bits-and-blooms/bitset" // Import for bitset
 )
 
 type UserService interface {
@@ -12,7 +13,7 @@ type UserService interface {
 	GetUserProfile(userID uint) (*UserProfileView, error)
 	UpdateUserProfile(userID uint, req UpdateProfileRequest) error
 	RecordUserActivity(userID uint) error
-
-	// MarkReviewSessionCompleted updates the user's timestamp for their last completed review session.
 	MarkReviewSessionCompleted(userID uint, completedAt time.Time) error
+
+	AwardAchievementProgress(userID uint, achievementID uint, itemsToReveal int) (*models.ProfileAchievement, *bitset.BitSet, error)
 }

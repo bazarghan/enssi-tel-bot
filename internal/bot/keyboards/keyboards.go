@@ -3,22 +3,31 @@ package keyboards
 import "gopkg.in/telebot.v4"
 
 var (
-	// MainMenu is the primary reply keyboard markup.
-	MainMenu = &telebot.ReplyMarkup{ResizeKeyboard: true}
-
-	// Buttons for the main menu
-	BtnStartLearning    = MainMenu.Text("شروع یادگیری")        // 📚 Start Learning
-	BtnMyProfile        = MainMenu.Text("پروفایل")             // 👤 My Profile
-	BtnSettings         = MainMenu.Text("تنظیمات")             // ⚙️ Settings
-	BtnReturnToMainMenu = MainMenu.Text("بازگشت به منوی اصلی") // ↩️ Return to Main Menu
+	BtnStartLearning    = telebot.Btn{Text: "شروع یادگیری"}        // 📚 Start Learning
+	BtnMyProfile        = telebot.Btn{Text: "پروفایل"}             // 👤 My Profile
+	BtnSettings         = telebot.Btn{Text: "تنظیمات"}             // ⚙️ Settings (Example, if you add it)
+	BtnReturnToMainMenu = telebot.Btn{Text: "بازگشت به منوی اصلی"} // ↩️ Return to Main Menu
+	BtnAdminPanel       = telebot.Btn{Text: "پنل ادمین"}           // 🛡️ Admin Panel (New)
 )
 
-func init() {
-	MainMenu.Reply(
-		MainMenu.Row(BtnStartLearning),
-		MainMenu.Row(BtnMyProfile /*, BtnSettings*/), // Settings can be added later
-	)
+func NewMainMenu(isAdmin bool) *telebot.ReplyMarkup {
+	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
+
+	// Define the rows using the button variables
+	rows := []telebot.Row{
+		menu.Row(BtnStartLearning),
+		menu.Row(BtnMyProfile /*, menu.Row(BtnSettings)*/), // Example if settings is added
+	}
+
+	if isAdmin {
+		rows = append(rows, menu.Row(BtnAdminPanel))
+	}
+
+	menu.Reply(rows...)
+	return menu
 }
+
+var MainMenu = NewMainMenu(false)
 
 // BackToMainMenuKeyboard provides a simple keyboard with a "Return to Main Menu" button.
 func BackToMainMenuKeyboard() *telebot.ReplyMarkup {

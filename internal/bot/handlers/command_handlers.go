@@ -51,7 +51,14 @@ func HandleStartCommand(c telebot.Context, appServices *services.AppServices) er
 		startText = "سلام! 👋 به ربات آموزش زبان خوش آمدید. برای شروع یادگیری از دکمه‌های زیر استفاده کنید."
 	}
 
-	return c.Send(formatters.EscapeMarkdownV2(startText), keyboards.MainMenu, telebot.ModeMarkdownV2)
+	// ---> MODIFICATION HERE <---
+	// Use the dynamic NewMainMenu function, passing the user's admin status
+	mainMenuKeyboard := keyboards.NewMainMenu(dbUser.IsAdmin)
+	return c.Send(formatters.EscapeMarkdownV2(startText), mainMenuKeyboard, telebot.ModeMarkdownV2)
+
+	// ---> END OF MODIFICATION <---
+
+	//return c.Send(formatters.EscapeMarkdownV2(startText), keyboards.MainMenu, telebot.ModeMarkdownV2)
 }
 
 // HandleMyProfileCommand displays the user's profile.

@@ -21,4 +21,6 @@ type User struct {
 
 	LastMenu                     string    `gorm:"type:varchar(100);not null;default:''"`
 	LastReviewSessionCompletedAt time.Time `gorm:"null;comment:Timestamp of the last completed mandatory review session"`
+
+	IsAdmin bool `gorm:"default:false;comment:Indicates if the user has admin privileges"`
 }

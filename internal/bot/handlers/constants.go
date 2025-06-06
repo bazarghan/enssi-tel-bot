@@ -22,6 +22,8 @@ const (
 	StateInCourseBase      = "in_course"      // Base for "in_course:<id>"
 	StateInQuizBase        = "in_quiz"        // Base for "in_quiz:<attempt_id>" - for course block quizzes
 	StateInReviewQuiz      = "in_review_quiz" // Base for "in_review_quiz:<attempt_id>" - for review quizzes
+
+	StateInAdminPanel = "admin_panel" // User is in the admin panel, expecting SQL queries
 )
 
 // Prefixes for parsing states with IDs
@@ -64,4 +66,3 @@ func ParseIDFromState(menuState string, prefix string) (uint, error) {
 	}
 	return uint(id), nil
 }
-
