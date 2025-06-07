@@ -205,7 +205,12 @@ func HandleStartLearningJourney(c telebot.Context, userID uint, appServices *ser
 }
 
 // displayCourseOverview shows details of a selected course.
-func displayCourseOverview(c telebot.Context, userID uint, courseID uint, appServices *services.AppServices) error {
+func displayCourseOverview(
+	c telebot.Context,
+	userID uint,
+	courseID uint,
+	appServices *services.AppServices,
+) error {
 	// Review check should happen before calling this if it's a user-initiated action.
 	// If called from HandleTextMessage, HandleTextMessage already did the check.
 
@@ -222,10 +227,14 @@ func displayCourseOverview(c telebot.Context, userID uint, courseID uint, appSer
 		return SendServiceError(c, fmt.Sprintf("getting overview for course %d", courseID), err)
 	}
 
-	formattedOverview := formatters.FormatCourseOverview(courseOverview)
+	formattedText := formatters.FormatCourseOverview(courseOverview)
+	if courseOverview.IsStartedByUser {
+		formattedText = formatters.FormatCourseProgress(courseOverview)
+	}
+
 	// ProgressPercentage and IsCompletedByUser are now on courseOverview directly
 	return c.Send(
-		formattedOverview,
+		formattedText,
 		keyboards.CourseDetailsKeyboard(
 			courseID,
 			courseOverview.ProgressPercentage,
@@ -293,6 +302,15 @@ func HandleAdvanceWord(c telebot.Context, userID uint, courseID uint, appService
 func HandleReturnToMainMenu(c telebot.Context, userID uint, appServices *services.AppServices) error {
 	log.Printf("[HandleReturnToMainMenu] UserID %d returning to main menu.", userID)
 
+	// ---> ADD THIS BLOCK TO GET THE FULL USER OBJECT <---
+	dbUser, err := appServices.User().GetOrCreateUserByTelegramID(c.Sender().ID, c.Sender().Username, c.Sender().FirstName, c.Sender().LastName)
+	if err != nil {
+		log.Printf("[HandleReturnToMainMenu] Could not get user details for UserID %d to build menu: %v", userID, err)
+		// Fallback to sending a default menu if user can't be fetched
+		return c.Send("بازگشت به منوی اصلی.", keyboards.MainMenu)
+	}
+	// ---> END OF BLOCK <---
+
 	// Find any active quiz (course or review) to potentially clean up its message
 	activeAttempt, err := appServices.Quiz().FindAnyActiveQuizAttempt(userID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) { // Log DB errors, ignore not found
@@ -332,5 +350,5 @@ func HandleReturnToMainMenu(c telebot.Context, userID uint, appServices *service
 	returnText := "به منوی اصلی بازگشتید."
 	returnText = formatters.EscapeMarkdownV2(returnText)
 
-	return c.Send(returnText, keyboards.MainMenu, telebot.ModeMarkdownV2)
+	return c.Send(returnText, keyboards.NewMainMenu(dbUser.IsAdmin), telebot.ModeMarkdownV2)
 }

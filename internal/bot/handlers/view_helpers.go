@@ -162,35 +162,24 @@ func sendWordDisplay(c telebot.Context, wordData *word.WordDisplayData, wordServ
 	}
 
 	for _, pron := range wordData.Pronunciations {
-		var sentAudioMsg *telebot.Message
-		var pronFileIDToCache string
-		var errSend error
 
 		if pron.TelegramVoiceID != "" {
-			sentAudioMsg, errSend = c.Bot().Send(c.Chat(), &telebot.Voice{File: telebot.File{FileID: pron.TelegramVoiceID}, Caption: pron.Region})
+
+			_, errSend := c.Bot().Send(c.Chat(), &telebot.Voice{File: telebot.File{FileID: pron.TelegramVoiceID}, Caption: pron.Region})
+
 			if errSend != nil {
-				log.Printf("[ViewHelper WARN] UserID %d, PronunciationID %d: Sending cached voice (FileID: %s) failed: %v. Will try URL.", c.Sender().ID, pron.ID, pron.TelegramVoiceID, errSend)
+				log.Printf(
+					"[ViewHelper WARN] UserID %d, PronunciationID %d: Sending cached voice (FileID: %s) failed: %v. Will try URL.",
+					c.Sender().ID,
+					pron.ID,
+					pron.TelegramVoiceID,
+					errSend,
+				)
 				if pron.AudioURL != "" {
-					sentAudioMsg, errSend = c.Bot().Send(c.Chat(), &telebot.Voice{File: telebot.FromURL(pron.AudioURL), Caption: pron.Region})
+					_, errSend = c.Bot().Send(c.Chat(), &telebot.Voice{File: telebot.FromURL(pron.AudioURL), Caption: pron.Region})
 				}
 			}
-		} else if pron.AudioURL != "" {
-			sentAudioMsg, errSend = c.Bot().Send(c.Chat(), &telebot.Voice{File: telebot.FromURL(pron.AudioURL), Caption: pron.Region})
 		}
-
-		if errSend != nil {
-			log.Printf("[ViewHelper WARN] UserID %d, PronunciationID %d: Sending voice failed (URL: %s): %v", c.Sender().ID, pron.ID, pron.AudioURL, errSend)
-			continue
-		}
-
-		if errSend == nil && sentAudioMsg != nil && sentAudioMsg.Voice != nil && sentAudioMsg.Voice.FileID != "" && sentAudioMsg.Voice.FileID != pron.TelegramVoiceID {
-			pronFileIDToCache = sentAudioMsg.Voice.FileID
-			errCache := wordService.CacheTelegramFileIDForPronunciation(pron.ID, pronFileIDToCache)
-			if errCache != nil {
-				log.Printf("[ViewHelper WARN] UserID %d, PronunciationID %d: Caching voice FileID (%s) failed: %v", c.Sender().ID, pron.ID, pronFileIDToCache, errCache)
-			}
-		}
-		break
 	}
 	return nil
 }
@@ -206,12 +195,28 @@ func sendQuizQuestion(c telebot.Context, qs *quiz.QuizState, quizService quiz.Qu
 		return c.Send("سوال آزمون به درستی بارگذاری نشد.", keyboards.MainMenu)
 	}
 
-	questionText := qs.QuestionText
+	// ---> MODIFICATION HERE <---
+	// Build the final formatted message text here.
+	var textBuilder strings.Builder
+	// Start with the base question text (e.g., "سوال ۱ از ۱۲:\n\nWhat is 'ubiquitous'?")
+	textBuilder.WriteString(qs.QuestionText)
+	textBuilder.WriteString("\n\n") // Add spacing
+
+	// Append the numbered list of options.
+	for i, opt := range qs.Options {
+		// Example: "۱. option text here\n"
+		// Make sure to escape the option text as it comes directly from the database.
+		textBuilder.WriteString(fmt.Sprintf("%d. %s\n", i+1, formatters.EscapeMarkdownV2(opt.Text)))
+	}
+
+	questionText := textBuilder.String()
+	// ---> END OF MODIFICATION <---
+
 	optionsMarkup := keyboards.QuizQuestionOptionsKeyboard(qs.Options, qs.AttemptID)
 
 	sentMsg, err := c.Bot().Send(
 		c.Chat(),
-		questionText,
+		formatters.EscapeMarkdownV2(questionText),
 		optionsMarkup,
 		telebot.ModeMarkdownV2,
 	)

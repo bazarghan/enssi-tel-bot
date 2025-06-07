@@ -44,8 +44,11 @@ func InitializeBot(token string, appServices *services.AppServices) (*telebot.Bo
 		return nil, err
 	}
 
-	// Setup router and middleware
-	RegisterRoutes(b, appServices)
+	// Create the user lock manager instance.
+	lockManager := NewUserLockManager()
+
+	// Setup router and middleware, now passing the lock manager as well.
+	RegisterRoutes(b, appServices, lockManager)
 
 	return b, nil
 }

@@ -2,27 +2,42 @@ package keyboards
 
 import (
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/models" // For models.QuizQuestionOption
+	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"gopkg.in/telebot.v4"
 )
 
 const (
-	QuizAnswerCallbackPrefix = "quiz_ans:" // quiz_ans:<attempt_ID>:<option_ID>
+	QuizAnswerCallbackPrefix = "quiz_ans:"
 )
 
-// QuizQuestionOptionsKeyboard creates an inline keyboard for quiz question options.
 func QuizQuestionOptionsKeyboard(options []models.QuizQuestionOption, attemptID uint) *telebot.ReplyMarkup {
 	inlineMenu := &telebot.ReplyMarkup{}
 
-	rows := make([]telebot.Row, len(options))
-	for i, opt := range options {
-		// Callback data: "quiz_ans:<attempt_id>:<option_id>"
-		// Question ID is not strictly needed in the callback if the service can derive it from attemptID + optionID,
-		// or if the service's SubmitAnswer only needs attemptID and chosenOptionID.
-		// The service `SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)` confirms this.
-		callbackData := fmt.Sprintf("%s%d:%d", QuizAnswerCallbackPrefix, attemptID, opt.ID)
-		btn := inlineMenu.Data(opt.Text, callbackData)
-		rows[i] = inlineMenu.Row(btn)
+	rows := make([]telebot.Row, 0, (len(options)+1)/2)
+
+	optionsText := []string{
+		"گزینه یک",
+		"گزینه دو",
+		"گزینه سه",
+		"گزینه چهار",
+		"گزینه پنج",
+		"گزینه شش",
+	}
+
+	for i := 0; i < len(options); i += 2 {
+
+		opt1 := options[i]
+		data1 := fmt.Sprintf("%s%d:%d", QuizAnswerCallbackPrefix, attemptID, opt1.ID)
+		btn1 := inlineMenu.Data(optionsText[i], data1)
+
+		if i+1 < len(options) {
+			opt2 := options[i+1]
+			data2 := fmt.Sprintf("%s%d:%d", QuizAnswerCallbackPrefix, attemptID, opt2.ID)
+			btn2 := inlineMenu.Data(optionsText[i+1], data2)
+			rows = append(rows, inlineMenu.Row(btn2, btn1))
+		} else {
+			rows = append(rows, inlineMenu.Row(btn1))
+		}
 	}
 
 	inlineMenu.Inline(rows...)

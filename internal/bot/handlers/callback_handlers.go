@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -80,6 +81,17 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 	submissionResult, err := appServices.Quiz().SubmitAnswer(attemptID, optionID, dbUser.ID)
 	if err != nil {
 		log.Printf("[HandleQuizAnswerCallback] UserID %d, AttemptID %d: Error submitting answer: %v", dbUser.ID, attemptID, err)
+
+		// ---> MODIFICATION IS HERE <---
+		// Handle the new error type for duplicate clicks
+		if errors.Is(err, quiz.ErrQuestionAlreadyAnswered) {
+			log.Printf("[HandleQuizAnswerCallback] Ignored duplicate answer for AttemptID %d. No action taken.", attemptID)
+			// Return nil immediately. The 'defer c.Respond()' at the top of the function
+			// will acknowledge the callback to stop the loading animation on the button,
+			// but we won't send any message or edit the existing one.
+			return nil
+		}
+		// ---> END OF MODIFICATION <---
 		var errorText string
 		switch {
 		case errors.Is(err, quiz.ErrAttemptNotFound):
@@ -152,8 +164,14 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 
 	} else if submissionResult.NextQuestionState != nil { // Quiz continues
 		nextState := submissionResult.NextQuestionState
-		log.Printf("[HandleQuizAnswerCallback] UserID %d: Quiz AttemptID %d (Type: %s) continues. Next question #%d (%s)",
-			dbUser.ID, nextState.AttemptID, nextState.QuizType, nextState.CurrentQuestionNum, nextState.QuestionText)
+		log.Printf(
+			"[HandleQuizAnswerCallback] UserID %d: Quiz AttemptID %d (Type: %s) continues. Next question #%d (%s)",
+			dbUser.ID,
+			nextState.AttemptID,
+			nextState.QuizType,
+			nextState.CurrentQuestionNum,
+			nextState.QuestionText,
+		)
 
 		// Update user's last menu to reflect they are in this specific quiz type
 		var currentQuizStateConstant string
@@ -164,7 +182,17 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 		}
 		appServices.User().UpdateUserLastMenu(dbUser.ID, currentQuizStateConstant)
 
-		questionText := nextState.QuestionText // Already formatted by QuizService
+		//here is the place where questions made
+
+		var textBuilder strings.Builder
+		textBuilder.WriteString(nextState.QuestionText)
+		textBuilder.WriteString("\n\n")
+
+		for i, opt := range nextState.Options {
+			textBuilder.WriteString(fmt.Sprintf("%d\\. %s\n", i+1, formatters.EscapeMarkdownV2(opt.Text)))
+		}
+		questionText := textBuilder.String()
+
 		optionsMarkup := keyboards.QuizQuestionOptionsKeyboard(nextState.Options, nextState.AttemptID)
 
 		// Edit the previous message to show the new question.
@@ -180,7 +208,7 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 			return sendQuizQuestion(c, nextState, appServices.Quiz())
 		}
 
-		sentMsg, editErr := c.Bot().Edit(editable, questionText, optionsMarkup, telebot.ModeMarkdownV2)
+		_, editErr := c.Bot().Edit(editable, questionText, optionsMarkup, telebot.ModeMarkdownV2)
 		if editErr != nil {
 			log.Printf(
 				"[HandleQuizAnswerCallback] Failed to edit quiz message (MsgID: %w) for next question. Error: %v. Sending new.",
@@ -190,10 +218,10 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 			return sendQuizQuestion(c, nextState, appServices.Quiz())
 		}
 
-		if sentMsg != nil {
-			if errUpdateID := appServices.Quiz().UpdateQuizAttemptMessageID(nextState.AttemptID, sentMsg.ID); errUpdateID != nil {
-				log.Printf("[HandleQuizAnswerCallback] UserID %d, AttemptID %d: Failed to update message ID after editing for next question: %v", dbUser.ID, nextState.AttemptID, errUpdateID)
-			}
+		messageIDToUpdate, _ := strconv.Atoi(func() string { msgId, _ := editable.MessageSig(); return msgId }()) // MessageSig() returns the ID as a string
+
+		if errUpdateID := appServices.Quiz().UpdateQuizAttemptMessageID(nextState.AttemptID, messageIDToUpdate); errUpdateID != nil {
+			log.Printf("[HandleQuizAnswerCallback] UserID %d, AttemptID %d: Failed to update message ID after editing for next question: %v", dbUser.ID, nextState.AttemptID, errUpdateID)
 		}
 
 	} else {

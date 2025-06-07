@@ -13,11 +13,15 @@ import (
 )
 
 // RegisterRoutes sets up all command, text, and callback handlers for the bot.
-func RegisterRoutes(b *telebot.Bot, appServices *services.AppServices) {
-	// Middleware to fetch/create user and make it available in context
+
+func RegisterRoutes(
+	b *telebot.Bot,
+	appServices *services.AppServices,
+	lockManager *UserLockManager,
+) {
+
 	b.Use(UserActivityMiddleware(appServices))
-	// General error handler middleware (optional, if you want centralized error logging/reply)
-	// b.Use(ErrorHandlerMiddleware) // Assuming ErrorHandlerMiddleware is defined
+	b.Use(UserLockMiddleware(lockManager))
 
 	// --- Command Handlers ---
 	// The CheckAndInitiateReview is inside these command handlers.

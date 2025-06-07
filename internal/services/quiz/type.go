@@ -20,6 +20,7 @@ var (
 	ErrCourseInteraction       = errors.New("quiz service: failed to interact with course service for progress update")
 	ErrInvalidInput            = errors.New("quiz service: invalid input provided")
 	ErrWordServiceInteraction  = errors.New("quiz service: failed to interact with word service")
+	ErrQuestionAlreadyAnswered = errors.New("quiz service: question has already been answered")
 )
 
 // --- Quiz Specific Constants ---

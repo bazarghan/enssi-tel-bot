@@ -2,7 +2,9 @@ package formatters
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/services/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz"
@@ -38,6 +40,62 @@ func FormatCourseOverview(co *course.CourseOverview) string {
 
 	if co.IsCompletedByUser {
 		sb.WriteString("وضعیت: *تکمیل شده*\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("پیشرفت شما: *%d%%*\n", co.ProgressPercentage))
+	}
+	return sb.String()
+}
+
+func FormatCourseProgress(co *course.CourseOverview) string {
+	// A small slice of motivational messages to pick from randomly.
+	motivationalPhrases := []string{
+		"هر کلمه‌ی جدید، یک آجر برای ساختن برج دانش توئه. 🏛️ آماده‌ای که آجر بعدی رو روی هم بذاریم؟",
+		"فوق‌العاده‌ست! ✨ دانش مثل یک اقیانوسه و تو داری عالی پیش میری. موج بعدی رو بگیریم؟ 🌊",
+		"عالیه که برگشتی! 🔥 یادگیری یک مسیره، نه یک مقصد. بیا قدم بعدی رو با هم برداریم.",
+		"موتور یادگیریت روشنه! 🚀 آماده برای کلمه‌ی بعدی؟ بزن بریم!",
+		"چه خوب که برای رشد خودت وقت میذاری. 🌱 هر قدمی که برمیداری، ارزشمنده. آماده‌ای برای ادامه؟",
+	}
+
+	// Seed the random number generator for variety each time.
+	// Note: For Go 1.20+, creating a new Rand source is preferred: r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// But for this non-critical use case, the global Seed is simple and effective.
+	rand.Seed(time.Now().UnixNano())
+	// Pick a random phrase.
+	randomPhrase := motivationalPhrases[rand.Intn(len(motivationalPhrases))]
+
+	var sb strings.Builder
+	// Course Title
+	sb.WriteString(fmt.Sprintf("*%s*\n", EscapeMarkdownV2(co.PersianTitle)))
+	if co.Title != co.PersianTitle {
+		sb.WriteString(fmt.Sprintf("_\\(%s\\)_\n", EscapeMarkdownV2(co.Title)))
+	}
+
+	sb.WriteString("\n") // Add a space
+
+	// --- Motivational Part ---
+
+	startText := "سلام\\! شما تازه دوره رو شروع کردید و هنوز هیچ کلمه‌ای رو یاد نگرفتید\\. نگران نباشید، با هم اولین کلمه‌تون رو یاد می‌گیریم\\! 📝🚀\n\n"
+
+	if co.UserProgressWords > 0 {
+		startText = fmt.Sprintf(
+			"تو تا اینجا *%d* کلمه از مجموع *%d* کلمه رو یاد گرفتی\\. دمت گرم\\! 💪\n\n",
+			co.UserProgressWords,
+			co.TotalWords,
+		)
+	}
+
+	sb.WriteString(startText)
+	if co.UserProgressWords > 0 {
+		sb.WriteString(EscapeMarkdownV2(randomPhrase))
+	}
+
+	sb.WriteString("\n\n") // Add more spacing before the status line
+
+	sb.WriteString(fmt.Sprintf("\nتعداد کلمات: *%d*\n", co.TotalWords))
+
+	// Progress status
+	if co.IsCompletedByUser {
+		sb.WriteString("وضعیت: *تکمیل شده* 🏆\n")
 	} else {
 		sb.WriteString(fmt.Sprintf("پیشرفت شما: *%d%%*\n", co.ProgressPercentage))
 	}

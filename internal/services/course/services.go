@@ -190,8 +190,34 @@ func (s *Service) checkQuizDue(
 
 	currentProgress := userCourse.Progress
 	if currentProgress > 1 {
+
 		if currentProgress > 0 && currentProgress%wordsPerQuizBlock == 0 {
+
 			quizTriggerPoint := currentProgress
+
+			// --- START: Gatekeeper check for previously passed quiz ---
+			var passedAttemptsCount int64
+
+			// Query to count successful, completed attempts for this specific milestone
+			err := s.db.Model(&models.QuizAttempt{}).
+				Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
+				Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ? AND quiz_attempts.score >= ?",
+					userID, courseID, quizTriggerPoint, true, quizPassThreshold).
+				Count(&passedAttemptsCount).Error
+
+			if err != nil {
+				// A DB error here is serious, log and prevent quiz from starting
+				log.Printf("CourseService: DB error checking for previously passed quiz for UserID %d, CourseID %d, Trigger %d: %v", userID, courseID, quizTriggerPoint, err)
+				// Returning the error will halt the process
+				return nil, err
+			}
+
+			if passedAttemptsCount > 0 {
+				log.Printf("CourseService: UserID %d has already passed the quiz for trigger point %d. Skipping quiz.", userID, quizTriggerPoint)
+				return nil, nil // Return successfully, indicating no quiz is due
+			}
+			// --- END: Gatekeeper check ---
+
 			quizState, err := s.quizService.StartOrResumeQuiz(userID, courseID, quizTriggerPoint)
 			if err != nil {
 				return nil, fmt.Errorf("%w: checking quiz at progress %d (trigger %d): %w", ErrQuizIntegration, currentProgress, quizTriggerPoint, err)

@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"fmt"
-	"log"
-
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/services"
 	"gopkg.in/telebot.v4"
+	"log"
+	"strconv"
 )
 
 // HandleStartCommand processes the /start command.
@@ -22,8 +22,20 @@ func HandleStartCommand(c telebot.Context, appServices *services.AppServices) er
 		log.Printf("[HandleStartCommand] Error ensuring user from service for TelegramID %d: %v", c.Sender().ID, err)
 		return c.Send("متاسفم، مشکلی در شروع گفتگو پیش آمد. لطفا دوباره با /start تلاش کنید.")
 	}
+	// The service now handles the "not found" case, so we only need to check for actual errors.
+	activeAttempt, err := appServices.Quiz().FindAnyActiveQuizAttempt(dbUser.ID)
+	if err != nil { // Simplified error check
+		log.Printf("[HandleStartCommand] Error finding active quiz for cleanup: %v", err)
+	}
 
-	// Check for mandatory daily review
+	if activeAttempt != nil && activeAttempt.CurrentQuestionMessageID != 0 {
+		log.Printf("[HandleStartCommand] UserID %d used /start, canceling active QuizAttemptID: %d", dbUser.ID, activeAttempt.ID)
+		if c.Chat() != nil {
+			neutralText := formatters.EscapeMarkdownV2("آزمون لغو شد.")
+			editPreviousMessage(c, c.Chat().ID, strconv.Itoa(activeAttempt.CurrentQuestionMessageID), neutralText, nil)
+		}
+	}
+
 	reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)
 	if reviewErr != nil {
 		// Error already logged by CheckAndInitiateReview, send a generic message to user
@@ -91,5 +103,5 @@ func HandleMyProfileCommand(c telebot.Context, appServices *services.AppServices
 	formattedProfile := formatters.FormatUserProfile(userProfileView)
 	// TODO: Add keyboard for profile actions (e.g., edit, view achievements)
 	// For now, sending with MainMenu, but a ProfileMenu would be better.
-	return c.Send(formattedProfile, keyboards.MainMenu, telebot.ModeMarkdownV2)
+	return c.Send(formattedProfile, keyboards.NewMainMenu(dbUser.IsAdmin), telebot.ModeMarkdownV2)
 }

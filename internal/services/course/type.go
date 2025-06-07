@@ -24,7 +24,8 @@ var (
 )
 
 const (
-	wordsPerQuizBlock = 12 // Example value
+	wordsPerQuizBlock = 12
+	quizPassThreshold = 9
 
 	MsgCourseNoContent            = "این دوره محتوایی ندارد. 🤷‍♂️"
 	MsgCourseCompleted            = "تبریک! 🎉 شما این دوره را با موفقیت به پایان رساندید."

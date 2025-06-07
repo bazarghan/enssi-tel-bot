@@ -11,6 +11,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/word" // Added for WordService interaction
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Service implements the QuizService interface.
@@ -465,12 +466,20 @@ func (s *Service) CreateReviewQuiz(userID uint, wordsToReview []word.WordStudied
 }
 
 func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint) (*AnswerSubmissionResult, error) {
-	log.Printf("QuizService: SubmitAnswer called for AttemptID: %d, OptionID: %d, UserID: %d", attemptID, chosenOptionID, userID)
+
+	log.Printf(
+		"QuizService: SubmitAnswer called for AttemptID: %d, OptionID: %d, UserID: %d",
+		attemptID,
+		chosenOptionID,
+		userID,
+	)
 
 	var submissionResult *AnswerSubmissionResult
 	txErr := s.db.Transaction(func(tx *gorm.DB) error {
 		var attempt models.QuizAttempt
-		if err := tx.First(&attempt, attemptID).Error; err != nil {
+
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&attempt, attemptID).Error; err != nil {
+
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrAttemptNotFound
 			}
@@ -494,8 +503,14 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 				return fmt.Errorf("getting results for completed attempt %d: %w", attemptID, err)
 			}
 			submissionResult = &AnswerSubmissionResult{
-				AttemptID: attempt.ID, QuizID: attempt.QuizID, UserID: userID, CourseID: quizForAttempt.CourseID, QuizType: quizForAttempt.Type,
-				IsQuizNowCompleted: true, FinalQuizResult: finalResults, CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
+				AttemptID:                attempt.ID,
+				QuizID:                   attempt.QuizID,
+				UserID:                   userID,
+				CourseID:                 quizForAttempt.CourseID,
+				QuizType:                 quizForAttempt.Type,
+				IsQuizNowCompleted:       true,
+				FinalQuizResult:          finalResults,
+				CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
 			}
 			return nil
 		}
@@ -508,20 +523,51 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 			return fmt.Errorf("fetching option %d: %w", chosenOptionID, err)
 		}
 
+		// ---> START OF CORRECTED GATEKEEPER LOGIC <---
+
+		// Check if an answer has already been recorded for the specific option's question.
+		var existingAnswerCount int64
+		if err := tx.Model(&models.QuizAnswer{}).
+			Where("quiz_attempt_id = ? AND quiz_question_id = ?", attempt.ID, chosenOption.QuizQuestionID).
+			Count(&existingAnswerCount).Error; err != nil {
+			// A DB error during this check is serious.
+			return fmt.Errorf("failed to check for existing answer: %w", err)
+		}
+
+		if existingAnswerCount > 0 {
+			// An answer for this question already exists. This is a duplicate click.
+			log.Printf("SubmitAnswer: Ignored duplicate request for AttemptID %d, QuestionID %d.", attempt.ID, chosenOption.QuizQuestionID)
+			return ErrQuestionAlreadyAnswered // Return the specific error that the handler will ignore.
+		}
+
+		// ---> END OF CORRECTED GATEKEEPER LOGIC <---
+
 		if attempt.CurrentQuestionNum < 0 || attempt.CurrentQuestionNum >= len(quizForAttempt.QuizQuesetions) {
-			log.Printf("QuizService: Invalid CurrentQuestionNum %d for attempt %d. Total questions: %d. Finalizing.", attempt.CurrentQuestionNum, attempt.ID, len(quizForAttempt.QuizQuesetions))
+			log.Printf(
+				"QuizService: Invalid CurrentQuestionNum %d for attempt %d. Total questions: %d. Finalizing.",
+				attempt.CurrentQuestionNum,
+				attempt.ID,
+				len(quizForAttempt.QuizQuesetions),
+			)
 			finalResults, err := s.getQuizResultsInternal(tx, &attempt, &quizForAttempt)
 			if err != nil {
 				return fmt.Errorf("finalizing attempt %d with invalid q_num: %w", attemptID, err)
 			}
 			submissionResult = &AnswerSubmissionResult{
-				AttemptID: attempt.ID, QuizID: attempt.QuizID, UserID: userID, CourseID: quizForAttempt.CourseID, QuizType: quizForAttempt.Type,
-				IsQuizNowCompleted: true, FinalQuizResult: finalResults, CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
+				AttemptID:                attempt.ID,
+				QuizID:                   attempt.QuizID,
+				UserID:                   userID,
+				CourseID:                 quizForAttempt.CourseID,
+				QuizType:                 quizForAttempt.Type,
+				IsQuizNowCompleted:       true,
+				FinalQuizResult:          finalResults,
+				CurrentQuestionMessageID: attempt.CurrentQuestionMessageID,
 			}
 			return nil
 		}
 		currentQuestionModel := quizForAttempt.QuizQuesetions[attempt.CurrentQuestionNum]
 		expectedQuestionID := currentQuestionModel.ID
+
 		if chosenOption.QuizQuestionID != expectedQuestionID {
 			log.Printf("Option mismatch for attempt %d. Expected QID %d, got for QID %d", attemptID, expectedQuestionID, chosenOption.QuizQuestionID)
 			return fmt.Errorf("%w: option chosen for question %d, but current is implicitly %d", ErrInvalidOption, chosenOption.QuizQuestionID, expectedQuestionID)
@@ -704,6 +750,7 @@ func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttemp
 			resultMessage += msgQuizPassed
 		} else {
 			resultMessage += fmt.Sprintf(msgQuizFailed, quizPassThresholdCorrectAnswers)
+			resultMessage += "\nبه همین دلیل مجبوریم شمارو به اول درس برگردونیم."
 			shouldResetProgress = true
 			if quizInfo.TriggerProgress >= wordsPerQuizBlock {
 				suggestedNewProgress = quizInfo.TriggerProgress - wordsPerQuizBlock

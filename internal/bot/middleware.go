@@ -86,3 +86,44 @@ func ErrorHandlerMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
 		return nil // error handled
 	}
 }
+
+// UserLockMiddleware prevents concurrent request processing for the same user.
+// It should be used in the router chain after UserActivityMiddleware.
+func UserLockMiddleware(lockManager *UserLockManager) telebot.MiddlewareFunc {
+	return func(next telebot.HandlerFunc) telebot.HandlerFunc {
+		return func(c telebot.Context) error {
+			sender := c.Sender()
+			if sender == nil {
+				// Not a user-initiated update (e.g., channel post), so we don't lock.
+				return next(c)
+			}
+			userID := sender.ID
+
+			// Try to acquire the lock for this user.
+			if !lockManager.TryLock(userID) {
+				// User is already locked, meaning another request from them is still being processed.
+				// We log it and ignore this new request by returning nil.
+				log.Printf("[UserLockMiddleware] Ignored concurrent request for UserID %d. User is locked.", userID)
+
+				// If this was a callback query (from an inline button), we should still "respond" to it
+				// to stop the loading animation on the user's client, even though we're ignoring it.
+				if cb := c.Callback(); cb != nil {
+					// Respond without any text. This just acknowledges the button press.
+					c.Respond()
+				}
+
+				return nil // Stop processing this duplicate/concurrent request.
+			}
+
+			// If we got here, the lock was acquired successfully.
+			// We use `defer` to GUARANTEE that the lock is released when this handler function
+			// (and all the handlers after it in the chain) finishes, no matter what.
+			defer lockManager.Unlock(userID)
+
+			// Proceed to the next handler in the chain (e.g., the actual command/message handler).
+			return next(c)
+		}
+	}
+}
+
+// ---> END OF NEW MIDDLEWARE FUNCTION <---
