@@ -198,15 +198,16 @@ func sendQuizQuestion(c telebot.Context, qs *quiz.QuizState, quizService quiz.Qu
 	// ---> MODIFICATION HERE <---
 	// Build the final formatted message text here.
 	var textBuilder strings.Builder
-	// Start with the base question text (e.g., "سوال ۱ از ۱۲:\n\nWhat is 'ubiquitous'?")
-	textBuilder.WriteString(qs.QuestionText)
+
+	textBuilder.WriteString(fmt.Sprintf("\n%s", qs.QuestionText))
 	textBuilder.WriteString("\n\n") // Add spacing
 
-	// Append the numbered list of options.
 	for i, opt := range qs.Options {
-		// Example: "۱. option text here\n"
-		// Make sure to escape the option text as it comes directly from the database.
-		textBuilder.WriteString(fmt.Sprintf("%d. %s\n", i+1, formatters.EscapeMarkdownV2(opt.Text)))
+		textBuilder.WriteString(fmt.Sprintf(">%d\\. %s\n", i+1, formatters.EscapeMarkdownV2(opt.Text)))
+
+		seperatorText := "─────────────────────────"
+		textBuilder.WriteString(fmt.Sprintf(">%s\n", formatters.EscapeMarkdownV2(seperatorText)))
+
 	}
 
 	questionText := textBuilder.String()
@@ -216,7 +217,7 @@ func sendQuizQuestion(c telebot.Context, qs *quiz.QuizState, quizService quiz.Qu
 
 	sentMsg, err := c.Bot().Send(
 		c.Chat(),
-		formatters.EscapeMarkdownV2(questionText),
+		questionText,
 		optionsMarkup,
 		telebot.ModeMarkdownV2,
 	)

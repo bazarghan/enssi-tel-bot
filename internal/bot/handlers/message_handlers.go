@@ -1,21 +1,199 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
 
-	"encoding/json" // For formatting query results
-
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
+	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/2000ostd/enssi-tel-bot/internal/services"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/course"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
 )
+
+// HandleStateBasedText is the primary state machine for all user text input.
+// It routes user input to the correct function based on their `LastMenu` state.
+func HandleStateBasedText(c telebot.Context, dbUser *models.User, appServices *services.AppServices) error {
+	userInput := strings.TrimSpace(c.Text())
+	// No need to fetch the user again, it's passed as a parameter.
+	if dbUser == nil {
+		return SendServiceError(c, "processing text (state handler)", errors.New("user object is nil"))
+	}
+
+	// --- Global Text Commands ---
+	// Handle commands that should work regardless of the current state, like returning to the main menu.
+	if userInput == keyboards.BtnReturnToMainMenu.Text {
+		return HandleReturnToMainMenu(c, dbUser.ID, appServices)
+	}
+
+	// --- Daily Review Check ---
+	// Check for a mandatory review before processing state-specific actions,
+	// unless the user is already in a quiz or the admin panel.
+	isProtectedState := strings.HasPrefix(dbUser.LastMenu, StateInQuizPrefix) ||
+		strings.HasPrefix(dbUser.LastMenu, StateInReviewQuizPrefix) ||
+		dbUser.LastMenu == StateInAdminPanel
+
+	if !isProtectedState {
+		reviewHandled, reviewErr := CheckAndInitiateReview(c, appServices, dbUser)
+		if reviewErr != nil {
+			return SendServiceError(c, "checking for daily review (state handler)", reviewErr)
+		}
+		if reviewHandled {
+			return nil // Review process has taken over. Stop further processing.
+		}
+	}
+
+	// --- State Machine Dispatcher ---
+	log.Printf("[State Machine] Routing UserID %d from state '%s' with input: '%s'", dbUser.ID, dbUser.LastMenu, userInput)
+
+	switch {
+	case dbUser.LastMenu == StateMain:
+		// User is in the main menu.
+		switch userInput {
+		case keyboards.BtnStartLearning.Text:
+			return HandleStartLearningJourney(c, dbUser.ID, appServices)
+		case keyboards.BtnMyProfile.Text:
+			return HandleMyProfileCommand(c, appServices) // The state check is now inside this handler.
+		case keyboards.BtnAdminPanel.Text:
+			return HandleAdminPanelEntry(c, dbUser, appServices) // New dedicated handler for clarity
+		}
+
+	case dbUser.LastMenu == StateCourseList:
+		// User is viewing the list of courses. Input should be a course title.
+		return handleCourseSelectionFromList(c, userInput, dbUser.ID, appServices)
+
+	case dbUser.LastMenu == StateInAdminPanel:
+		// User is in the admin panel. Input is an SQL query.
+		return handleAdminQuery(c, userInput, dbUser, appServices)
+
+	case strings.HasPrefix(dbUser.LastMenu, StateCourseDetailsPrefix):
+		// User is viewing a specific course overview.
+		courseID, err := ParseIDFromState(dbUser.LastMenu, StateCourseDetailsPrefix)
+		if err != nil {
+			log.Printf("[State Machine] Could not parse courseID from state '%s' for UserID %d", dbUser.LastMenu, dbUser.ID)
+			return SendServiceError(c, "invalid state", err)
+		}
+		// Check for buttons like "Start Course" or "Continue Course"
+		if strings.HasPrefix(userInput, keyboards.StartCourseButtonText) || strings.HasPrefix(userInput, keyboards.ContinueCourseButtonText) {
+			return handleStartOrResumeCourse(c, dbUser.ID, courseID, appServices)
+		}
+		if strings.HasPrefix(userInput, keyboards.ReviewCourseButtonText) {
+			return c.Send("مرور دوره هنوز پیاده‌سازی نشده است.") // Placeholder
+		}
+
+	case strings.HasPrefix(dbUser.LastMenu, StateInCoursePrefix):
+		// User is actively in a course lesson.
+		if userInput == keyboards.NextWordButtonText {
+			courseID, err := ParseIDFromState(dbUser.LastMenu, StateInCoursePrefix)
+			if err != nil {
+				log.Printf("[State Machine] Could not parse courseID from state '%s' for UserID %d", dbUser.LastMenu, dbUser.ID)
+				return SendServiceError(c, "invalid state", err)
+			}
+			return HandleAdvanceWord(c, dbUser.ID, courseID, appServices)
+		}
+
+	case strings.HasPrefix(dbUser.LastMenu, StateInQuizPrefix) || strings.HasPrefix(dbUser.LastMenu, StateInReviewQuizPrefix):
+		// User is in a quiz. Inline keyboard handles answers. Text messages should be ignored or handled.
+		return c.Send("لطفا با استفاده از دکمه‌ها به سوالات آزمون پاسخ دهید.")
+	}
+
+	// If no state matches, log it. Don't send a message to avoid spamming on typos.
+	log.Printf("[State Machine] UserID %d sent unhandled text '%s' from state '%s'", dbUser.ID, userInput, dbUser.LastMenu)
+	return nil
+}
+
+// --- Helper Handlers for the State Machine ---
+
+func handleCourseSelectionFromList(c telebot.Context, userInput string, userID uint, appServices *services.AppServices) error {
+	courses, err := appServices.Course().ListAvailableCourses(userID)
+	if err != nil {
+		return SendServiceError(c, "listing courses for selection", err)
+	}
+	for _, courseSummary := range courses {
+		// Match against the exact button text generated by the keyboard
+		if userInput == courseSummary.PersianTitle {
+			return displayCourseOverview(c, userID, courseSummary.ID, appServices)
+		}
+	}
+	// If no match found, it might be a typo. Silently ignore.
+	return nil
+}
+
+func HandleAdminPanelEntry(c telebot.Context, dbUser *models.User, appServices *services.AppServices) error {
+	if !dbUser.IsAdmin {
+		log.Printf("[Admin] Non-admin UserID %d attempted to access admin panel.", dbUser.ID)
+		return c.Send("شما اجازه دسترسی به این بخش را ندارید.")
+	}
+	err := appServices.User().UpdateUserLastMenu(dbUser.ID, StateInAdminPanel)
+	if err != nil {
+		return SendServiceError(c, "entering admin panel", err)
+	}
+	adminPanelMessage := "به پنل ادمین خوش آمدید. 👨‍💻\n" +
+		"اکنون می‌توانید کوئری‌های SQL خام را مستقیماً ارسال کنید.\n" +
+		"هشدار: اجرای کوئری‌های نادرست می‌تواند به داده‌ها آسیب برساند.\n" +
+		"برای خروج، از دکمه 'بازگشت به منوی اصلی' استفاده کنید."
+
+	return c.Send(formatters.EscapeMarkdownV2(adminPanelMessage), keyboards.BackToMainMenuKeyboard(), telebot.ModeMarkdownV2)
+}
+
+func handleAdminQuery(c telebot.Context, query string, dbUser *models.User, appServices *services.AppServices) error {
+	log.Printf("[Admin] UserID %d executing SQL query: %s", dbUser.ID, query)
+	// Simple guards against common destructive commands
+	lowerQuery := strings.ToLower(query)
+	if (strings.HasPrefix(lowerQuery, "delete ") || strings.HasPrefix(lowerQuery, "update ")) && !strings.Contains(lowerQuery, "where") {
+		return c.Send(formatters.EscapeMarkdownV2("⚠️ هشدار: کوئری‌های DELETE/UPDATE بدون WHERE مجاز نیستند."), telebot.ModeMarkdownV2)
+	}
+	if strings.HasPrefix(lowerQuery, "drop ") || strings.HasPrefix(lowerQuery, "truncate ") {
+		return c.Send(formatters.EscapeMarkdownV2("⛔️ دستورات DROP و TRUNCATE از طریق این پنل مجاز نیستند."), telebot.ModeMarkdownV2)
+	}
+
+	var results []map[string]interface{}
+	var responseMessage string
+	db := appServices.DB()
+	tx := db.Raw(query).Scan(&results)
+
+	if tx.Error != nil {
+		log.Printf("[Admin] SQL Error for UserID %d: %v", dbUser.ID, tx.Error)
+		// The error message itself is escaped and placed within a code block. The prefix is safe.
+		responseMessage = fmt.Sprintf("❌ خطای SQL:\n```\n%s\n```", formatters.EscapeMarkdownV2(tx.Error.Error()))
+	} else {
+		if len(results) > 0 {
+			jsonResult, err := json.MarshalIndent(results, "", "  ")
+			if err != nil {
+				// Escape the entire message as it's just plain text.
+				messagePart := fmt.Sprintf("✅ کوئری اجرا شد. %d ردیف تحت تاثیر. نمایش نتیجه با خطا مواجه شد: %v", tx.RowsAffected, err)
+				responseMessage = formatters.EscapeMarkdownV2(messagePart)
+			} else {
+				resultStr := string(jsonResult)
+				if len(resultStr) > 4000 {
+					resultStr = resultStr[:4000] + "\n... (نتیجه طولانی‌تر از حد مجاز است)"
+				}
+				// --- Selective Escaping ---
+				// 1. Create the prefix text.
+				prefixText := fmt.Sprintf("✅ کوئری اجرا شد. %d ردیف بازگردانده شد.\nنتیجه:\n", len(results))
+				// 2. Escape ONLY the prefix text.
+				escapedPrefix := formatters.EscapeMarkdownV2(prefixText)
+				// 3. Combine with the unescaped JSON code block.
+				responseMessage = escapedPrefix + "```json\n" + resultStr + "\n```"
+			}
+		} else if tx.RowsAffected > 0 {
+			// Escape the entire message as it's just plain text.
+			messagePart := fmt.Sprintf("✅ کوئری اجرا شد. %d ردیف تحت تاثیر قرار گرفت.", tx.RowsAffected)
+			responseMessage = formatters.EscapeMarkdownV2(messagePart)
+		} else {
+			// Escape the entire message as it's just plain text.
+			responseMessage = formatters.EscapeMarkdownV2("✅ کوئری اجرا شد. هیچ ردیفی بازگردانده نشد یا تحت تاثیر قرار نگرفت.")
+		}
+	}
+	// Send the final, correctly constructed message.
+	return c.Send(responseMessage, telebot.ModeMarkdownV2)
+}
 
 // HandleTextMessage is a general handler for text messages.
 // It routes to more specific handlers based on the text content or user state.

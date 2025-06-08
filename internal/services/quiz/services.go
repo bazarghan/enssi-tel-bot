@@ -350,7 +350,13 @@ func (s *Service) StartOrResumeQuiz(userID uint, courseID uint, userCourseProgre
 		shuffledOptions[i], shuffledOptions[j] = shuffledOptions[j], shuffledOptions[i]
 	})
 
-	questionText := fmt.Sprintf("سوال %d از %d:\n\n%s", currentAttempt.CurrentQuestionNum+1, quizForAttempt.QuestionCount, currentQuestionModel.Text)
+	questionText := fmt.Sprintf(
+		"سوال %d از %d:\n\nمعنی کمله %s چه می باشد؟",
+		currentAttempt.CurrentQuestionNum+1,
+		quizForAttempt.QuestionCount,
+		currentQuestionModel.Text,
+	)
+
 	if isNewAttempt && messageToUser == "" {
 		messageToUser = fmt.Sprintf(msgStartNewQuizDefault, userCourseProgress)
 	} else if messageToUser == "" {
@@ -446,7 +452,13 @@ func (s *Service) CreateReviewQuiz(userID uint, wordsToReview []word.WordStudied
 		shuffledOptions[i], shuffledOptions[j] = shuffledOptions[j], shuffledOptions[i]
 	})
 
-	questionText := fmt.Sprintf("سوال %d از %d:\n\n%s", currentAttempt.CurrentQuestionNum+1, newQuiz.QuestionCount, currentQuestionModel.Text)
+	// questionText := fmt.Sprintf("سوال %d از %d:\n\n%s", currentAttempt.CurrentQuestionNum+1, newQuiz.QuestionCount, currentQuestionModel.Text)
+	questionText := fmt.Sprintf(
+		"سوال %d از %d:\n\nمعنی کمله %s چه می باشد؟",
+		currentAttempt.CurrentQuestionNum+1,
+		newQuiz.QuestionCount,
+		currentQuestionModel.Text,
+	)
 
 	return &QuizState{
 		AttemptID:                currentAttempt.ID,
@@ -634,7 +646,13 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 			rand.New(rand.NewSource(time.Now().UnixNano())).Shuffle(len(shuffledOptions), func(i, j int) {
 				shuffledOptions[i], shuffledOptions[j] = shuffledOptions[j], shuffledOptions[i]
 			})
-			questionText := fmt.Sprintf("سوال %d از %d:\n\n%s", attempt.CurrentQuestionNum+1, quizForAttempt.QuestionCount, nextQuestionModel.Text)
+			// questionText := fmt.Sprintf("سوال %d از %d:\n\n%s", attempt.CurrentQuestionNum+1, quizForAttempt.QuestionCount, nextQuestionModel.Text)
+			questionText := fmt.Sprintf(
+				"سوال %d از %d:\n\nمعنی کمله %s چه می باشد؟",
+				attempt.CurrentQuestionNum+1,
+				quizForAttempt.QuestionCount,
+				nextQuestionModel.Text,
+			)
 
 			submissionResult = &AnswerSubmissionResult{
 				AttemptID:          attempt.ID,

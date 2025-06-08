@@ -185,12 +185,17 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 		//here is the place where questions made
 
 		var textBuilder strings.Builder
-		textBuilder.WriteString(nextState.QuestionText)
+
+		textBuilder.WriteString(fmt.Sprintf("\n%s", nextState.QuestionText))
 		textBuilder.WriteString("\n\n")
 
 		for i, opt := range nextState.Options {
-			textBuilder.WriteString(fmt.Sprintf("%d\\. %s\n", i+1, formatters.EscapeMarkdownV2(opt.Text)))
+			textBuilder.WriteString(fmt.Sprintf(">%d\\. %s\n", i+1, formatters.EscapeMarkdownV2(opt.Text)))
+
+			seperatorText := "─────────────────────────"
+			textBuilder.WriteString(fmt.Sprintf(">%s\n", formatters.EscapeMarkdownV2(seperatorText)))
 		}
+
 		questionText := textBuilder.String()
 
 		optionsMarkup := keyboards.QuizQuestionOptionsKeyboard(nextState.Options, nextState.AttemptID)
