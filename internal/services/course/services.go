@@ -9,6 +9,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/word"
+
+	"github.com/2000ostd/enssi-tel-bot/internal/services/user" // Import user service
 	"gorm.io/gorm"
 )
 
@@ -21,14 +23,16 @@ type Service struct {
 	db          *gorm.DB
 	quizService quiz.QuizService
 	wordService word.WordService
+	userService user.UserService
 }
 
 // NewService creates a new instance of the course Service.
-func NewService(db *gorm.DB, qs quiz.QuizService, ws word.WordService) *Service {
+func NewService(db *gorm.DB, qs quiz.QuizService, ws word.WordService, us user.UserService) *Service {
 	return &Service{
 		db:          db,
 		quizService: qs,
 		wordService: ws,
+		userService: us,
 	}
 }
 
@@ -550,6 +554,40 @@ func (s *Service) HandleQuizCompletion(
 
 			log.Printf("CourseService: Quiz passed. Directly presenting next word for UserID %d, CourseID %d.", userID, courseID)
 
+			// --- ADD/REPLACE ACHIEVEMENT PROGRESS LOGIC HERE ---
+			var achievementInfo *AchievementUpdateInfo
+
+			var currentCourseModels models.Course
+			if err := s.db.First(&currentCourseModels, courseID).Error; err == nil {
+				// Check if the course has a linked achievement ID (0 means none).
+				if currentCourseModels.LinkedAchievementID != 0 {
+					linkedAchID := currentCourseModels.LinkedAchievementID
+					itemsToRevealThisQuiz := 12 // This could also come from currentCourseModels if you add that field
+
+					_, newBitsetState, errAch := s.userService.AwardAchievementProgress(userID, linkedAchID, itemsToRevealThisQuiz)
+					if errAch != nil {
+						log.Printf("CourseService: Error awarding achievement progress for UserID %d, AchievementID %d: %v", userID, linkedAchID, errAch)
+					} else {
+						// Fetch achievement details to pass back to the handler for image generation.
+						var achievementDetails models.Achievement
+						if errAchDetails := s.db.First(&achievementDetails, linkedAchID).Error; errAchDetails == nil {
+							log.Printf("CourseService: Achievement progress awarded. Populating DTO for handler.")
+							achievementInfo = &AchievementUpdateInfo{
+								AchievementID:  linkedAchID,
+								Title:          achievementDetails.Title,
+								ImageURL:       achievementDetails.ImageURL,
+								TotalItems:     achievementDetails.TotalItems,
+								GridWidth:      achievementDetails.GridWidth,
+								GridHeight:     achievementDetails.GridHeight,
+								NewStateBitSet: newBitsetState,
+							}
+						}
+					}
+				}
+			} else {
+				log.Printf("CourseService: Could not fetch course details for CourseID %d to check for linked achievement.", courseID)
+			}
+
 			// Fetch the most up-to-date UserCourse record to get the current progress.
 			uc, err := s.GetUserCourse(userID, courseID)
 			if err != nil {
@@ -557,8 +595,16 @@ func (s *Service) HandleQuizCompletion(
 				// Fallback to StartOrResumeLearningSession if we can't get the user course.
 				return s.StartOrResumeLearningSession(courseID, userID)
 			}
+			// Get the learning context for the next word
+			learningContext, err := s.presentNextWord(userID, courseID, uc)
+			if err != nil {
+				return nil, err
+			}
 
-			return s.presentNextWord(userID, courseID, uc)
+			// Attach the achievement info (if any) to the context before returning
+			learningContext.AchievementProgressed = achievementInfo
+
+			return learningContext, nil
 
 		} else {
 			log.Printf("CourseService: COURSE_BLOCK Quiz (ID %d) failed for UserID %d, CourseID %d.", quizOutcome.QuizID, userID, courseID)

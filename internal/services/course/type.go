@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/word"
+	"github.com/bits-and-blooms/bitset" // Import for bitset
 )
 
 // --- Service-Specific Errors ---
@@ -75,4 +76,16 @@ type LearningContext struct {
 	WordToDisplay *word.WordDisplayData // Populated if IsQuizDue is false and there's a word
 	MessageToUser string                // e.g., "Here is your next word", "Time for a quiz!"
 	IsCourseEnded bool                  // True if all words + final quiz (if any) are done.
+
+	AchievementProgressed *AchievementUpdateInfo // Populated if an achievement progressed in this step
+}
+
+type AchievementUpdateInfo struct {
+	AchievementID  uint
+	Title          string
+	ImageURL       string         // Base image for generation
+	TotalItems     uint           // e.g., 504
+	GridWidth      uint           // e.g., 24
+	GridHeight     uint           // e.g., 21
+	NewStateBitSet *bitset.BitSet // The updated bitset of revealed items
 }

@@ -14,5 +14,5 @@ type Course struct {
 	Description        string
 	PersianDescription string
 
-	LinkedAchievementID uint `gorm:"null;comment:ID of an Achievement linked to this course's progression"`
+	LinkedAchievementID uint `gorm:"default:0;comment:ID of an Achievement linked to this course's progression (0 if none)"`
 }

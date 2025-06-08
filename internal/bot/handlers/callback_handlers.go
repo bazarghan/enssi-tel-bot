@@ -4,13 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time" // For MarkReviewSessionCompleted
 
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/bot/keyboards"
-	"github.com/2000ostd/enssi-tel-bot/internal/models" // For models.QuizType
+	"github.com/2000ostd/enssi-tel-bot/internal/imagegen" // Import your new image generation package
+	"github.com/2000ostd/enssi-tel-bot/internal/models"   // For models.QuizType
 	"github.com/2000ostd/enssi-tel-bot/internal/services"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz" // For quiz.ErrAttemptNotFound etc.
 	"gopkg.in/telebot.v4"
@@ -153,6 +155,44 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 				log.Printf("[HandleQuizAnswerCallback] UserID %d, CourseID %d: Error in CourseService.HandleQuizCompletion: %v", dbUser.ID, finalResult.CourseID, errHc)
 				return SendServiceError(c, "handling course quiz completion", errHc)
 			}
+			// ---> ADD THIS BLOCK TO HANDLE ACHIEVEMENT IMAGE SENDING <---
+			if nextLc != nil && nextLc.AchievementProgressed != nil {
+				log.Printf("[HandleQuizAnswerCallback] Achievement progress detected for UserID %d. Generating image.", dbUser.ID)
+				achInfo := nextLc.AchievementProgressed
+
+				// Generate the dynamic achievement image.
+				// Ensure the output directory exists and is writable.
+				outputDir := "./tmp_achievements"
+				generatedImagePath, imgErr := imagegen.GenerateAchievementImage(
+					achInfo.ImageURL, // Base image path from achievement record
+					achInfo.NewStateBitSet,
+					achInfo.TotalItems,
+					achInfo.GridWidth,
+					achInfo.GridHeight, // Pass the grid height
+					outputDir,
+				)
+
+				if imgErr != nil {
+					log.Printf("[HandleQuizAnswerCallback] UserID %d: Failed to generate achievement image: %v", dbUser.ID, imgErr)
+					// Don't stop the flow, just log the error. The user will still get their next word.
+				} else {
+					// Clean up the temporary file after the handler finishes executing.
+					defer os.Remove(generatedImagePath)
+
+					// Send the generated image to the user.
+					photoToSend := &telebot.Photo{
+						File:    telebot.FromDisk(generatedImagePath),
+						Caption: fmt.Sprintf("🏆 پیشرفت جدید در دستاورد: *%s*", formatters.EscapeMarkdownV2(achInfo.Title)),
+					}
+
+					// Send with MarkdownV2 for the caption.
+					if _, sendErr := c.Bot().Send(c.Chat(), photoToSend, telebot.ModeMarkdownV2); sendErr != nil {
+						log.Printf("[HandleQuizAnswerCallback] UserID %d: Failed to send achievement image: %v", dbUser.ID, sendErr)
+					}
+				}
+			}
+			// ---> END OF ACHIEVEMENT IMAGE HANDLING <---
+
 			return sendLearningContext(c, nextLc, appServices)
 		}
 

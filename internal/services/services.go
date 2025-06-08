@@ -35,7 +35,7 @@ func NewAppServices(db *gorm.DB) (*AppServices, error) {
 	quizService := quiz.NewService(db, wordService) // Pass wordService instance
 
 	// Course Service depends on QuizService and WordService
-	courseService := course.NewService(db, quizService, wordService)
+	courseService := course.NewService(db, quizService, wordService, userService)
 
 	return &AppServices{
 		userServiceInstance:   *userService,
