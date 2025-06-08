@@ -16,4 +16,6 @@ type UserService interface {
 	MarkReviewSessionCompleted(userID uint, completedAt time.Time) error
 
 	AwardAchievementProgress(userID uint, achievementID uint, itemsToReveal int) (*models.ProfileAchievement, *bitset.BitSet, error)
+
+	CompleteAchievement(userID uint, achievementID uint) (*models.ProfileAchievement, *bitset.BitSet, error)
 }

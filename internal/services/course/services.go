@@ -6,6 +6,8 @@ import (
 	"log"
 	"strings"
 
+	"github.com/bits-and-blooms/bitset"
+
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/word"
@@ -562,26 +564,43 @@ func (s *Service) HandleQuizCompletion(
 				// Check if the course has a linked achievement ID (0 means none).
 				if currentCourseModels.LinkedAchievementID != 0 {
 					linkedAchID := currentCourseModels.LinkedAchievementID
-					itemsToRevealThisQuiz := 12 // This could also come from currentCourseModels if you add that field
 
-					_, newBitsetState, errAch := s.userService.AwardAchievementProgress(userID, linkedAchID, itemsToRevealThisQuiz)
-					if errAch != nil {
-						log.Printf("CourseService: Error awarding achievement progress for UserID %d, AchievementID %d: %v", userID, linkedAchID, errAch)
-					} else {
-						// Fetch achievement details to pass back to the handler for image generation.
-						var achievementDetails models.Achievement
-						if errAchDetails := s.db.First(&achievementDetails, linkedAchID).Error; errAchDetails == nil {
-							log.Printf("CourseService: Achievement progress awarded. Populating DTO for handler.")
-							achievementInfo = &AchievementUpdateInfo{
-								AchievementID:  linkedAchID,
-								Title:          achievementDetails.Title,
-								ImageURL:       achievementDetails.ImageURL,
-								TotalItems:     achievementDetails.TotalItems,
-								GridWidth:      achievementDetails.GridWidth,
-								GridHeight:     achievementDetails.GridHeight,
-								NewStateBitSet: newBitsetState,
-							}
+					// Fetch total words to check for completion
+					totalWords, _ := s.getTotalWordsInCourseInternal(courseID)
+
+					// Check if this is the final block of the course
+					if completedQuizModels.TriggerProgress >= uint(totalWords) {
+						// This is the final quiz, so complete the achievement
+						log.Printf("CourseService: Final quiz passed for CourseID %d. Completing achievement %d.", courseID, linkedAchID)
+						_, newBitsetState, errAch := s.userService.CompleteAchievement(userID, linkedAchID)
+
+						if errAch != nil {
+							log.Printf(
+								"CourseService: Error awarding achievement progress for UserID %d, AchievementID %d: %v",
+								userID,
+								linkedAchID,
+								errAch,
+							)
+						} else {
+							achievementInfo = s.populateAchievementInfo(linkedAchID, newBitsetState)
 						}
+					} else {
+						// Not the final quiz, award partial progress
+						itemsToRevealThisQuiz := 12
+						log.Printf("CourseService: Quiz passed for CourseID %d. Awarding %d items for achievement %d.", courseID, itemsToRevealThisQuiz, linkedAchID)
+						_, newBitsetState, errAch := s.userService.AwardAchievementProgress(userID, linkedAchID, itemsToRevealThisQuiz)
+
+						if errAch != nil {
+							log.Printf(
+								"CourseService: Error awarding achievement progress for UserID %d, AchievementID %d: %v",
+								userID,
+								linkedAchID,
+								errAch,
+							)
+						} else {
+							achievementInfo = s.populateAchievementInfo(linkedAchID, newBitsetState)
+						}
+
 					}
 				}
 			} else {
@@ -643,4 +662,28 @@ func (s *Service) UpdateUserCourseProgress(userID uint, courseID uint, newProgre
 	}
 	log.Printf("CourseService: Successfully updated progress for UserID %d, CourseID %d to %d.", userID, courseID, uc.Progress)
 	return &uc, nil
+}
+
+func (s *Service) populateAchievementInfo(
+	linkedAchievementID uint,
+	newBitsetState *bitset.BitSet,
+) *AchievementUpdateInfo {
+
+	var achievementInfo *AchievementUpdateInfo
+
+	var achievementDetails models.Achievement
+	if errAchDetails := s.db.First(&achievementDetails, linkedAchievementID).Error; errAchDetails == nil {
+		log.Printf("CourseService: Achievement progress awarded. Populating DTO for handler.")
+		achievementInfo = &AchievementUpdateInfo{
+			AchievementID:  linkedAchievementID,
+			Title:          achievementDetails.Title,
+			ImageURL:       achievementDetails.ImageURL,
+			TotalItems:     achievementDetails.TotalItems,
+			GridWidth:      achievementDetails.GridWidth,
+			GridHeight:     achievementDetails.GridHeight,
+			NewStateBitSet: newBitsetState,
+		}
+	}
+	return achievementInfo
+
 }
