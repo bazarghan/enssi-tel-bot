@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/bits-and-blooms/bitset"
@@ -43,13 +42,14 @@ func (s *Service) AwardAchievementProgress(userID uint, achievementID uint, item
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Printf("UserService: No existing ProfileAchievement for ProfileID %d, AchievementID %d. Creating new one.", profile.ID, achievementID)
-			// Initialize a new bitset with the correct total length from the achievement model.
-			newState := bitset.New(achievementDetails.TotalItems)
 
 			pa = models.ProfileAchievement{
 				ProfileID:     profile.ID,
 				AchievementID: achievementID,
-				State:         models.GormBitSet{BitSet: *newState},
+				State: models.GormBitSet{
+					BitSet:      *bitset.New(achievementDetails.TotalItems),
+					TotalLength: achievementDetails.TotalItems,
+				},
 			}
 		} else {
 			return nil, nil, fmt.Errorf("failed to fetch ProfileAchievement for ProfileID %d, AchievementID %d: %w", profile.ID, achievementID, err)
@@ -77,7 +77,7 @@ func (s *Service) AwardAchievementProgress(userID uint, achievementID uint, item
 
 	if len(availableIndices) > 0 {
 		// Step 2: Shuffle the list of available indices.
-		rand.Seed(time.Now().UnixNano())
+		rand.Seed(666)
 		rand.Shuffle(len(availableIndices), func(i, j int) {
 			availableIndices[i], availableIndices[j] = availableIndices[j], availableIndices[i]
 		})
@@ -99,6 +99,15 @@ func (s *Service) AwardAchievementProgress(userID uint, achievementID uint, item
 		if errSave := s.db.Save(&pa).Error; errSave != nil {
 			return nil, nil, fmt.Errorf("failed to save ProfileAchievement for ProfileID %d, AchievementID %d: %w", profile.ID, achievementID, errSave)
 		}
+		// --- THIS IS THE FIX ---
+		// Step 2: Immediately reload the record from the database.
+		// This ensures the returned object is an exact representation of what was persisted.
+		log.Printf("UserService: Re-reading ProfileAchievement (ID: %d) from DB to ensure consistency.", pa.ID)
+		if errReload := s.db.First(&pa, pa.ID).Error; errReload != nil {
+			// This would be a critical error, meaning we saved but can't read it back.
+			return nil, nil, fmt.Errorf("failed to reload ProfileAchievement after saving: %w", errReload)
+		}
+		// --- END OF FIX ---
 	} else {
 		log.Printf("UserService: No new items to reveal or achievement already fully revealed for ProfileID %d, AchievementID %d.", profile.ID, achievementID)
 	}
@@ -150,4 +159,14 @@ func (s *Service) CompleteAchievement(userID uint, achievementID uint) (*models.
 
 	log.Printf("UserService: Successfully completed all %d items for ProfileID %d, AchievementID %d.", maxIndex, pa.ProfileID, achievementID)
 	return &pa, &pa.State.BitSet, nil
+}
+
+func (s *Service) GetAllAchievements() ([]models.Achievement, error) {
+	log.Println("UserService: GetAllAchievements called.")
+	var achievements []models.Achievement
+	if err := s.db.Order("id asc").Find(&achievements).Error; err != nil {
+		log.Printf("UserService: Error fetching all achievements: %v", err)
+		return nil, fmt.Errorf("could not fetch achievements from database: %w", err)
+	}
+	return achievements, nil
 }

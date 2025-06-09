@@ -4,6 +4,8 @@ package user
 import (
 	"errors"
 	"time"
+
+	"github.com/bits-and-blooms/bitset"
 )
 
 // --- Service-Specific Errors ---
@@ -36,10 +38,20 @@ type UserProfileView struct {
 }
 
 type AchievementView struct {
+	ID          uint // The ID of the achievement itself
 	Title       string
 	Description string
-	ImageURL    string
+	Type        string // e.g., "PROGRESSIVE_IMAGE_504"
+	ImageURL    string // Path to the base image for generation or static display
 	EarnedOn    time.Time
+
+	// Fields required for progressive achievements
+	TotalItems uint
+	GridWidth  uint
+	GridHeight uint
+
+	// User-specific progress for this achievement
+	StateBitSet *bitset.BitSet
 }
 
 type UpdateProfileRequest struct {

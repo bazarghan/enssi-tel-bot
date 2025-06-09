@@ -6,12 +6,22 @@ import (
 	"strings"
 )
 
+// ---> ADD THIS SECTION <---
+// UserContextKey defines the type for keys used in the telebot context to avoid collisions.
+type UserContextKey string
+
+// DBUserKey is the key used to store the fetched *models.User in the context.
+// It is defined here so other packages (like bot) can import it from handlers.
+const DBUserKey UserContextKey = "dbUser"
+
+// ---> END OF ADDED SECTION <---
+
 // Callback Data Prefixes
 const (
 	CourseSelectCallbackPrefix = "cs:"       // cs:<course_id> - DEPRECATED if using CourseDetailsCallbackPrefix
 	QuizAnswerCallbackPrefix   = "quiz_ans:" // quiz_ans:<attempt_ID>:<option_ID>
-	// Example for a new callback type if needed:
-	// ReviewActionCallbackPrefix = "rev_action:"
+
+	ShowAchievementCallbackPrefix = "ach_show:"
 )
 
 // User state values for `LastMenu` (base states)
@@ -24,6 +34,8 @@ const (
 	StateInReviewQuiz      = "in_review_quiz" // Base for "in_review_quiz:<attempt_id>" - for review quizzes
 
 	StateInAdminPanel = "admin_panel" // User is in the admin panel, expecting SQL queries
+
+	StateProfileMenu = "profile_menu"
 )
 
 // Prefixes for parsing states with IDs

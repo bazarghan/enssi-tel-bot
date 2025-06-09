@@ -101,7 +101,16 @@ func HandleMyProfileCommand(c telebot.Context, appServices *services.AppServices
 	}
 
 	formattedProfile := formatters.FormatUserProfile(userProfileView)
-	// TODO: Add keyboard for profile actions (e.g., edit, view achievements)
-	// For now, sending with MainMenu, but a ProfileMenu would be better.
-	return c.Send(formattedProfile, keyboards.NewMainMenu(dbUser.IsAdmin), telebot.ModeMarkdownV2)
+
+	// ---> MODIFICATION HERE <---
+	// 1. Set the user's state to be inside the profile menu.
+	err = appServices.User().UpdateUserLastMenu(dbUser.ID, StateProfileMenu)
+	if err != nil {
+		return SendServiceError(c, "setting profile menu state", err)
+	}
+
+	// 2. Send the new profile menu keyboard.
+	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
+	// ---> END OF MODIFICATION <---
+
 }

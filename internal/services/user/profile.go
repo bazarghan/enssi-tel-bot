@@ -101,6 +101,31 @@ func (s *Service) GetUserProfile(userID uint) (*UserProfileView, error) {
 	activeCoursesCount := len(userCourses)
 	// ---> END OF CALCULATIONS <---
 
+	// Initialize the Achievements slice for the DTO
+	earnedAchievements := make([]AchievementView, 0, len(user.Profile.Achievements))
+
+	// ---> THIS IS THE COMPLETED "TO-DO" PART <---
+	// Iterate over the preloaded ProfileAchievement records and map them to AchievementView DTOs.
+	for _, pa := range user.Profile.Achievements {
+		// The `pa.Achievement` field should be populated here because of the preload.
+		if pa.Achievement.ID != 0 {
+			achView := AchievementView{
+				ID:          pa.Achievement.ID,
+				Title:       pa.Achievement.Title,
+				Description: pa.Achievement.Description,
+				Type:        pa.Achievement.Type,
+				ImageURL:    pa.Achievement.ImageURL,
+				EarnedOn:    pa.CreatedAt, // The time the ProfileAchievement record was created
+				TotalItems:  pa.Achievement.TotalItems,
+				GridWidth:   pa.Achievement.GridWidth,
+				GridHeight:  pa.Achievement.GridHeight,
+				StateBitSet: &pa.State.BitSet, // Pass a pointer to the user's specific progress bitset
+			}
+			earnedAchievements = append(earnedAchievements, achView)
+		}
+	}
+	// ---> END OF COMPLETED PART <---
+
 	profileView := UserProfileView{
 		UserID:        user.ID,
 		Username:      user.Profile.Username,
@@ -111,7 +136,7 @@ func (s *Service) GetUserProfile(userID uint) (*UserProfileView, error) {
 		WordsStudied:  int(wordsStudiedCount),
 		CoursesActive: activeCoursesCount,
 		// this is just place holder later ToDo fix this part
-		Achievements: make([]AchievementView, 0, len(user.Profile.Achievements)),
+		Achievements: earnedAchievements,
 	}
 	if !user.Profile.DateOfBirth.IsZero() {
 		dob := user.Profile.DateOfBirth

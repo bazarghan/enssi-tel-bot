@@ -59,6 +59,8 @@ func RegisterRoutes(
 			return handlers.HandleQuizAnswerCallback(c, appServices)
 		case strings.HasPrefix(data, keyboards.CourseDetailsCallbackPrefix):
 			return handlers.HandleCourseSelectionCallback(c, appServices)
+		case strings.HasPrefix(data, handlers.ShowAchievementCallbackPrefix):
+			return handlers.HandleShowAchievementCallback(c, appServices)
 		default:
 			log.Printf("[Router OnCallback] Unhandled callback data: %s", data)
 			return c.Respond(&telebot.CallbackResponse{

@@ -15,8 +15,100 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/models"   // For models.QuizType
 	"github.com/2000ostd/enssi-tel-bot/internal/services"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz" // For quiz.ErrAttemptNotFound etc.
+	"github.com/2000ostd/enssi-tel-bot/internal/services/user"
 	"gopkg.in/telebot.v4"
+
+	"github.com/bits-and-blooms/bitset"
 )
+
+// ---> ADD THIS NEW HANDLER FUNCTION <---
+// HandleShowAchievementCallback handles clicks on the achievement list buttons.
+func HandleShowAchievementCallback(c telebot.Context, appServices *services.AppServices) error {
+	// Acknowledge the callback immediately to stop the loading animation.
+	defer c.Respond()
+
+	// --- THIS IS THE FIX ---
+	// Get the user object from the context to use its internal DB ID.
+	dbUser, ok := c.Get(string(DBUserKey)).(*models.User)
+	if !ok || dbUser == nil {
+		log.Printf("[ShowAchievementCallback] Critical: User not found in context.")
+		return nil // Silently fail if user context is missing
+	}
+	userID := dbUser.ID // Use the correct internal database ID
+	// --- END OF FIX ---
+
+	payload := strings.TrimSpace(c.Callback().Data)
+
+	// Parse the achievement ID from the callback data "ach_show:<id>"
+	achievementIDVal, err := ParseIDFromState(payload, ShowAchievementCallbackPrefix)
+	if err != nil {
+		log.Printf("[ShowAchievementCallback] Invalid callback data for UserID %d: %s. Error: %v", userID, payload, err)
+		return nil // Silently ignore invalid data
+	}
+	achievementID := uint(achievementIDVal)
+
+	log.Printf("[ShowAchievementCallback] UserID %d requested to view AchievementID %d", userID, achievementID)
+
+	// We need the user-specific progress for this achievement (the bitset).
+	// We can get this from the ProfileAchievement join table.
+	userProfile, err := appServices.User().GetUserProfile(uint(userID))
+	if err != nil {
+		return SendServiceError(c, "fetching user profile for achievement image", err)
+	}
+
+	var targetAchievement *user.AchievementView // Find the specific achievement from the user's list
+	var targetPaState *bitset.BitSet            // And its corresponding state bitset
+
+	for _, achView := range userProfile.Achievements {
+		if achView.ID == achievementID {
+			targetAchievement = &achView
+			targetPaState = achView.StateBitSet // Assumes AchievementView DTO now holds the bitset
+			break
+		}
+	}
+
+	if targetAchievement == nil {
+		log.Printf("[ShowAchievementCallback] UserID %d requested achievement %d which they have not earned.", userID, achievementID)
+		// Optionally send an alert c.Respond(&telebot.CallbackResponse{Text: "You haven't earned this yet!"})
+		return nil
+	}
+
+	// Check if this is a progressive image type achievement
+	if targetAchievement.Type == "PROGRESSIVE_IMAGE" {
+		log.Printf("[ShowAchievementCallback] Generating progressive image for achievement %d", achievementID)
+		outputDir := "./tmp_achievements"
+		log.Print(targetPaState)
+		generatedImagePath, imgErr := imagegen.GenerateAchievementImage(
+			targetAchievement.ImageURL,
+			targetPaState,
+			targetAchievement.TotalItems,
+			targetAchievement.GridWidth,
+			targetAchievement.GridHeight,
+			outputDir,
+		)
+		if imgErr != nil {
+			log.Printf("[ShowAchievementCallback] UserID %d: Failed to generate achievement image: %v", userID, imgErr)
+			return SendServiceError(c, "generating achievement image", imgErr)
+		}
+		defer os.Remove(generatedImagePath) // Clean up the temp file
+
+		photoToSend := &telebot.Photo{File: telebot.FromDisk(generatedImagePath)}
+		_, err = c.Bot().Send(c.Chat(), photoToSend)
+
+	} else {
+		// For all other standard achievements, just send the static image URL.
+		log.Printf("[ShowAchievementCallback] Sending static image for achievement %d", achievementID)
+		photoToSend := &telebot.Photo{File: telebot.File{FileID: targetAchievement.ImageURL}} // Assuming ImageURL might be a FileID
+		// If it's a real URL, use: photoToSend := &telebot.Photo{File: telebot.FromURL(targetAchievement.ImageURL)}
+		_, err = c.Bot().Send(c.Chat(), photoToSend)
+	}
+
+	if err != nil {
+		log.Printf("[ShowAchievementCallback] Failed to send achievement image for UserID %d: %v", userID, err)
+	}
+
+	return nil
+}
 
 // HandleQuizAnswerCallback processes answers submitted via inline quiz buttons.
 func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServices) error {
@@ -193,7 +285,21 @@ func HandleQuizAnswerCallback(c telebot.Context, appServices *services.AppServic
 			}
 			// ---> END OF ACHIEVEMENT IMAGE HANDLING <---
 
-			return sendLearningContext(c, nextLc, appServices)
+			// --- START OF MODIFICATION ---
+
+			if nextLc.IsCourseEnded {
+				// The course is complete. Let sendLearningContext handle showing the final completion message.
+				log.Printf("[HandleQuizAnswerCallback] CourseID %d is now complete for UserID %d. Sending final message.", finalResult.CourseID, dbUser.ID)
+				return sendLearningContext(c, nextLc, appServices)
+			} else {
+				// The quiz is finished, but the course is not.
+				// Instead of sending the next word, we show the course overview.
+				// This will display the user's new progress percentage and a "Continue Course" button,
+				// allowing them to proceed when ready.
+				log.Printf("[HandleQuizAnswerCallback] Quiz for CourseID %d finished. Displaying course overview for UserID %d.", finalResult.CourseID, dbUser.ID)
+				return displayCourseOverview(c, dbUser.ID, finalResult.CourseID, appServices, true)
+			}
+			// --- END OF MODIFICATION ---
 		}
 
 		// Fallback for unknown quiz type completion
@@ -331,5 +437,5 @@ func HandleCourseSelectionCallback(c telebot.Context, appServices *services.AppS
 		}
 	}
 
-	return displayCourseOverview(c, dbUser.ID, courseID, appServices)
+	return displayCourseOverview(c, dbUser.ID, courseID, appServices, false)
 }

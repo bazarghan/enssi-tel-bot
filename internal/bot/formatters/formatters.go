@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/services/user"
@@ -120,7 +121,7 @@ func FormatUserProfile(upv *user.UserProfileView) string {
 	if len(upv.Achievements) > 0 {
 		sb.WriteString("\n🏆 *دستاوردها:*\n")
 		for _, ach := range upv.Achievements {
-			sb.WriteString(fmt.Sprintf("  - %s: %s\n", EscapeMarkdownV2(ach.Title), EscapeMarkdownV2(ach.Description)))
+			sb.WriteString(fmt.Sprintf("  \\- %s: %s\n", EscapeMarkdownV2(ach.Title), EscapeMarkdownV2(ach.Description)))
 		}
 	}
 	return sb.String()
@@ -147,6 +148,26 @@ func FormatQuizResultForDisplay(qr *quiz.QuizResult) string {
 	return fmt.Sprintf("%s\n\n%s", header, review) // Both should be pre-escaped by service if necessary, or escape here.
 	// Assuming service provides safe text or we escape it:
 	// return fmt.Sprintf("%s\n\n%s", EscapeMarkdownV2(qr.ResultMessage), EscapeMarkdownV2(qr.ReviewText))
+}
+
+// FormatAllAchievementsList creates a formatted message listing all available achievements.
+func FormatAllAchievementsList(achievements []models.Achievement) string {
+	if len(achievements) == 0 {
+		return EscapeMarkdownV2("در حال حاضر هیچ دستاوردی برای نمایش وجود ندارد.")
+	}
+
+	var sb strings.Builder
+	sb.WriteString(EscapeMarkdownV2("🏆 لیست تمام دستاوردهای موجود 🏆\n\n"))
+
+	for _, ach := range achievements {
+		sb.WriteString(fmt.Sprintf("*%s*\n", EscapeMarkdownV2(ach.Title)))
+		if ach.Description != "" {
+			sb.WriteString(fmt.Sprintf("_%s_\n", EscapeMarkdownV2(ach.Description)))
+		}
+		sb.WriteString("\n") // Add a space between entries
+	}
+
+	return sb.String()
 }
 
 // TranslatePOS translates English Part of Speech to Persian.
