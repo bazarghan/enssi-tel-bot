@@ -687,6 +687,7 @@ func (s *Service) SubmitAnswer(attemptID uint, chosenOptionID uint, userID uint)
 	return submissionResult, nil
 }
 
+// getQuizResultsInternal finalizes an attempt and prepares results in the new, structured format.
 func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttempt, quizInfo *models.Quiz) (*QuizResult, error) {
 	if !attempt.IsCompleted {
 		var quizAnswers []models.QuizAnswer
@@ -708,12 +709,38 @@ func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttemp
 	}
 
 	totalQuestions := int(quizInfo.QuestionCount)
-	var reviewBuilder strings.Builder
-	if quizInfo.Type == models.QuizTypeCourseBlock && len(quizInfo.QuizQuesetions) > 0 {
-		reviewBuilder.WriteString(msgReviewHeader)
+	passed := false
+
+	// --- Build Result Message (The Top Quote Block) ---
+	var resultMessageBuilder strings.Builder
+	resultMessageBuilder.WriteString("" + escapeMarkdownV2("آزمون به پایان رسید !") + "\n")
+	resultMessageBuilder.WriteString("\n") // Empty quoted line for spacing
+	scoreLine := fmt.Sprintf("تو به %d سوال از %d سوال پاسخ صحیح دادی.", attempt.Score, totalQuestions)
+	resultMessageBuilder.WriteString(escapeMarkdownV2(scoreLine) + "\n")
+
+	if quizInfo.Type == models.QuizTypeCourseBlock {
+		passed = attempt.Score >= quizPassThresholdCorrectAnswers
+		if passed {
+			resultMessageBuilder.WriteString("> " + escapeMarkdownV2("آفرین ! تونستی آزمون رو با موفقیت پشت سر بذاری. 🎉🎉"))
+		} else {
+			resultMessageBuilder.WriteString("> " + escapeMarkdownV2("متاسفانه نتونستی حد نصاب قبولی رو کسب کنی. 😔") + "\n")
+			resultMessageBuilder.WriteString("" + escapeMarkdownV2("به همین دلیل باید این بخش رو دوباره مرور کنی."))
+		}
+	} else if quizInfo.Type == models.QuizTypeReview {
+		passed = true // Review quizzes are always "passed" in terms of flow
+		resultMessageBuilder.WriteString("> " + escapeMarkdownV2("عالی بود! جلسه مرور به پایان رسید. 👍") + "\n")
+	}
+	resultMessage := resultMessageBuilder.String()
+
+	// --- Build Review Text (The Header and Individual Question Blocks) ---
+	var reviewTextBuilder strings.Builder
+	if len(quizInfo.QuizQuesetions) > 0 {
+		reviewTextBuilder.WriteString(escapeMarkdownV2("───────────────────────────────") + "\n")
+		reviewTextBuilder.WriteString("📝 *مرور سوالات:*\n")
+
+		// Fetch all necessary data for the review
 		var answersForReview []models.QuizAnswer
 		tx.Where("quiz_attempt_id = ?", attempt.ID).Find(&answersForReview)
-
 		userAnswersMap := make(map[uint]models.QuizAnswer)
 		var allChosenOptionIDs []uint
 		for _, ans := range answersForReview {
@@ -730,8 +757,9 @@ func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttemp
 			}
 		}
 
+		// Loop through questions and build each review block
 		for i, q := range quizInfo.QuizQuesetions {
-			reviewBuilder.WriteString(fmt.Sprintf(msgReviewQuestion, i+1, q.Text))
+			// Find the user's chosen answer text and correctness marker
 			userChosenText := msgReviewNotAnswered
 			userCorrectStatus := msgIncorrectMarker
 			if userAnswer, found := userAnswersMap[q.ID]; found {
@@ -742,52 +770,46 @@ func (s *Service) getQuizResultsInternal(tx *gorm.DB, attempt *models.QuizAttemp
 					userCorrectStatus = msgCorrectMarker
 				}
 			}
-			reviewBuilder.WriteString(fmt.Sprintf(msgReviewUserAnswer, userChosenText, userCorrectStatus))
-			var correctOptTexts []string
+
+			// Find the correct answer text
+			var correctOptText string
 			for _, opt := range q.Options {
 				if opt.IsCorrect {
-					correctOptTexts = append(correctOptTexts, opt.Text)
+					correctOptText = opt.Text
+					break
 				}
 			}
-			if len(correctOptTexts) > 0 {
-				reviewBuilder.WriteString(fmt.Sprintf(msgReviewCorrectAnswer, strings.Join(correctOptTexts, " / ")))
+
+			// Build the individual quote block for this question
+			reviewTextBuilder.WriteString(fmt.Sprintf(">\n> *سوال %d :* %s\n", i+1, escapeMarkdownV2(q.Text)))
+			reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ تو :* %s \\(%s\\)\n", escapeMarkdownV2(userChosenText), userCorrectStatus))
+			// Only show "Correct Answer" line if the user was wrong, to reduce clutter.
+			if userCorrectStatus == msgIncorrectMarker {
+				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ صحیح :* %s\n", escapeMarkdownV2(correctOptText)))
+			}
+			reviewTextBuilder.WriteString(">  \n")
+
+			// Add a blank line with two newlines to create a separate quote block for the next question
+			if i < len(quizInfo.QuizQuesetions)-1 {
+				reviewTextBuilder.WriteString("\n")
 			}
 		}
 	}
-	reviewText := reviewBuilder.String()
+	reviewTextBuilder.WriteString("\\.")
+	reviewText := reviewTextBuilder.String()
 
-	passed := false
-	resultMessage := ""
+	// --- Determine reset logic ---
 	shouldResetProgress := false
 	suggestedNewProgress := uint(0)
-
-	if quizInfo.Type == models.QuizTypeCourseBlock {
-		passed = attempt.Score >= quizPassThresholdCorrectAnswers
-		resultMessage = fmt.Sprintf(msgQuizFinished, attempt.Score, totalQuestions)
-		if passed {
-			resultMessage += msgQuizPassed
+	if quizInfo.Type == models.QuizTypeCourseBlock && !passed {
+		shouldResetProgress = true
+		if quizInfo.TriggerProgress >= wordsPerQuizBlock {
+			suggestedNewProgress = quizInfo.TriggerProgress - wordsPerQuizBlock
 		} else {
-			resultMessage += fmt.Sprintf(msgQuizFailed, quizPassThresholdCorrectAnswers)
-			resultMessage += "\nبه همین دلیل مجبوریم شمارو به اول درس برگردونیم."
-			shouldResetProgress = true
-			if quizInfo.TriggerProgress >= wordsPerQuizBlock {
-				suggestedNewProgress = quizInfo.TriggerProgress - wordsPerQuizBlock
-			} else {
-				suggestedNewProgress = 0
-			}
-			if suggestedNewProgress <= 0 {
-				suggestedNewProgress = 0
-			}
+			suggestedNewProgress = 0
 		}
-	} else if quizInfo.Type == models.QuizTypeReview {
-		passed = true
-		resultMessage = fmt.Sprintf(msgReviewQuizFinished, attempt.Score, totalQuestions)
-		if totalQuestions > 0 && attempt.Score == totalQuestions {
-			resultMessage += "\n🎉 عالی بود! همه رو درست جواب دادی!"
-		} else if attempt.Score > 0 {
-			resultMessage += "\n👍 خوب بود! به مرور ادامه بده."
-		} else {
-			resultMessage += "\nاشکالی نداره، دفعه بعد بهتر میشه!"
+		if suggestedNewProgress < 0 {
+			suggestedNewProgress = 0
 		}
 	}
 

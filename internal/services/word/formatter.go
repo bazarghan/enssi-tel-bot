@@ -44,6 +44,9 @@ func translatePOS(posTitleEng string) string {
 
 // formatWordForDisplay takes the core word models and formats them into a Markdown string.
 // This is an unexported method as it's a helper for GetWordDetailsForCourse.
+
+// formatWordForDisplay takes the core word models and formats them into a new,
+// structured MarkdownV2 string with quote blocks for each section.
 func (s *Service) formatWordForDisplay(word *models.Word, ws *models.WordSource) (string, error) {
 	if word == nil || ws == nil {
 		return "", fmt.Errorf("%w: word or word source data is nil", ErrFormattingFailed)
@@ -51,97 +54,86 @@ func (s *Service) formatWordForDisplay(word *models.Word, ws *models.WordSource)
 
 	var mb strings.Builder
 
-	// 1. Word Title
-	if word.Title != "" {
-		mb.WriteString(fmt.Sprintf("🔤 **%s**\n", escapeMarkdownV2(strings.ToUpper(word.Title))))
+	// --- Header ---
+	// Word Title (Bold)
+	mb.WriteString(fmt.Sprintf(">*%s*\n", escapeMarkdownV2(word.Title)))
+	// Phonetics (Code block) - we'll take the first available one
+	if len(ws.Phonetics) > 0 && ws.Phonetics[0].Title != "" {
+		mb.WriteString(fmt.Sprintf("`%s`\n", escapeMarkdownV2(ws.Phonetics[0].Title)))
 	}
+	// Separator
+	mb.WriteString(escapeMarkdownV2("─────────────────────────") + "\n")
 
-	// 2. General Definitions (Primary/Secondary)
-	if ws.DefPrimary != "" || ws.DefSecondary != "" {
-		mb.WriteString("\n📋 *تعاریف اصلی:*\n")
-		if ws.DefPrimary != "" {
-			mb.WriteString(fmt.Sprintf("  ▪️ %s\n\n", escapeMarkdownV2(ws.DefPrimary)))
-		}
-		if ws.DefSecondary != "" {
-			mb.WriteString(fmt.Sprintf("  ▪️ %s\n\n", escapeMarkdownV2(ws.DefSecondary)))
-		}
-	}
-
-	// 3. Phonetics
-	if len(ws.Phonetics) > 0 {
-		hasContent := false
-		var phoneticsBuilder strings.Builder
-		for _, p := range ws.Phonetics {
-			if p.Title != "" { // p.Title is the IPA string
-				hasContent = true
-				langTag := ""
-				if p.Lang != "" {
-					langTag = fmt.Sprintf(" \\(%s\\)", escapeMarkdownV2(p.Lang)) // IPA lang (US, UK)
-				}
-				phoneticsBuilder.WriteString(fmt.Sprintf("  ▫️ %s%s\n", escapeMarkdownV2(p.Title), langTag))
-			}
-		}
-		if hasContent {
-			mb.WriteString("\n🗣️ *تلفظ / IPA:*\n")
-			mb.WriteString(phoneticsBuilder.String())
-		}
-	}
-
-	// --- English Meanings Section ---
-	englishSectionHeader := "\n\n🇬🇧 \\=\\=\\= **ENGLISH MEANINGS** \\=\\=\\= 🇬🇧\n"
-	hasEnglishContent := false
-	var englishSectionBuilder strings.Builder
-
+	// --- Persian Meanings Block ---
+	persianMeaningsByPOS := make(map[string][]string)
 	for _, pos := range ws.PartsOfSpeeches {
-		var currentPosEnMeanings []string
 		for _, meaning := range pos.Meanings {
-			// Assuming blank lang or "en" means English
-			if meaning.Title != "" && (strings.ToLower(meaning.Lang) == "en" || meaning.Lang == "") {
-				currentPosEnMeanings = append(currentPosEnMeanings, escapeMarkdownV2(meaning.Title))
-			}
-		}
-		if len(currentPosEnMeanings) > 0 {
-			if !hasEnglishContent {
-				englishSectionBuilder.WriteString(englishSectionHeader)
-				hasEnglishContent = true
-			}
-			englishSectionBuilder.WriteString(fmt.Sprintf("\n  🏷️ **%s**\n\n", escapeMarkdownV2(pos.Title))) // POS Title
-			for _, mText := range currentPosEnMeanings {
-				englishSectionBuilder.WriteString(fmt.Sprintf("    💡 %s\n", mText))
+			if strings.ToLower(meaning.Lang) == "fa" && strings.TrimSpace(meaning.Title) != "" {
+				persianPOSTitle := translatePOS(pos.Title) // Translate "noun" to "اسم"
+				persianMeaningsByPOS[persianPOSTitle] = append(persianMeaningsByPOS[persianPOSTitle], meaning.Title)
 			}
 		}
 	}
-	if hasEnglishContent {
-		mb.WriteString(englishSectionBuilder.String())
+	if len(persianMeaningsByPOS) > 0 {
+		mb.WriteString("*معانی فارسی* :\n")
+		mb.WriteString(">\n") // Zero-width space for an empty quoted line
+		for posTitle, meanings := range persianMeaningsByPOS {
+			mb.WriteString(fmt.Sprintf("> `[ %s ]` :\n", escapeMarkdownV2(posTitle)))
+			for _, m := range meanings {
+				mb.WriteString(fmt.Sprintf(">  \\- %s\n", escapeMarkdownV2(m)))
+			}
+			mb.WriteString(">  \n")
+		}
+		mb.WriteString("\n") // Space after the block
 	}
 
-	// --- Persian Meanings Section ---
-	persianSectionHeader := "\n\n🇮🇷 \\=\\=\\= **معانی فارسی** \\=\\=\\= 🇮🇷\n"
-	hasPersianContent := false
-	var persianSectionBuilder strings.Builder
+	// --- Primary Definition Block ---
+	if strings.TrimSpace(ws.DefPrimary) != "" {
+		mb.WriteString("*تعریف اصلی* : \n")
+		mb.WriteString("> \u200b\n")
+		for _, line := range strings.Split(ws.DefPrimary, "\n") {
+			mb.WriteString(fmt.Sprintf("> %s\n", escapeMarkdownV2(line)))
 
+			mb.WriteString(">  \n")
+		}
+		mb.WriteString("\n")
+	}
+
+	// --- Secondary/Long Definition Block ---
+	if strings.TrimSpace(ws.DefSecondary) != "" {
+		mb.WriteString("*تعریف بلند* : \n")
+		mb.WriteString("> \n")
+		for _, line := range strings.Split(ws.DefSecondary, "\n") {
+			mb.WriteString(fmt.Sprintf("> %s\n", escapeMarkdownV2(line)))
+
+			mb.WriteString(">  \n")
+
+		}
+		mb.WriteString("\n")
+	}
+
+	// --- English Meanings Block ---
+	englishMeaningsByPOS := make(map[string][]string)
 	for _, pos := range ws.PartsOfSpeeches {
-		var currentPosFaMeanings []string
+		// Group English meanings (lang="en" or empty)
 		for _, meaning := range pos.Meanings {
-			if meaning.Title != "" && strings.ToLower(meaning.Lang) == "fa" {
-				currentPosFaMeanings = append(currentPosFaMeanings, escapeMarkdownV2(meaning.Title))
-			}
-		}
-		if len(currentPosFaMeanings) > 0 {
-			if !hasPersianContent {
-				persianSectionBuilder.WriteString(persianSectionHeader)
-				hasPersianContent = true
-			}
-			persianPOSTitle := translatePOS(pos.Title)
-			englishPOSTitleEscaped := escapeMarkdownV2(pos.Title)
-			persianSectionBuilder.WriteString(fmt.Sprintf("\n  🏷️ *%s \\(%s\\):*\n\n", escapeMarkdownV2(persianPOSTitle), englishPOSTitleEscaped))
-			for _, mText := range currentPosFaMeanings {
-				persianSectionBuilder.WriteString(fmt.Sprintf("    💡 %s\n", mText))
+			if (strings.ToLower(meaning.Lang) == "en" || meaning.Lang == "") && strings.TrimSpace(meaning.Title) != "" {
+				englishMeaningsByPOS[pos.Title] = append(englishMeaningsByPOS[pos.Title], meaning.Title)
 			}
 		}
 	}
-	if hasPersianContent {
-		mb.WriteString(persianSectionBuilder.String())
+	if len(englishMeaningsByPOS) > 0 {
+		mb.WriteString("*معانی انگلیسی* :\n")
+		mb.WriteString(">\n")
+		for posTitle, meanings := range englishMeaningsByPOS {
+			mb.WriteString(fmt.Sprintf("> `[ %s ]` :\n", escapeMarkdownV2(strings.ToLower(posTitle))))
+			for _, m := range meanings {
+				mb.WriteString(fmt.Sprintf("> \\- %s\n", escapeMarkdownV2(m)))
+
+			}
+			mb.WriteString(">  \n")
+		}
+		mb.WriteString("\\.\n")
 	}
 
 	if mb.Len() == 0 {

@@ -145,7 +145,7 @@ func FormatQuizResultForDisplay(qr *quiz.QuizResult) string {
 	// The service already provides these formatted messages.
 	header := qr.ResultMessage
 	review := qr.ReviewText
-	return fmt.Sprintf("%s\n\n%s", header, review) // Both should be pre-escaped by service if necessary, or escape here.
+	return fmt.Sprintf("%s\n%s", header, review) // Both should be pre-escaped by service if necessary, or escape here.
 	// Assuming service provides safe text or we escape it:
 	// return fmt.Sprintf("%s\n\n%s", EscapeMarkdownV2(qr.ResultMessage), EscapeMarkdownV2(qr.ReviewText))
 }
