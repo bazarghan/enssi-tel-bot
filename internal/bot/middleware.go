@@ -1,9 +1,10 @@
 package bot
 
 import (
+	"context"
 	"log"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/services"
+	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
 
@@ -15,7 +16,10 @@ const (
 )
 
 // UserActivityMiddleware ensures a user row exists and stores it in the update context.
-func UserActivityMiddleware(appServices *services.AppServices) telebot.MiddlewareFunc {
+// func UserActivityMiddleware(appServices *services.AppServices) telebot.MiddlewareFunc {
+
+func UserActivityMiddleware(registerUserHandler registerCmd.RegisterUserHandler) telebot.MiddlewareFunc {
+
 	return func(next telebot.HandlerFunc) telebot.HandlerFunc {
 		return func(c telebot.Context) error {
 			// Channel posts (and many service updates) have no sender.
@@ -24,20 +28,23 @@ func UserActivityMiddleware(appServices *services.AppServices) telebot.Middlewar
 				return next(c)
 			}
 
-			user, err := appServices.User().GetOrCreateUserByTelegramID(
-				sender.ID,
-				sender.Username,
-				sender.FirstName,
-				sender.LastName,
-			)
+			cmd := registerCmd.RegisterUserCommand{
+				TelegramID: sender.ID,
+				Username:   sender.Username,
+				FirstName:  sender.FirstName,
+				LastName:   sender.LastName,
+			}
+
+			// We run the command here to ensure the user exists for every interaction.
+			// The result contains the domain user entity.
+			result, err := registerUserHandler.Handle(context.Background(), cmd)
+
 			if err != nil {
 				log.Printf("[UserActivityMiddleware] FATAL: telegramID=%d: %v", sender.ID, err)
 				_ = c.Send("I'm having trouble setting up your account right now. Please try again later.")
 				return nil // stop here; we already informed the user
 			}
-
-			// Make the user available to all subsequent handlers in this update.
-			c.Set(string(DBUserKey), user)
+			c.Set(string(DBUserKey), result.User)
 
 			return next(c)
 		}
