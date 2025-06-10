@@ -74,3 +74,15 @@ func (r *WordRepository) SaveStudiedWord(ctx context.Context, sw word.StudiedWor
 	// gorm's Save handles both create (if ID is 0) and update (if ID is non-zero).
 	return r.db.WithContext(ctx).Save(&model).Error
 }
+
+// FindWordIDsByCourseBlock retrieves a slice of word IDs for a specific block in a course.
+func (r *WordRepository) FindWordIDsByCourseBlock(ctx context.Context, courseID uint, limit uint, offset uint) ([]uint, error) {
+	var wordIDs []uint
+	err := r.db.WithContext(ctx).Model(&courseWordModel{}).
+		Where("course_id = ?", courseID).
+		Order("index ASC").
+		Limit(int(limit)).
+		Offset(int(offset)).
+		Pluck("word_id", &wordIDs).Error
+	return wordIDs, err
+}

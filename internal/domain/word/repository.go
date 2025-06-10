@@ -12,4 +12,7 @@ type Repository interface {
 
 	// SaveStudiedWord creates or updates a user's SRS data for a word.
 	SaveStudiedWord(ctx context.Context, sw StudiedWord) error
+
+	// FindWordIDsByCourseBlock retrieves a slice of word IDs for a specific block in a course.
+	FindWordIDsByCourseBlock(ctx context.Context, courseID uint, limit uint, offset uint) ([]uint, error)
 }
