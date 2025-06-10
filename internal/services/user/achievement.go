@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/models"
 	"github.com/bits-and-blooms/bitset"
@@ -77,7 +78,7 @@ func (s *Service) AwardAchievementProgress(userID uint, achievementID uint, item
 
 	if len(availableIndices) > 0 {
 		// Step 2: Shuffle the list of available indices.
-		rand.Seed(666)
+		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(len(availableIndices), func(i, j int) {
 			availableIndices[i], availableIndices[j] = availableIndices[j], availableIndices[i]
 		})
