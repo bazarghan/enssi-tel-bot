@@ -19,6 +19,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 
+	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	getOverviewQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	listCoursesQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 )
@@ -63,6 +64,7 @@ func InitializeApp(db *gorm.DB) (*App, error) {
 		commandHandlerSet,
 		courseSet,
 		wordSet, // Add word providers
+		advanceCmd.NewAdvanceWordHandler,
 		startCmd.NewStartSessionHandler,
 		message.NewHandler,
 		wire.Struct(new(App), "*"),

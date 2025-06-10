@@ -131,6 +131,24 @@ func (r *CourseRepository) GetUserProgress(ctx context.Context, userID uint, cou
 	return progress, nil
 }
 
+// IncrementProgress advances a user's progress in a course by one.
+func (r *CourseRepository) IncrementProgress(ctx context.Context, userID, courseID uint) (course.UserProgress, error) {
+	var uc userCourseModel
+	err := r.db.WithContext(ctx).Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
+	if err != nil {
+		// Should not happen if user is in a course, but handle defensively.
+		return course.UserProgress{}, course.ErrProgressQuery
+	}
+
+	uc.Progress++
+	if err := r.db.WithContext(ctx).Save(&uc).Error; err != nil {
+		return course.UserProgress{}, err
+	}
+
+	totalWords, _ := r.GetTotalWords(ctx, courseID)
+	return calculateProgress(uc, totalWords), nil
+}
+
 // GetTotalWords retrieves the number of words in a course.
 func (r *CourseRepository) GetTotalWords(ctx context.Context, courseID uint) (int, error) {
 	var totalWords int64

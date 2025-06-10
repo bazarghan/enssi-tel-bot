@@ -1,5 +1,9 @@
 package word
 
+import (
+	"time"
+)
+
 // Word represents a single vocabulary word with its definitions and pronunciations.
 type Word struct {
 	ID             uint
@@ -29,4 +33,14 @@ type Pronunciation struct {
 	ID       uint
 	Region   string
 	AudioURL string
+}
+
+// StudiedWord tracks a user's learning progress for a single word in the SRS.
+type StudiedWord struct {
+	ID                 uint
+	UserID             uint
+	WordID             uint
+	LastReviewedAt     time.Time
+	NextReviewAt       time.Time
+	ReviewIntervalDays uint
 }

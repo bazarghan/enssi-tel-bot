@@ -21,4 +21,7 @@ type Repository interface {
 
 	// GetOrCreateUserCourse ensures a user is enrolled in a course, creating a progress record if needed.
 	GetOrCreateUserCourse(ctx context.Context, userID uint, courseID uint) (UserProgress, error)
+
+	// IncrementProgress advances a user's progress in a course by one.
+	IncrementProgress(ctx context.Context, userID, courseID uint) (UserProgress, error)
 }

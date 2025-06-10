@@ -15,6 +15,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 
+	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
+
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	"gopkg.in/telebot.v4"
@@ -25,12 +27,15 @@ const (
 	StateMain              = "main"
 	StateCourseList        = "course_list"
 	StateCourseDetailsBase = "course_details"
+	StateInCourseBase      = "in_course"
 )
 
 // Handler holds dependencies for message handlers.
 type Handler struct {
 	listCourses courseQueries.ListCoursesHandler
 	getOverview courseQueries.GetOverviewHandler
+
+	advanceWord advanceCmd.AdvanceWordHandler
 
 	startSession startCmd.StartSessionHandler
 	userRepo     user.Repository
@@ -41,7 +46,7 @@ type Handler struct {
 func NewHandler(
 	listCourses courseQueries.ListCoursesHandler,
 	getOverview courseQueries.GetOverviewHandler,
-
+	advanceWord advanceCmd.AdvanceWordHandler,
 	startSession startCmd.StartSessionHandler,
 	userRepo user.Repository,
 	courseRepo course.Repository,
@@ -51,6 +56,7 @@ func NewHandler(
 		listCourses:  listCourses,
 		getOverview:  getOverview,
 		startSession: startSession,
+		advanceWord:  advanceWord,
 		userRepo:     userRepo,
 		courseRepo:   courseRepo,
 	}
@@ -85,6 +91,11 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 	case stateBase == StateCourseDetailsBase && stateID != "":
 		return h.handleCourseAction(c, ctxUser, userInput, stateID)
+
+	case stateBase == StateInCourseBase && stateID != "":
+		if userInput == keyboards.NextWordButtonText {
+			return h.handleNextWord(c, ctxUser, stateID)
+		}
 	}
 
 	log.Printf("[MessageHandler] Unhandled text from UserID %d in state '%s': '%s'", ctxUser.ID, ctxUser.LastMenu, userInput)
@@ -191,15 +202,43 @@ func (h *Handler) handleCourseAction(c telebot.Context, u user.User, actionText,
 		// Handle different results from the use case
 		switch res.NextStep {
 		case startCmd.ShowWord:
-			// TODO: Update user state to be 'in_course:ID'
+			newState := fmt.Sprintf("%s:%d", StateInCourseBase, courseID)
+			h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
 			return c.Send(formatters.FormatWordForDisplay(res.Word), keyboards.InCourseNavigationKeyboard())
 		case startCmd.ShowQuiz:
 			// This will be implemented in a future slice
 			return c.Send("Quiz time! (Not implemented yet)")
 		case startCmd.CourseEnded:
-			// TODO: Update user state back to 'main' or 'course_list'
+
+			h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateCourseList)
 			return c.Send(tgmarkdown.Escape(res.MessageToUser), keyboards.BackToCourseListKeyboard())
 		}
+	}
+	return nil
+}
+
+func (h *Handler) handleNextWord(c telebot.Context, u user.User, courseIDStr string) error {
+	courseID, _ := strconv.ParseUint(courseIDStr, 10, 32)
+	if courseID == 0 {
+		return nil // Invalid state
+	}
+
+	cmd := advanceCmd.AdvanceWordCommand{UserID: u.ID, CourseID: uint(courseID)}
+	res, err := h.advanceWord.Handle(context.Background(), cmd)
+	if err != nil {
+		log.Printf("[handleNextWord] Error advancing word for UserID %d, CourseID %d: %v", u.ID, courseID, err)
+		return c.Send("مشکلی در دریافت کلمه بعدی پیش آمد.")
+	}
+
+	// Same result handling logic as start session
+	switch res.NextStep {
+	case advanceCmd.ShowWord:
+		return c.Send(formatters.FormatWordForDisplay(res.Word), keyboards.InCourseNavigationKeyboard())
+	case advanceCmd.ShowQuiz:
+		return c.Send("Quiz time! (Not implemented yet)")
+	case advanceCmd.CourseEnded:
+		h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateCourseList)
+		return c.Send(tgmarkdown.Escape(res.MessageToUser), keyboards.BackToCourseListKeyboard())
 	}
 	return nil
 }

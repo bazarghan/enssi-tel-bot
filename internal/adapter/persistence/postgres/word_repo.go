@@ -53,3 +53,24 @@ func (r *WordRepository) FindByCourseIndex(ctx context.Context, courseID uint, i
 
 	return toDomainWord(wm, wsm), nil
 }
+
+// FindStudiedWord retrieves a user's SRS data for a specific word.
+func (r *WordRepository) FindStudiedWord(ctx context.Context, userID, wordID uint) (word.StudiedWord, error) {
+	var model studiedWordModel
+	err := r.db.WithContext(ctx).Where("user_id = ? AND word_id = ?", userID, wordID).First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Return a zero-value object and a special error to indicate "not found"
+			return word.StudiedWord{}, word.ErrStudiedWordNotFound
+		}
+		return word.StudiedWord{}, err
+	}
+	return toDomainStudiedWord(model), nil
+}
+
+// SaveStudiedWord creates or updates a user's SRS data for a word.
+func (r *WordRepository) SaveStudiedWord(ctx context.Context, sw word.StudiedWord) error {
+	model := toPersistenceStudiedWord(sw)
+	// gorm's Save handles both create (if ID is 0) and update (if ID is non-zero).
+	return r.db.WithContext(ctx).Save(&model).Error
+}

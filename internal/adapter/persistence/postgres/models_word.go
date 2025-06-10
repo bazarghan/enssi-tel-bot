@@ -1,6 +1,9 @@
 package postgres
 
-import "gorm.io/gorm"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 // This file aggregates all models related to the Word domain.
 
@@ -69,3 +72,14 @@ type imageModel struct {
 }
 
 func (imageModel) TableName() string { return "images" }
+
+type studiedWordModel struct {
+	gorm.Model
+	UserID             uint `gorm:"index"`
+	WordID             uint `gorm:"index"`
+	LastReviewedAt     time.Time
+	NextReviewAt       time.Time `gorm:"index"`
+	ReviewIntervalDays uint      `gorm:"default:1"`
+}
+
+func (studiedWordModel) TableName() string { return "words_studied" }

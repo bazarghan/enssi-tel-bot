@@ -7,4 +7,5 @@ var (
 	ErrNotFound               = errors.New("word not found")
 	ErrSourceNotFound         = errors.New("word source not found")
 	ErrCourseWordLinkNotFound = errors.New("link between course and word not found for this index")
+	ErrStudiedWordNotFound    = errors.New("word studied record not found for user and word")
 )
