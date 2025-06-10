@@ -18,4 +18,7 @@ type Repository interface {
 
 	// GetTotalWords retrieves the number of words in a course.
 	GetTotalWords(ctx context.Context, courseID uint) (int, error)
+
+	// GetOrCreateUserCourse ensures a user is enrolled in a course, creating a progress record if needed.
+	GetOrCreateUserCourse(ctx context.Context, userID uint, courseID uint) (UserProgress, error)
 }

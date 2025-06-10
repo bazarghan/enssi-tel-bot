@@ -11,6 +11,10 @@ import (
 	"github.com/google/wire"
 	"gorm.io/gorm"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+
+	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
+
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
@@ -48,11 +52,18 @@ var courseSet = wire.NewSet(
 	getOverviewQry.NewGetOverviewHandler,
 )
 
+var wordSet = wire.NewSet(
+	postgres.NewWordRepository,
+	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
+)
+
 // InitializeApp creates the dependency graph for the application.
 func InitializeApp(db *gorm.DB) (*App, error) {
 	wire.Build(
 		commandHandlerSet,
 		courseSet,
+		wordSet, // Add word providers
+		startCmd.NewStartSessionHandler,
 		message.NewHandler,
 		wire.Struct(new(App), "*"),
 	)

@@ -13,6 +13,7 @@ type Course struct {
 // UserProgress represents a user's progress within a single course.
 type UserProgress struct {
 	ProgressPercentage int
+	WordsCompleted     int
 	IsCompleted        bool
 	IsStarted          bool
 }

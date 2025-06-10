@@ -17,6 +17,50 @@ func NewCourseRepository(db *gorm.DB) *CourseRepository {
 	return &CourseRepository{db: db}
 }
 
+// GetOrCreateUserCourse ensures a user course record exists and returns its progress state.
+func (r *CourseRepository) GetOrCreateUserCourse(ctx context.Context, userID uint, courseID uint) (course.UserProgress, error) {
+	var uc userCourseModel
+	err := r.db.WithContext(ctx).Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Create a new record because the user is starting the course.
+		uc = userCourseModel{UserID: userID, CourseID: courseID, Progress: 0}
+		if createErr := r.db.WithContext(ctx).Create(&uc).Error; createErr != nil {
+			return course.UserProgress{}, createErr
+		}
+	} else if err != nil {
+		return course.UserProgress{}, course.ErrProgressQuery
+	}
+
+	// After getting or creating, calculate the progress percentage.
+	// This duplicates GetUserProgress logic, suggesting a potential internal refactor later.
+	totalWords, err := r.GetTotalWords(ctx, courseID)
+	if err != nil {
+		return course.UserProgress{}, err
+	}
+
+	progress := calculateProgress(uc, totalWords)
+	return progress, nil
+
+}
+
+func calculateProgress(uc userCourseModel, totalWords int) course.UserProgress {
+	progress := course.UserProgress{}
+	if uc.ID != 0 {
+		progress.IsStarted = true
+		progress.WordsCompleted = int(uc.Progress)
+
+		if totalWords > 0 {
+			progress.ProgressPercentage = int((float64(uc.Progress) / float64(totalWords)) * 100)
+			if uc.Progress >= uint(totalWords) {
+				progress.IsCompleted = true
+				progress.ProgressPercentage = 100
+			}
+		}
+	}
+	return progress
+}
+
 // FindAll retrieves all available courses from the database.
 func (r *CourseRepository) FindAll(ctx context.Context) ([]course.Course, error) {
 	var models []courseModel

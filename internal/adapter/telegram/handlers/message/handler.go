@@ -3,7 +3,9 @@ package message
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
@@ -11,6 +13,9 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+
+	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	"gopkg.in/telebot.v4"
 )
@@ -26,22 +31,28 @@ const (
 type Handler struct {
 	listCourses courseQueries.ListCoursesHandler
 	getOverview courseQueries.GetOverviewHandler
-	userRepo    user.Repository
-	courseRepo  course.Repository
+
+	startSession startCmd.StartSessionHandler
+	userRepo     user.Repository
+	courseRepo   course.Repository
 }
 
 // NewHandler creates a new message handler.
 func NewHandler(
 	listCourses courseQueries.ListCoursesHandler,
 	getOverview courseQueries.GetOverviewHandler,
+
+	startSession startCmd.StartSessionHandler,
 	userRepo user.Repository,
 	courseRepo course.Repository,
 ) *Handler {
+
 	return &Handler{
-		listCourses: listCourses,
-		getOverview: getOverview,
-		userRepo:    userRepo,
-		courseRepo:  courseRepo,
+		listCourses:  listCourses,
+		getOverview:  getOverview,
+		startSession: startSession,
+		userRepo:     userRepo,
+		courseRepo:   courseRepo,
 	}
 }
 
@@ -55,6 +66,8 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 	userInput := strings.TrimSpace(c.Text())
 
+	stateBase, stateID, _ := strings.Cut(ctxUser.LastMenu, ":")
+
 	// Global commands
 	if userInput == keyboards.BtnReturnToMainMenu {
 		return h.handleReturnToMainMenu(c, ctxUser)
@@ -66,8 +79,12 @@ func (h *Handler) Handle(c telebot.Context) error {
 		if userInput == BtnStartLearning {
 			return h.handleStartLearning(c, ctxUser)
 		}
+
 	case ctxUser.LastMenu == StateCourseList:
 		return h.handleCourseSelection(c, ctxUser, userInput)
+
+	case stateBase == StateCourseDetailsBase && stateID != "":
+		return h.handleCourseAction(c, ctxUser, userInput, stateID)
 	}
 
 	log.Printf("[MessageHandler] Unhandled text from UserID %d in state '%s': '%s'", ctxUser.ID, ctxUser.LastMenu, userInput)
@@ -141,8 +158,10 @@ func (h *Handler) displayCourseOverview(c telebot.Context, u user.User, courseID
 	msg := formatters.FormatCourseOverview(dto)
 	kb := keyboards.CourseDetailsKeyboard(dto)
 
-	// In a later slice, user state will be updated to e.g., "course_details:123"
-	// For now, we leave it in the course list state.
+	newState := fmt.Sprintf("%s:%d", StateCourseDetailsBase, courseID)
+	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState); err != nil {
+		log.Printf("[displayCourseOverview] Failed to update user state for UserID %d: %v", u.ID, err)
+	}
 
 	return c.Send(msg, kb)
 }
@@ -152,4 +171,35 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 		log.Printf("[handleReturnToMainMenu] Failed to update user state for UserID %d: %v", u.ID, err)
 	}
 	return c.Send("به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin))
+}
+
+func (h *Handler) handleCourseAction(c telebot.Context, u user.User, actionText, courseIDStr string) error {
+	courseID, _ := strconv.ParseUint(courseIDStr, 10, 32)
+	if courseID == 0 {
+		return nil // Invalid state
+	}
+
+	baseActionText := strings.Split(actionText, " (")[0]
+	if baseActionText == keyboards.StartCourseButtonText || baseActionText == keyboards.ContinueCourseButtonText {
+		cmd := startCmd.StartSessionCommand{UserID: u.ID, CourseID: uint(courseID)}
+		res, err := h.startSession.Handle(context.Background(), cmd)
+		if err != nil {
+			log.Printf("[handleCourseAction] Error starting session for UserID %d, CourseID %d: %v", u.ID, courseID, err)
+			return c.Send("مشکلی در شروع دوره پیش آمد.")
+		}
+
+		// Handle different results from the use case
+		switch res.NextStep {
+		case startCmd.ShowWord:
+			// TODO: Update user state to be 'in_course:ID'
+			return c.Send(formatters.FormatWordForDisplay(res.Word), keyboards.InCourseNavigationKeyboard())
+		case startCmd.ShowQuiz:
+			// This will be implemented in a future slice
+			return c.Send("Quiz time! (Not implemented yet)")
+		case startCmd.CourseEnded:
+			// TODO: Update user state back to 'main' or 'course_list'
+			return c.Send(tgmarkdown.Escape(res.MessageToUser), keyboards.BackToCourseListKeyboard())
+		}
+	}
+	return nil
 }
