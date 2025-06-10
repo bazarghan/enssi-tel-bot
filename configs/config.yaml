@@ -1,0 +1,10 @@
+bot:
+  token: "7635539187:AAFNJnSds1OuGNB4Ue0qJsNWJ1XHcyyo8yI" # Default, can be overridden by ENV
+
+postgres:
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "ali1834"
+  dbname: "enssi_tel_bot_dev"
+  sslmode: "disable"
