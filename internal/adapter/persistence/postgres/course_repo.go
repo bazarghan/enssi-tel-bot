@@ -1,0 +1,95 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+	"gorm.io/gorm"
+)
+
+// CourseRepository is the GORM implementation of the course repository port.
+type CourseRepository struct {
+	db *gorm.DB
+}
+
+// NewCourseRepository creates a new course repository.
+func NewCourseRepository(db *gorm.DB) *CourseRepository {
+	return &CourseRepository{db: db}
+}
+
+// FindAll retrieves all available courses from the database.
+func (r *CourseRepository) FindAll(ctx context.Context) ([]course.Course, error) {
+	var models []courseModel
+	if err := r.db.WithContext(ctx).Order("id ASC").Find(&models).Error; err != nil {
+		return nil, course.ErrFetchFailed
+	}
+
+	courses := make([]course.Course, 0, len(models))
+	for _, m := range models {
+		totalWords, _ := r.GetTotalWords(ctx, m.ID)
+		courses = append(courses, toDomainCourse(m, totalWords))
+	}
+	return courses, nil
+}
+
+// FindByID retrieves a single course by its ID.
+func (r *CourseRepository) FindByID(ctx context.Context, courseID uint) (course.Course, error) {
+	var model courseModel
+	if err := r.db.WithContext(ctx).First(&model, courseID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return course.Course{}, course.ErrNotFound
+		}
+		return course.Course{}, err
+	}
+	totalWords, _ := r.GetTotalWords(ctx, model.ID)
+	return toDomainCourse(model, totalWords), nil
+}
+
+// FindByPersianTitle retrieves a single course by its Persian title.
+func (r *CourseRepository) FindByPersianTitle(ctx context.Context, title string) (course.Course, error) {
+	var model courseModel
+	// The title on the keyboard may have progress percentage, so we need a partial match.
+	if err := r.db.WithContext(ctx).Where("persian_title LIKE ?", title+"%").First(&model).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return course.Course{}, course.ErrNotFound
+		}
+		return course.Course{}, err
+	}
+	totalWords, _ := r.GetTotalWords(ctx, model.ID)
+	return toDomainCourse(model, totalWords), nil
+}
+
+// GetUserProgress retrieves a specific user's progress for a given course.
+func (r *CourseRepository) GetUserProgress(ctx context.Context, userID uint, courseID uint) (course.UserProgress, error) {
+	var uc userCourseModel
+	err := r.db.WithContext(ctx).Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
+
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return course.UserProgress{}, course.ErrProgressQuery
+	}
+
+	totalWords, err := r.GetTotalWords(ctx, courseID)
+	if err != nil {
+		return course.UserProgress{}, err
+	}
+
+	progress := course.UserProgress{}
+	if uc.ID != 0 {
+		progress.IsStarted = true
+		if totalWords > 0 {
+			progress.ProgressPercentage = int((float64(uc.Progress) / float64(totalWords)) * 100)
+			if uc.Progress >= uint(totalWords) {
+				progress.IsCompleted = true
+				progress.ProgressPercentage = 100
+			}
+		}
+	}
+	return progress, nil
+}
+
+// GetTotalWords retrieves the number of words in a course.
+func (r *CourseRepository) GetTotalWords(ctx context.Context, courseID uint) (int, error) {
+	var totalWords int64
+	err := r.db.WithContext(ctx).Model(&courseWordModel{}).Where("course_id = ?", courseID).Count(&totalWords).Error
+	return int(totalWords), err
+}
