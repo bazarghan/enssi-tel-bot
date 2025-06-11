@@ -2,9 +2,11 @@ package quiz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"log"
 )
 
 const QuizPassThreshold = 9
@@ -52,7 +54,9 @@ func (h SubmitAnswerHandler) Handle(ctx context.Context, cmd SubmitAnswerCommand
 	}
 
 	if err := h.quizRepo.SaveAnswer(ctx, attempt.ID, currentQuestion.ID, chosenOption.ID, chosenOption.IsCorrect); err != nil {
-		// This could be a duplicate answer, which we can ignore or handle. For now, we return the error.
+		if errors.Is(err, quiz.ErrQuestionAlreadyAnswered) {
+			return SubmitAnswerResult{}, err // Propagate specific error for handler to ignore
+		}
 		return SubmitAnswerResult{}, fmt.Errorf("failed to save answer: %w", err)
 	}
 
@@ -64,18 +68,19 @@ func (h SubmitAnswerHandler) Handle(ctx context.Context, cmd SubmitAnswerCommand
 		return SubmitAnswerResult{}, fmt.Errorf("failed to advance attempt: %w", err)
 	}
 
-	attempt.CurrentQuestionIndex++
-
 	// Check if the quiz is now complete.
-	if attempt.CurrentQuestionIndex >= len(attempt.Questions) {
-		h.quizRepo.MarkAttemptCompleted(ctx, attempt.ID)
+	if attempt.CurrentQuestionIndex+1 >= len(attempt.Questions) {
+		finalScore, err := h.quizRepo.MarkAttemptCompleted(ctx, attempt.ID)
+		if err != nil {
+			return SubmitAnswerResult{}, fmt.Errorf("failed to mark attempt complete: %w", err)
+		}
 
-		finalResult := h.calculateFinalResult(ctx, attempt)
+		finalResult := h.calculateFinalResult(attempt, finalScore)
 		return SubmitAnswerResult{IsCompleted: true, FinalResult: finalResult}, nil
 	}
 
 	// Quiz continues, return the next question.
-	nextQuestion := attempt.Questions[attempt.CurrentQuestionIndex]
+	nextQuestion := attempt.Questions[attempt.CurrentQuestionIndex+1]
 	return SubmitAnswerResult{IsCompleted: false, NextQuestion: nextQuestion}, nil
 }
 
@@ -84,6 +89,9 @@ func (h *SubmitAnswerHandler) validateAttempt(attempt quiz.Attempt, userID uint)
 		return quiz.ErrUserMismatch
 	}
 	if attempt.IsCompleted {
+		return quiz.ErrAttemptAlreadyCompleted
+	}
+	if attempt.CurrentQuestionIndex >= len(attempt.Questions) {
 		return quiz.ErrAttemptAlreadyCompleted
 	}
 	return nil
@@ -99,31 +107,31 @@ func (h *SubmitAnswerHandler) validateOption(question quiz.Question, optionID ui
 }
 
 func (h *SubmitAnswerHandler) updateSRS(ctx context.Context, userID, wordID uint, wasCorrect bool) {
+	if wordID == 0 {
+		return
+	}
 	studiedWord, err := h.wordRepo.FindStudiedWord(ctx, userID, wordID)
 	if err != nil {
-		// Log error but don't fail the entire operation.
-		fmt.Printf("could not find studied word %d for user %d to update SRS: %v\n", wordID, userID, err)
+		log.Printf("could not find studied word %d for user %d to update SRS: %v", wordID, userID, err)
 		return
 	}
 	studiedWord.CalculateNextReview(wasCorrect)
 	h.wordRepo.SaveStudiedWord(ctx, studiedWord)
 }
 
-func (h *SubmitAnswerHandler) calculateFinalResult(ctx context.Context, attempt quiz.Attempt) quiz.Result {
-	// Re-fetch attempt to get latest score after all answers are in.
-	finalAttempt, _ := h.quizRepo.GetAttempt(ctx, attempt.ID)
-
+func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalScore int) quiz.Result {
 	result := quiz.Result{
-		Score:          finalAttempt.Score,
-		TotalQuestions: len(finalAttempt.Questions),
+		Score:          finalScore,
+		TotalQuestions: len(attempt.Questions),
 	}
 
-	if finalAttempt.Type == quiz.CourseBlock {
+	if attempt.Type == quiz.CourseBlock {
 		result.Passed = result.Score >= QuizPassThreshold
 		if !result.Passed {
 			result.ShouldResetProgress = true
-			if finalAttempt.CourseID > 0 && WordsPerQuizBlock > 0 { // Placeholder for TriggerProgress
-				result.SuggestedNewProgress = 0 //Simplified logic
+			// Simplified logic for progress reset
+			if attempt.CourseID > 0 {
+				result.SuggestedNewProgress = 0
 			}
 		}
 	} else {
@@ -132,3 +140,4 @@ func (h *SubmitAnswerHandler) calculateFinalResult(ctx context.Context, attempt 
 
 	return result
 }
+

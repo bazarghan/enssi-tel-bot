@@ -16,3 +16,4 @@ type Repository interface {
 	// FindWordIDsByCourseBlock retrieves a slice of word IDs for a specific block in a course.
 	FindWordIDsByCourseBlock(ctx context.Context, courseID uint, limit uint, offset uint) ([]uint, error)
 }
+

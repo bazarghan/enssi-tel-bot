@@ -5,17 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
-
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 	"gopkg.in/telebot.v4"
 )
 
@@ -24,7 +26,7 @@ const (
 	ShowAchievementCallbackPrefix = "ach_show:"
 )
 
-// Handler holds dependencies for callback handlers.
+// Handler holds dependencies for all callback handlers.
 type Handler struct {
 	submitAnswer submitCmd.SubmitAnswerHandler
 	quizRepo     quiz.Repository
@@ -32,7 +34,7 @@ type Handler struct {
 	imgSvc       achievement.ImageGenerator
 }
 
-// NewHandler creates a new callback handler.
+// NewHandler creates a new callback handler with all its dependencies.
 func NewHandler(
 	submitAnswer submitCmd.SubmitAnswerHandler,
 	quizRepo quiz.Repository,
@@ -47,7 +49,7 @@ func NewHandler(
 	}
 }
 
-// Handle routes incoming callback queries.
+// Handle routes incoming callback queries to the appropriate sub-handler.
 func (h *Handler) Handle(c telebot.Context) error {
 	cb := c.Callback()
 	if cb == nil {
@@ -66,12 +68,13 @@ func (h *Handler) Handle(c telebot.Context) error {
 	return c.Respond()
 }
 
+// handleQuizAnswer processes a user's answer to a quiz question.
 func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	defer c.Respond()
 
 	ctxUser, ok := c.Get("dbUser").(user.User)
 	if !ok {
-		return c.Send("خطای شناسایی کاربر.")
+		return c.Send("Error identifying user.")
 	}
 
 	payload := strings.TrimPrefix(c.Callback().Data, QuizAnswerCallbackPrefix)
@@ -96,15 +99,25 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			return nil // Silently ignore duplicate clicks
 		}
 		log.Printf("Error submitting quiz answer for attempt %d: %v", attemptID, err)
-		_, err := c.Bot().Edit(c.Callback().Message, "خطایی در پردازش پاسخ شما رخ داد.")
-		return err
+		_, errEdit := c.Bot().Edit(c.Callback().Message, "An error occurred while processing your answer.")
+		return errEdit
+	}
+
+	fullAttempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
+	if err != nil {
+		log.Printf("Could not fetch full attempt %d for formatting: %v", attemptID, err)
 	}
 
 	if res.IsCompleted {
-		finalMsg := formatters.FormatQuizResult(res.FinalResult)
+		finalMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 		_, err = c.Bot().Edit(c.Callback().Message, finalMsg, telebot.ModeMarkdownV2)
 	} else {
-		questionMsg := formatters.FormatQuizQuestion(res.NextQuestion, int(attemptID))
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(len(res.NextQuestion.Options), func(i, j int) {
+			res.NextQuestion.Options[i], res.NextQuestion.Options[j] = res.NextQuestion.Options[j], res.NextQuestion.Options[i]
+		})
+
+		questionMsg := formatters.FormatQuizQuestion(res.NextQuestion, fullAttempt.CurrentQuestionIndex+1, len(fullAttempt.Questions))
 		kb := keyboards.QuizQuestionOptionsKeyboard(res.NextQuestion.Options, uint(attemptID))
 		_, err = c.Bot().Edit(c.Callback().Message, questionMsg, kb, telebot.ModeMarkdownV2)
 	}
@@ -115,12 +128,13 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	return nil
 }
 
+// handleShowAchievement generates and sends a progressive achievement image.
 func (h *Handler) handleShowAchievement(c telebot.Context) error {
 	defer c.Respond()
 
 	ctxUser, ok := c.Get("dbUser").(user.User)
 	if !ok {
-		return c.Send("خطای شناسایی کاربر.")
+		return c.Send("Error identifying user.")
 	}
 
 	payload := strings.TrimPrefix(c.Callback().Data, ShowAchievementCallbackPrefix)
@@ -130,35 +144,32 @@ func (h *Handler) handleShowAchievement(c telebot.Context) error {
 		return nil
 	}
 
-	// 1. Get base achievement details (like image path).
 	ach, err := h.achRepo.FindByID(context.Background(), uint(achievementID))
 	if err != nil {
 		log.Printf("Could not find achievement %d: %v", achievementID, err)
-		return c.Send("اطلاعات این دستاورد یافت نشد.")
+		return c.Send("Achievement details not found.")
 	}
 
-	// 2. Get user's specific progress for this achievement.
 	userAch, err := h.achRepo.GetUserAchievement(context.Background(), ctxUser.ID, uint(achievementID))
 	if err != nil && !errors.Is(err, achievement.ErrUserAchNotFound) {
 		log.Printf("Could not get user achievement progress for user %d, ach %d: %v", ctxUser.ID, achievementID, err)
-		return c.Send("خطا در دریافت اطلاعات پیشرفت شما.")
+		return c.Send("Error retrieving your progress.")
 	}
 
-	// 3. Generate the progressive image.
 	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
 	if err != nil {
 		log.Printf("Failed to generate achievement image: %v", err)
-		return c.Send("خطا در ساخت تصویر دستاورد.")
+		return c.Send("Error creating achievement image.")
 	}
-	defer os.Remove(generatedPath) // Clean up the temp file.
+	defer os.Remove(generatedPath)
 
-	// 4. Send the image.
+	caption := fmt.Sprintf("🏆 *%s*\n\n_%s_", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
 	photo := &telebot.Photo{
 		File:    telebot.FromDisk(generatedPath),
-		Caption: fmt.Sprintf("🏆 *%s*\n\n_%s_", ach.Title, ach.Description),
+		Caption: caption,
 	}
 
-	_, err = c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdown)
+	_, err = c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2)
 	if err != nil {
 		log.Printf("Failed to send achievement photo: %v", err)
 	}

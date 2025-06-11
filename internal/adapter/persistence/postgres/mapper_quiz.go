@@ -1,6 +1,8 @@
 package postgres
 
-import "github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+import (
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+)
 
 func toDomainAttempt(m attemptModel, qm quizModel) quiz.Attempt {
 	questions := make([]quiz.Question, len(qm.Questions))
@@ -42,3 +44,4 @@ func toDomainOption(m optionModel) quiz.Option {
 		IsCorrect: m.IsCorrect,
 	}
 }
+

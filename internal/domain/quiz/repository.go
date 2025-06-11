@@ -24,9 +24,10 @@ type Repository interface {
 	// IncrementQuestionIndex moves the attempt to the next question.
 	IncrementQuestionIndex(ctx context.Context, attemptID uint) error
 
-	// MarkAttemptCompleted finalizes an attempt.
-	MarkAttemptCompleted(ctx context.Context, attemptID uint) error
+	// MarkAttemptCompleted finalizes an attempt and calculates the final score.
+	MarkAttemptCompleted(ctx context.Context, attemptID uint) (score int, err error)
 
 	// UpdateMessageID updates the telegram message ID for the current question.
 	UpdateMessageID(ctx context.Context, attemptID uint, messageID int) error
 }
+
