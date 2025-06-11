@@ -4,7 +4,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
@@ -12,7 +14,9 @@ import (
 // InitializeBot creates and configures the Telebot instance.
 func InitializeBot(
 	token string,
-	appHandlers *di.BotApp,
+	cmdHandler *command.Handler,
+	msgHandler *message.Handler,
+	cbHandler *callback.Handler,
 	registerUserHandler registerCmd.RegisterUserHandler,
 ) (*telebot.Bot, error) {
 	if token == "" {
@@ -34,7 +38,7 @@ func InitializeBot(
 	lockManager := NewUserLockManager()
 
 	// Setup router and middleware.
-	RegisterRoutes(b, appHandlers, registerUserHandler, lockManager)
+	RegisterRoutes(b, cmdHandler, msgHandler, cbHandler, registerUserHandler, lockManager)
 
 	return b, nil
 }

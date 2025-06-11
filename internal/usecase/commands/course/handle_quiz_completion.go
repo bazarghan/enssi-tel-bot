@@ -3,6 +3,7 @@ package course
 import (
 	"context"
 	"errors"
+	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"log"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
@@ -17,19 +18,28 @@ type HandleQuizCompletionCommand struct {
 	Result   quiz.Result
 }
 
+// HandleQuizCompletionHandler processes the command.
+type HandleQuizCompletionHandler struct {
+	courseRepo       course.Repository
+	wordRepo         word.Repository
+	createCourseQuiz quizCmd.CreateCourseQuizHandler
+}
+
 // HandleQuizCompletionResult tells the presentation layer what to do next.
 // It reuses the StartSessionResult structure for consistency.
 type HandleQuizCompletionResult = StartSessionResult
 
-// HandleQuizCompletionHandler processes the command.
-type HandleQuizCompletionHandler struct {
-	courseRepo course.Repository
-	wordRepo   word.Repository
-}
-
 // NewHandleQuizCompletionHandler creates a new handler.
-func NewHandleQuizCompletionHandler(courseRepo course.Repository, wordRepo word.Repository) HandleQuizCompletionHandler {
-	return HandleQuizCompletionHandler{courseRepo: courseRepo, wordRepo: wordRepo}
+func NewHandleQuizCompletionHandler(
+	courseRepo course.Repository,
+	wordRepo word.Repository,
+	createCourseQuiz quizCmd.CreateCourseQuizHandler,
+) HandleQuizCompletionHandler {
+	return HandleQuizCompletionHandler{
+		courseRepo:       courseRepo,
+		wordRepo:         wordRepo,
+		createCourseQuiz: createCourseQuiz,
+	}
 }
 
 // Handle executes the command.
@@ -70,7 +80,6 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 		}
 	}
 
-	// After handling the result, determine the next step by re-evaluating the session.
-	startSessionHandler := NewStartSessionHandler(h.courseRepo, h.wordRepo)
+	startSessionHandler := NewStartSessionHandler(h.courseRepo, h.wordRepo, h.createCourseQuiz)
 	return startSessionHandler.Handle(ctx, StartSessionCommand{UserID: cmd.UserID, CourseID: cmd.CourseID})
 }

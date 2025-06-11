@@ -1,3 +1,4 @@
+//go:generate wire
 //go:build wireinject
 // +build wireinject
 

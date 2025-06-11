@@ -41,7 +41,14 @@ func main() {
 	registerUserHandler := di.InitializeRegisterUserHandler(dbConnection)
 
 	// Initialize the bot instance, passing in the configured handlers
-	botInstance, err := telegram.InitializeBot(token, botApp, registerUserHandler)
+	botInstance, err := telegram.InitializeBot(
+		token,
+		botApp.CommandHandler,
+		botApp.MessageHandler,
+		botApp.CallbackHandler,
+		registerUserHandler,
+	)
+
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize bot: %v", err)
 	}
