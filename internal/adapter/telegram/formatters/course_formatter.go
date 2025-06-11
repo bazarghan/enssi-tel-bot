@@ -23,10 +23,10 @@ func FormatCourseOverview(co dto.CourseOverview) string {
 		sb.WriteString(fmt.Sprintf("_\\(%s\\)_\n", tgmarkdown.Escape(co.Title)))
 	}
 	sb.WriteString(fmt.Sprintf("\n%s\n", tgmarkdown.Escape(co.PersianFullDescription)))
-	sb.WriteString(fmt.Sprintf("\nتعداد کلمات: %d\n", co.TotalWords))
+	sb.WriteString(fmt.Sprintf("\nتعداد کلمات: *%d*\n", co.TotalWords))
 
 	if co.IsCompleted {
-		sb.WriteString("وضعیت: *تکمیل شده*\n")
+		sb.WriteString("وضعیت: *تکمیل شده* 🏆\n")
 	} else if co.IsStarted {
 		sb.WriteString(fmt.Sprintf("پیشرفت شما: *%d%%*\n", co.ProgressPercentage))
 	} else {
@@ -34,3 +34,4 @@ func FormatCourseOverview(co dto.CourseOverview) string {
 	}
 	return sb.String()
 }
+

@@ -45,19 +45,24 @@ func (r *CourseRepository) GetOrCreateUserCourse(ctx context.Context, userID uin
 }
 
 func calculateProgress(uc userCourseModel, totalWords int) course.UserProgress {
-	progress := course.UserProgress{}
+	progress := course.UserProgress{
+		WordsCompleted: int(uc.Progress),
+	}
 	if uc.ID != 0 {
 		progress.IsStarted = true
-		progress.WordsCompleted = int(uc.Progress)
-
-		if totalWords > 0 {
-			progress.ProgressPercentage = int((float64(uc.Progress) / float64(totalWords)) * 100)
-			if uc.Progress >= uint(totalWords) {
-				progress.IsCompleted = true
-				progress.ProgressPercentage = 100
-			}
-		}
 	}
+
+	if totalWords > 0 {
+		progress.ProgressPercentage = int((float64(uc.Progress) / float64(totalWords)) * 100)
+		if uc.Progress >= uint(totalWords) {
+			progress.IsCompleted = true
+			progress.ProgressPercentage = 100
+		}
+	} else if uc.Progress > 0 { // Case for courses with progress but somehow 0 words
+		progress.IsCompleted = true
+		progress.ProgressPercentage = 100
+	}
+
 	return progress
 }
 

@@ -54,13 +54,11 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 		}, nil
 	}
 
-	// Placeholder for quiz logic
-	// In a future slice, this will check progress and quiz attempt status.
-	// For now, we assume no quiz is due at the start of a session.
+	// TODO: Check if a quiz is due for the current progress point.
+	// This will be implemented in a future slice by calling a quiz use case.
+	// For now, we proceed directly to the next word.
 
-	// The next word to study is at index `WordsCompleted + 1`.
 	nextWordIndex := uint(progress.WordsCompleted + 1)
-
 	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, nextWordIndex)
 	if err != nil {
 		if errors.Is(err, word.ErrCourseWordLinkNotFound) {

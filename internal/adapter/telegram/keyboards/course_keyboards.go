@@ -20,8 +20,6 @@ func CourseListKeyboard(courses []dto.CourseSummary) *telebot.ReplyMarkup {
 	rows := make([]telebot.Row, 0, len(courses)+1)
 	for _, c := range courses {
 		btnText := c.PersianTitle
-		// The logic to add progress to the button text is now handled here,
-		// as it's a presentation concern.
 		if c.ProgressPercentage > 0 && !c.IsCompleted {
 			btnText = fmt.Sprintf("%s (%d%%)", btnText, c.ProgressPercentage)
 		} else if c.IsCompleted {
@@ -53,3 +51,4 @@ func CourseDetailsKeyboard(co dto.CourseOverview) *telebot.ReplyMarkup {
 	)
 	return menu
 }
+

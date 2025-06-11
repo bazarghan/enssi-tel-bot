@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"log"
 )
 
 // AdvanceWordCommand defines the input for advancing to the next word.
@@ -31,47 +32,38 @@ func NewAdvanceWordHandler(courseRepo course.Repository, wordRepo word.Repositor
 
 // Handle executes the command.
 func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) (AdvanceWordResult, error) {
-	// 1. Get current progress (e.g., user has completed N words).
-	currentProgress, err := h.courseRepo.GetUserProgress(ctx, cmd.UserID, cmd.CourseID)
+	// First, mark the word the user just saw as studied.
+	progress, err := h.courseRepo.GetUserProgress(ctx, cmd.UserID, cmd.CourseID)
 	if err != nil {
-		return AdvanceWordResult{}, fmt.Errorf("failed to get current progress: %w", err)
+		return AdvanceWordResult{}, fmt.Errorf("failed to get current progress before advancing: %w", err)
 	}
-	if currentProgress.IsCompleted {
-		return AdvanceWordResult{NextStep: CourseEnded, MessageToUser: "دوره قبلا تمام شده است."}, nil
-	}
+	wordJustStudiedIndex := uint(progress.WordsCompleted)
 
-	wordJustStudiedIndex := uint(currentProgress.WordsCompleted)
-
-	// 2. Mark word N as studied using the SRS primitive.
-	// This happens after the user has seen it and clicked "Next".
-	if wordJustStudiedIndex > 0 {
-		wordToMark, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, wordJustStudiedIndex)
-		if err != nil {
-			return AdvanceWordResult{}, fmt.Errorf("could not find word at index %d to mark as studied: %w", wordJustStudiedIndex, err)
-		}
-
-		studiedWord, err := h.wordRepo.FindStudiedWord(ctx, cmd.UserID, wordToMark.ID)
-		if err != nil && !errors.Is(err, word.ErrStudiedWordNotFound) {
-			return AdvanceWordResult{}, fmt.Errorf("error checking for studied word: %w", err)
-		}
-
-		// If not found, a new StudiedWord struct is created.
-		if errors.Is(err, word.ErrStudiedWordNotFound) {
-			studiedWord = word.StudiedWord{UserID: cmd.UserID, WordID: wordToMark.ID}
-		}
-
-		// In this flow, we assume seeing the word and clicking "Next" means it was correctly recalled.
-		studiedWord.CalculateNextReview(true)
-
-		if err := h.wordRepo.SaveStudiedWord(ctx, studiedWord); err != nil {
-			return AdvanceWordResult{}, fmt.Errorf("failed to save studied word record: %w", err)
-		}
-	}
-
-	// 3. Increment course progress (user is now at N+1).
+	// Increment progress to the next word.
 	newProgress, err := h.courseRepo.IncrementProgress(ctx, cmd.UserID, cmd.CourseID)
 	if err != nil {
 		return AdvanceWordResult{}, fmt.Errorf("failed to increment course progress: %w", err)
+	}
+
+	// Now update the SRS for the word they just finished.
+	if wordJustStudiedIndex > 0 {
+		wordToMark, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, wordJustStudiedIndex)
+		if err != nil {
+			log.Printf("could not find word at index %d to mark as studied: %v", wordJustStudiedIndex, err)
+		} else {
+			studiedWord, err := h.wordRepo.FindStudiedWord(ctx, cmd.UserID, wordToMark.ID)
+			if err != nil && !errors.Is(err, word.ErrStudiedWordNotFound) {
+				log.Printf("error checking for studied word %d: %v", wordToMark.ID, err)
+			} else {
+				if errors.Is(err, word.ErrStudiedWordNotFound) {
+					studiedWord = word.StudiedWord{UserID: cmd.UserID, WordID: wordToMark.ID}
+				}
+				studiedWord.CalculateNextReview(true) // Assume correct recall as user is advancing.
+				if err := h.wordRepo.SaveStudiedWord(ctx, studiedWord); err != nil {
+					log.Printf("failed to save studied word record for word %d: %v", wordToMark.ID, err)
+				}
+			}
+		}
 	}
 
 	// 4. Determine next step (word N+1, quiz, or end).
@@ -82,12 +74,15 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 		}, nil
 	}
 
-	// Placeholder for quiz logic
-	// if newProgress.WordsCompleted % 12 == 0 { ... return ShowQuiz ... }
+	// TODO: Check for quiz trigger at newProgress.WordsCompleted
+	// if newProgress.WordsCompleted % 12 == 0 { return ShowQuiz }
 
-	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, uint(newProgress.WordsCompleted+1))
+	nextWordToShowIndex := uint(newProgress.WordsCompleted + 1)
+	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, nextWordToShowIndex)
 	if err != nil {
 		if errors.Is(err, word.ErrCourseWordLinkNotFound) {
+			// This might mean we're at the very end and the next thing is the final quiz.
+			// For now, we treat it as the end of content.
 			return AdvanceWordResult{
 				NextStep:      CourseEnded,
 				MessageToUser: "شما به پایان کلمات موجود رسیده‌اید. 🏁",
