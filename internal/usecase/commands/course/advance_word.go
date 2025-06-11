@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"log"
 )
 
@@ -21,13 +22,22 @@ type AdvanceWordResult = StartSessionResult
 
 // AdvanceWordHandler processes the command.
 type AdvanceWordHandler struct {
-	courseRepo course.Repository
-	wordRepo   word.Repository
+	courseRepo       course.Repository
+	wordRepo         word.Repository
+	createCourseQuiz quizCmd.CreateCourseQuizHandler
 }
 
 // NewAdvanceWordHandler creates a new handler.
-func NewAdvanceWordHandler(courseRepo course.Repository, wordRepo word.Repository) AdvanceWordHandler {
-	return AdvanceWordHandler{courseRepo: courseRepo, wordRepo: wordRepo}
+func NewAdvanceWordHandler(
+	courseRepo course.Repository,
+	wordRepo word.Repository,
+	createCourseQuiz quizCmd.CreateCourseQuizHandler,
+) AdvanceWordHandler {
+	return AdvanceWordHandler{
+		courseRepo:       courseRepo,
+		wordRepo:         wordRepo,
+		createCourseQuiz: createCourseQuiz,
+	}
 }
 
 // Handle executes the command.
@@ -74,8 +84,23 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 		}, nil
 	}
 
-	// TODO: Check for quiz trigger at newProgress.WordsCompleted
-	// if newProgress.WordsCompleted % 12 == 0 { return ShowQuiz }
+	// Check for quiz trigger at the new progress point.
+	if newProgress.WordsCompleted > 0 && newProgress.WordsCompleted%WordsPerQuizBlock == 0 {
+		quizCmd := quizCmd.CreateCourseQuizCommand{
+			UserID:          cmd.UserID,
+			CourseID:        cmd.CourseID,
+			TriggerProgress: uint(newProgress.WordsCompleted),
+		}
+		quizResult, err := h.createCourseQuiz.Handle(ctx, quizCmd)
+		if err != nil {
+			log.Printf("Failed to create quiz for user %d, course %d: %v", cmd.UserID, cmd.CourseID, err)
+		} else {
+			return AdvanceWordResult{
+				NextStep:    ShowQuiz,
+				QuizAttempt: quizResult.QuizAttempt,
+			}, nil
+		}
+	}
 
 	nextWordToShowIndex := uint(newProgress.WordsCompleted + 1)
 	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, nextWordToShowIndex)

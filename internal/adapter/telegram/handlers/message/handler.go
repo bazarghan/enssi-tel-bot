@@ -9,11 +9,13 @@ import (
 	"strings"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 
@@ -39,6 +41,7 @@ type Handler struct {
 
 	startSession startCmd.StartSessionHandler
 	userRepo     user.Repository
+	quizRepo     quiz.Repository
 	courseRepo   course.Repository
 }
 
@@ -50,6 +53,7 @@ func NewHandler(
 	startSession startCmd.StartSessionHandler,
 	userRepo user.Repository,
 	courseRepo course.Repository,
+	quizRepo quiz.Repository,
 ) *Handler {
 
 	return &Handler{
@@ -59,6 +63,7 @@ func NewHandler(
 		advanceWord:  advanceWord,
 		userRepo:     userRepo,
 		courseRepo:   courseRepo,
+		quizRepo:     quizRepo,
 	}
 }
 
@@ -191,30 +196,17 @@ func (h *Handler) handleCourseAction(c telebot.Context, u user.User, actionText,
 	}
 
 	baseActionText := strings.Split(actionText, " (")[0]
-	if baseActionText == keyboards.StartCourseButtonText || baseActionText == keyboards.ContinueCourseButtonText {
-		cmd := startCmd.StartSessionCommand{UserID: u.ID, CourseID: uint(courseID)}
-		res, err := h.startSession.Handle(context.Background(), cmd)
-		if err != nil {
-			log.Printf("[handleCourseAction] Error starting session for UserID %d, CourseID %d: %v", u.ID, courseID, err)
-			return c.Send("مشکلی در شروع دوره پیش آمد.")
-		}
-
-		// Handle different results from the use case
-		switch res.NextStep {
-		case startCmd.ShowWord:
-			newState := fmt.Sprintf("%s:%d", StateInCourseBase, courseID)
-			h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
-			return c.Send(formatters.FormatWordForDisplay(res.Word), keyboards.InCourseNavigationKeyboard())
-		case startCmd.ShowQuiz:
-			// This will be implemented in a future slice
-			return c.Send("Quiz time! (Not implemented yet)")
-		case startCmd.CourseEnded:
-
-			h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateCourseList)
-			return c.Send(tgmarkdown.Escape(res.MessageToUser), keyboards.BackToCourseListKeyboard())
-		}
+	if baseActionText != keyboards.StartCourseButtonText && baseActionText != keyboards.ContinueCourseButtonText {
+		return nil // Not a start/continue action
 	}
-	return nil
+
+	cmd := startCmd.StartSessionCommand{UserID: u.ID, CourseID: uint(courseID)}
+	res, err := h.startSession.Handle(context.Background(), cmd)
+	if err != nil {
+		log.Printf("[handleCourseAction] Error starting session for UserID %d, CourseID %d: %v", u.ID, courseID, err)
+		return c.Send("There was a problem starting the course.")
+	}
+	return h.sendLearningContext(c, res, uint(courseID), u.ID)
 }
 
 func (h *Handler) handleNextWord(c telebot.Context, u user.User, courseIDStr string) error {
@@ -227,18 +219,61 @@ func (h *Handler) handleNextWord(c telebot.Context, u user.User, courseIDStr str
 	res, err := h.advanceWord.Handle(context.Background(), cmd)
 	if err != nil {
 		log.Printf("[handleNextWord] Error advancing word for UserID %d, CourseID %d: %v", u.ID, courseID, err)
-		return c.Send("مشکلی در دریافت کلمه بعدی پیش آمد.")
+		return c.Send("There was a problem getting the next word.")
+	}
+	return h.sendLearningContext(c, res, uint(courseID), u.ID)
+}
+
+// sendLearningContext processes the result from a course use case and sends the appropriate message.
+func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessionResult, courseID, userID uint) error {
+	var newState string
+	var kb *telebot.ReplyMarkup = &telebot.ReplyMarkup{RemoveKeyboard: true}
+	var msg string
+	var sendErr error
+
+	switch res.NextStep {
+	case startCmd.ShowWord:
+		newState = fmt.Sprintf("%s:%d", StateInCourseBase, courseID)
+		msg = formatters.FormatWordForDisplay(res.Word)
+		kb = keyboards.InCourseNavigationKeyboard()
+		sendErr = c.Send(msg, kb, telebot.ModeMarkdownV2)
+
+		// TODO: In a future slice, send image and audio pronunciations if they exist.
+
+	case startCmd.CourseEnded:
+		newState = StateCourseList
+		msg = tgmarkdown.Escape(res.MessageToUser)
+		kb = keyboards.BackToCourseListKeyboard()
+		sendErr = c.Send(msg, kb, telebot.ModeMarkdownV2)
+	case startCmd.ShowQuiz:
+		attempt := res.QuizAttempt
+		question := attempt.Questions[attempt.CurrentQuestionIndex]
+		newState = fmt.Sprintf("in_quiz:%d:%d", courseID, attempt.ID) // A more specific state
+		msg = formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
+		kb = keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID)
+
+		sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
+		if err != nil {
+			log.Printf("Failed to send initial quiz question: %v", err)
+			return err
+		}
+		// Save message ID so the quiz can be edited later by the callback handler
+		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
+		h.userRepo.UpdateLastMenu(context.Background(), userID, newState)
+		return nil // Return early as the message is already sent and state is updated
+
+	default:
+		// Fallback for unhandled steps
+		newState = StateMain
+		msg = "An unknown error occurred. Returning to main menu."
+		kb = keyboards.NewMainMenu(false) // Assuming non-admin for safety
+		sendErr = c.Send(msg)
 	}
 
-	// Same result handling logic as start session
-	switch res.NextStep {
-	case advanceCmd.ShowWord:
-		return c.Send(formatters.FormatWordForDisplay(res.Word), keyboards.InCourseNavigationKeyboard())
-	case advanceCmd.ShowQuiz:
-		return c.Send("Quiz time! (Not implemented yet)")
-	case advanceCmd.CourseEnded:
-		h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateCourseList)
-		return c.Send(tgmarkdown.Escape(res.MessageToUser), keyboards.BackToCourseListKeyboard())
+	if sendErr != nil {
+		log.Printf("Error sending learning context message: %v", sendErr)
 	}
-	return nil
+
+	h.userRepo.UpdateLastMenu(context.Background(), userID, newState)
+	return sendErr
 }

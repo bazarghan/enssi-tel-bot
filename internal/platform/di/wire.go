@@ -55,6 +55,7 @@ var courseSet = wire.NewSet(
 	courseQueries.NewGetOverviewHandler,
 	courseCmd.NewStartSessionHandler,
 	courseCmd.NewAdvanceWordHandler,
+	courseCmd.NewHandleQuizCompletionHandler,
 )
 
 var wordSet = wire.NewSet(

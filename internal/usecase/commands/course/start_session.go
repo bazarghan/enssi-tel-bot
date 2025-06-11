@@ -5,7 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+	"log"
+)
+
+type Step int
+
+const WordsPerQuizBlock = 12
+const (
+	ShowWord Step = iota
+	ShowQuiz
+	CourseEnded
 )
 
 // StartSessionCommand defines the input for starting a course session.
@@ -19,25 +31,28 @@ type StartSessionResult struct {
 	NextStep      Step
 	Word          word.Word
 	MessageToUser string
+
+	QuizAttempt quiz.Attempt
 }
-
-type Step int
-
-const (
-	ShowWord Step = iota
-	ShowQuiz
-	CourseEnded
-)
 
 // StartSessionHandler processes the command.
 type StartSessionHandler struct {
-	courseRepo course.Repository
-	wordRepo   word.Repository
+	courseRepo       course.Repository
+	wordRepo         word.Repository
+	createCourseQuiz quizCmd.CreateCourseQuizHandler
 }
 
 // NewStartSessionHandler creates a new handler.
-func NewStartSessionHandler(courseRepo course.Repository, wordRepo word.Repository) StartSessionHandler {
-	return StartSessionHandler{courseRepo: courseRepo, wordRepo: wordRepo}
+func NewStartSessionHandler(
+	courseRepo course.Repository,
+	wordRepo word.Repository,
+	createCourseQuiz quizCmd.CreateCourseQuizHandler,
+) StartSessionHandler {
+	return StartSessionHandler{
+		courseRepo:       courseRepo,
+		wordRepo:         wordRepo,
+		createCourseQuiz: createCourseQuiz,
+	}
 }
 
 // Handle executes the command.
@@ -54,9 +69,23 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 		}, nil
 	}
 
-	// TODO: Check if a quiz is due for the current progress point.
-	// This will be implemented in a future slice by calling a quiz use case.
-	// For now, we proceed directly to the next word.
+	// Check if a quiz is due for the current progress point.
+	if progress.WordsCompleted > 0 && progress.WordsCompleted%WordsPerQuizBlock == 0 {
+		quizCmd := quizCmd.CreateCourseQuizCommand{
+			UserID:          cmd.UserID,
+			CourseID:        cmd.CourseID,
+			TriggerProgress: uint(progress.WordsCompleted),
+		}
+		quizResult, err := h.createCourseQuiz.Handle(ctx, quizCmd)
+		if err != nil && !errors.Is(err, quiz.ErrAttemptAlreadyCompleted) {
+			log.Printf("Failed to create or find quiz for user %d, course %d: %v", cmd.UserID, cmd.CourseID, err)
+		} else if quizResult.QuizAttempt.ID != 0 && !quizResult.QuizAttempt.IsCompleted {
+			return StartSessionResult{
+				NextStep:    ShowQuiz,
+				QuizAttempt: quizResult.QuizAttempt,
+			}, nil
+		}
+	}
 
 	nextWordIndex := uint(progress.WordsCompleted + 1)
 	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, nextWordIndex)

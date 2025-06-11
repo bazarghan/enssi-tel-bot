@@ -16,7 +16,10 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+
+	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 	"gopkg.in/telebot.v4"
 )
@@ -28,24 +31,27 @@ const (
 
 // Handler holds dependencies for all callback handlers.
 type Handler struct {
-	submitAnswer submitCmd.SubmitAnswerHandler
-	quizRepo     quiz.Repository
-	achRepo      achievement.Repository
-	imgSvc       achievement.ImageGenerator
+	submitAnswer         submitCmd.SubmitAnswerHandler
+	handleQuizCompletion courseCmd.HandleQuizCompletionHandler
+	quizRepo             quiz.Repository
+	achRepo              achievement.Repository
+	imgSvc               achievement.ImageGenerator
 }
 
 // NewHandler creates a new callback handler with all its dependencies.
 func NewHandler(
 	submitAnswer submitCmd.SubmitAnswerHandler,
+	handleQuizCompletion courseCmd.HandleQuizCompletionHandler,
 	quizRepo quiz.Repository,
 	achRepo achievement.Repository,
 	imgSvc achievement.ImageGenerator,
 ) *Handler {
 	return &Handler{
-		submitAnswer: submitAnswer,
-		quizRepo:     quizRepo,
-		achRepo:      achRepo,
-		imgSvc:       imgSvc,
+		submitAnswer:         submitAnswer,
+		handleQuizCompletion: handleQuizCompletion,
+		quizRepo:             quizRepo,
+		achRepo:              achRepo,
+		imgSvc:               imgSvc,
 	}
 }
 
@@ -107,10 +113,29 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	if err != nil {
 		log.Printf("Could not fetch full attempt %d for formatting: %v", attemptID, err)
 	}
-
 	if res.IsCompleted {
-		finalMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
-		_, err = c.Bot().Edit(c.Callback().Message, finalMsg, telebot.ModeMarkdownV2)
+		completionCmd := courseCmd.HandleQuizCompletionCommand{
+			UserID:   ctxUser.ID,
+			CourseID: fullAttempt.CourseID,
+			Result:   res.FinalResult,
+		}
+		courseRes, err := h.handleQuizCompletion.Handle(context.Background(), completionCmd)
+		if err != nil {
+			log.Printf("Error handling quiz completion for attempt %d: %v", attemptID, err)
+			_, err = c.Bot().Edit(c.Callback().Message, "Error processing quiz result.")
+			return err
+		}
+
+		// Now, show the next step from the course flow
+		if courseRes.NextStep == courseCmd.ShowWord {
+			msg := formatters.FormatWordForDisplay(courseRes.Word)
+			kb := keyboards.InCourseNavigationKeyboard()
+			_, err = c.Bot().Edit(c.Callback().Message, msg, kb, telebot.ModeMarkdownV2)
+		} else { // CourseEnded or another state
+			msg := tgmarkdown.Escape(courseRes.MessageToUser)
+			kb := keyboards.BackToCourseListKeyboard()
+			_, err = c.Bot().Edit(c.Callback().Message, msg, kb, telebot.ModeMarkdownV2)
+		}
 	} else {
 		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(len(res.NextQuestion.Options), func(i, j int) {
