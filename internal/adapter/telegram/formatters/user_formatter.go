@@ -22,7 +22,12 @@ func FormatUserProfile(upv dto.UserProfile) string {
 	sb.WriteString(fmt.Sprintf("کلمات مطالعه شده: %d\n", upv.WordsStudied))
 	sb.WriteString(fmt.Sprintf("دوره‌های فعال: %d\n", upv.CoursesActive))
 
-	// Achievement formatting will be added in a later slice.
+	if len(upv.Achievements) > 0 {
+		sb.WriteString("\n🏆 *دستاوردها:*\n")
+		for _, ach := range upv.Achievements {
+			sb.WriteString(fmt.Sprintf("  - %s\n", tgmarkdown.Escape(ach.Title)))
+		}
+	}
 
 	return sb.String()
 }

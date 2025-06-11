@@ -5,10 +5,11 @@ import "gorm.io/gorm"
 // courseModel is the GORM-specific struct for the 'courses' table.
 type courseModel struct {
 	gorm.Model
-	Title              string `gorm:"not null;check:length(title) >= 2"`
-	PersianTitle       string `gorm:"not null;check:length(title) >= 2"`
-	Description        string
-	PersianDescription string
+	Title               string `gorm:"not null;check:length(title) >= 2"`
+	PersianTitle        string `gorm:"not null;check:length(title) >= 2"`
+	Description         string
+	PersianDescription  string
+	LinkedAchievementID uint `gorm:"default:0"`
 }
 
 func (courseModel) TableName() string {

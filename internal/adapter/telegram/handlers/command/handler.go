@@ -96,6 +96,7 @@ func (h *Handler) HandleMyProfile(c telebot.Context) error {
 
 	formattedProfile := formatters.FormatUserProfile(profileDTO)
 
-	// TODO: Profile menu keyboard and state update needs to be added in a later slice.
+	h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "profile_menu")
+
 	return c.Send(formattedProfile, telebot.ModeMarkdownV2)
 }

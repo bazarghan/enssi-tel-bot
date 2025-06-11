@@ -8,5 +8,6 @@ type UserProfile struct {
 	Score         uint
 	WordsStudied  int
 	CoursesActive int
+	Achievements  []AchievementView
 	// Achievements will be added in a later slice
 }

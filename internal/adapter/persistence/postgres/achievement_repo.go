@@ -71,3 +71,24 @@ func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achi
 	}
 	return nil
 }
+
+// FindUserAchievements retrieves all of a user's achievement progress records, preloading the base achievement data.
+func (r *AchievementRepository) FindUserAchievements(ctx context.Context, userID uint) ([]achievement.UserAchievement, error) {
+	var models []userAchievementModel
+	// This assumes user_id is on the user_achievements table. Adjust join if it's via profile_id.
+	err := r.db.WithContext(ctx).
+		Joins("Achievement"). // Preload the associated Achievement details
+		Where("user_id = ?", userID).
+		Find(&models).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	userAchievements := make([]achievement.UserAchievement, len(models))
+	for i, m := range models {
+		userAchievements[i] = toDomainUserAchievement(m)
+		userAchievements[i].Details = toDomainAchievement(m.Achievement) // Manually map the preloaded details
+	}
+	return userAchievements, nil
+}

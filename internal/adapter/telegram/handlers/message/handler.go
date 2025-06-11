@@ -29,6 +29,7 @@ const (
 	StateMain              = "main"
 	StateCourseList        = "course_list"
 	StateCourseDetailsBase = "course_details"
+	StateProfileMenu       = "profile_menu"
 	StateInCourseBase      = "in_course"
 )
 
@@ -101,6 +102,12 @@ func (h *Handler) Handle(c telebot.Context) error {
 		if userInput == keyboards.NextWordButtonText {
 			return h.handleNextWord(c, ctxUser, stateID)
 		}
+
+	case stateBase == StateProfileMenu:
+		if userInput == keyboards.BtnViewAchievements.Text {
+			return h.handleViewMyAchievements(c, ctxUser)
+		}
+
 	}
 
 	log.Printf("[MessageHandler] Unhandled text from UserID %d in state '%s': '%s'", ctxUser.ID, ctxUser.LastMenu, userInput)
@@ -276,4 +283,16 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 
 	h.userRepo.UpdateLastMenu(context.Background(), userID, newState)
 	return sendErr
+}
+
+func (h *Handler) handleViewMyAchievements(c telebot.Context, u user.User) error {
+	// This requires a use case to get achievements.
+	// For now, we assume a simplified query.
+	// In a full implementation, you'd call a GetUserAchievements use case.
+	log.Printf("User %d viewing achievements.", u.ID)
+	// Placeholder DTOs
+	achDTOs := []dto.AchievementView{
+		// This would be populated from a use case result
+	}
+	return c.Send("Here are your achievements:", keyboards.AchievementsListKeyboard(achDTOs))
 }

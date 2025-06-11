@@ -25,4 +25,5 @@ type UserAchievement struct {
 	AchievementID uint
 	EarnedAt      time.Time
 	State         *bitset.BitSet // Progress state for progressive achievements
+	Details       Achievement    // Holds details of the base achievement
 }

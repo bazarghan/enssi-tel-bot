@@ -13,13 +13,13 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+	achievement2 "github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	course3 "github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
 	quiz2 "github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	user3 "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	achievement2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	course2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
@@ -38,7 +38,8 @@ import (
 func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	userRepository := postgres.NewUserRepository(db)
 	registerUserHandler := user.NewRegisterUserHandler(userRepository)
-	getProfileHandler := user2.NewGetProfileHandler(userRepository)
+	achievementRepository := postgres.NewAchievementRepository(db)
+	getProfileHandler := user2.NewGetProfileHandler(userRepository, achievementRepository)
 	handler := command.NewHandler(registerUserHandler, getProfileHandler, userRepository)
 	courseRepository := postgres.NewCourseRepository(db)
 	listCoursesHandler := course.NewListCoursesHandler(courseRepository)
@@ -50,8 +51,8 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository)
 	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
-	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler)
-	achievementRepository := postgres.NewAchievementRepository(db)
+	awardProgressHandler := achievement.NewAwardProgressHandler(achievementRepository)
+	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	string2 := _wireStringValue
 	generator, err := imagegen.NewGenerator(string2)
 	if err != nil {
@@ -114,8 +115,8 @@ var wordSet = wire.NewSet(postgres.NewWordRepository, wire.Bind(new(word.Reposit
 
 var quizSet = wire.NewSet(postgres.NewQuizRepository, wire.Bind(new(quiz2.Repository), new(*postgres.QuizRepository)), quiz.NewCreateCourseQuizHandler, quiz.NewCreateReviewQuizHandler, quiz.NewSubmitAnswerHandler)
 
-var achievementSet = wire.NewSet(postgres.NewAchievementRepository, wire.Bind(new(achievement.Repository), new(*postgres.AchievementRepository)), achievement2.NewAwardProgressHandler, achievement3.NewGetAllHandler)
+var achievementSet = wire.NewSet(postgres.NewAchievementRepository, wire.Bind(new(achievement2.Repository), new(*postgres.AchievementRepository)), achievement.NewAwardProgressHandler, achievement3.NewGetAllHandler)
 
-var imagegenSet = wire.NewSet(wire.Value("assets/imgs/achievements_gen"), imagegen.NewGenerator, wire.Bind(new(achievement.ImageGenerator), new(*imagegen.Generator)))
+var imagegenSet = wire.NewSet(wire.Value("assets/imgs/achievements_gen"), imagegen.NewGenerator, wire.Bind(new(achievement2.ImageGenerator), new(*imagegen.Generator)))
 
 var notifierSet = wire.NewSet(telegram.NewNotifier, wire.Bind(new(notification.Notifier), new(*telegram.Notifier)))

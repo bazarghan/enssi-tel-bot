@@ -3,7 +3,10 @@ package user
 import (
 	"context"
 	"fmt"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"log"
+	"time"
 )
 
 // GetProfileQuery defines the input for the query.
@@ -20,17 +23,26 @@ type GetProfileResult struct {
 	Score         uint
 	WordsStudied  int // Note: Will be implemented in a later slice
 	CoursesActive int // Note: Will be implemented in a later slice
+
+	Achievements []AchievementResult
 }
 
 // GetProfileHandler processes the query.
 type GetProfileHandler struct {
 	userRepo user.Repository
+	achRepo  achievement.Repository
 	// Dependencies on other repositories (WordStudied, UserCourse) will be added in later slices.
 }
 
+// AchievementResult is a DTO for achievements included in the profile.
+type AchievementResult struct {
+	Title    string
+	EarnedOn time.Time
+}
+
 // NewGetProfileHandler creates a new handler.
-func NewGetProfileHandler(userRepo user.Repository) GetProfileHandler {
-	return GetProfileHandler{userRepo: userRepo}
+func NewGetProfileHandler(userRepo user.Repository, achRepo achievement.Repository) GetProfileHandler {
+	return GetProfileHandler{userRepo: userRepo, achRepo: achRepo}
 }
 
 // Handle executes the query.
@@ -46,6 +58,20 @@ func (h GetProfileHandler) Handle(ctx context.Context, q GetProfileQuery) (GetPr
 
 	// TODO: In future slices, call other repositories to get WordsStudied and CoursesActive counts.
 
+	userAchievements, err := h.achRepo.FindUserAchievements(ctx, q.UserID)
+	if err != nil {
+		log.Printf("Could not fetch achievements for user %d: %v", q.UserID, err)
+		// Non-fatal error, we can still show the rest of the profile
+	}
+
+	achResults := make([]AchievementResult, len(userAchievements))
+	for i, ua := range userAchievements {
+		achResults[i] = AchievementResult{
+			Title:    ua.Details.Title,
+			EarnedOn: ua.EarnedAt,
+		}
+	}
+
 	return GetProfileResult{
 		UserID:        domainUser.ID,
 		Username:      domainUser.Profile.Username,
@@ -54,6 +80,6 @@ func (h GetProfileHandler) Handle(ctx context.Context, q GetProfileQuery) (GetPr
 		Score:         domainUser.Profile.Score,
 		WordsStudied:  0, // Placeholder for this slice
 		CoursesActive: 0, // Placeholder for this slice
+		Achievements:  achResults,
 	}, nil
 }
-

@@ -58,7 +58,8 @@ type userAchievementModel struct {
 	gorm.Model
 	UserID        uint
 	AchievementID uint
-	State         GormBitSet // Custom type for bitset storage
+	State         GormBitSet       // Custom type for bitset storage
+	Achievement   achievementModel `gorm:"foreignKey:AchievementID"`
 }
 
 func (userAchievementModel) TableName() string { return "user_achievements" }
