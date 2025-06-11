@@ -30,8 +30,9 @@ func (userCourseModel) TableName() string {
 
 // courseWordModel is a temporary model to count words before the Word domain is migrated.
 type courseWordModel struct {
-	CourseID uint
-	WordID   uint
+	gorm.Model // Required for ID field
+	CourseID   uint
+	WordID     uint
 }
 
 func (courseWordModel) TableName() string {

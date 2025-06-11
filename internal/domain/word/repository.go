@@ -21,4 +21,13 @@ type Repository interface {
 
 	// GetWordsDueForReview retrieves all words for a user that are due for review.
 	GetWordsDueForReview(ctx context.Context, userID uint, now time.Time) ([]StudiedWord, error)
+
+	// FindDisplayableWordByIndex fetches a word and its associated media FileIDs.
+	FindDisplayableWordByIndex(ctx context.Context, courseID uint, index uint) (DisplayableWord, error)
+
+	// CacheImageFileIDs updates a CourseWord entry with Telegram File IDs for an image.
+	CacheImageFileIDs(ctx context.Context, courseWordID uint, imageFileID, imageDocFileID string) error
+
+	// CacheVoiceFileID updates a Pronunciation entry with a Telegram File ID for a voice message.
+	CacheVoiceFileID(ctx context.Context, pronunciationID uint, voiceFileID string) error
 }

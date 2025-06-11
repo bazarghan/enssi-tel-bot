@@ -106,3 +106,56 @@ func (r *WordRepository) GetWordsDueForReview(ctx context.Context, userID uint, 
 
 	return domainStudiedWords, nil
 }
+
+func (r *WordRepository) FindDisplayableWordByIndex(ctx context.Context, courseID uint, index uint) (word.DisplayableWord, error) {
+	var cw courseWordModel
+	err := r.db.WithContext(ctx).Where("course_id = ? AND index = ?", courseID, index).First(&cw).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return word.DisplayableWord{}, word.ErrCourseWordLinkNotFound
+		}
+		return word.DisplayableWord{}, err
+	}
+
+	domainWord, err := r.FindByCourseIndex(ctx, courseID, index)
+	if err != nil {
+		return word.DisplayableWord{}, err
+	}
+
+	displayable := word.DisplayableWord{
+		Word:               domainWord,
+		CourseWordID:       cw.ID, // Assuming courseWordModel has gorm.Model
+		TelegramImageID:    cw.TelgramImageID,
+		TelegramImageDocID: cw.TelgramImageDocID,
+	}
+
+	for _, pron := range domainWord.Pronunciations {
+		// This is slightly inefficient but works. A single complex query would be better in a high-load system.
+		var pronModel pronunciationModel
+		r.db.WithContext(ctx).First(&pronModel, pron.ID)
+		displayable.Pronunciations = append(displayable.Pronunciations, word.DisplayablePronunciation{
+			Pronunciation:   pron,
+			TelegramVoiceID: pronModel.TelgramVoiceID,
+		})
+	}
+
+	return displayable, nil
+}
+
+func (r *WordRepository) CacheImageFileIDs(ctx context.Context, courseWordID uint, imageFileID, imageDocFileID string) error {
+	updates := make(map[string]interface{})
+	if imageFileID != "" {
+		updates["telgram_image_id"] = imageFileID
+	}
+	if imageDocFileID != "" {
+		updates["telgram_image_doc_id"] = imageDocFileID
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&courseWordModel{}).Where("id = ?", courseWordID).Updates(updates).Error
+}
+
+func (r *WordRepository) CacheVoiceFileID(ctx context.Context, pronunciationID uint, voiceFileID string) error {
+	return r.db.WithContext(ctx).Model(&pronunciationModel{}).Where("id = ?", pronunciationID).Update("telgram_voice_id", voiceFileID).Error
+}

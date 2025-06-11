@@ -243,9 +243,33 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 		newState = fmt.Sprintf("%s:%d", StateInCourseBase, courseID)
 		msg = formatters.FormatWordForDisplay(res.Word)
 		kb = keyboards.InCourseNavigationKeyboard()
-		sendErr = c.Send(msg, kb, telebot.ModeMarkdownV2)
 
-		// TODO: In a future slice, send image and audio pronunciations if they exist.
+		// Send the main text message with keyboard
+		if err := c.Send(msg, kb, telebot.ModeMarkdownV2); err != nil {
+			log.Printf("Error sending word text message: %v", err)
+			return err // If text fails, don't send media
+		}
+
+		// Send the image if it exists
+		if res.Word.ImageURL != "" {
+			photo := &telebot.Photo{File: telebot.FromURL(res.Word.ImageURL)}
+			if _, err := c.Bot().Send(c.Chat(), photo); err != nil {
+				log.Printf("Error sending word image from URL %s: %v", res.Word.ImageURL, err)
+			}
+		}
+
+		// Send all available pronunciations
+		for _, pron := range res.Word.Pronunciations {
+			if pron.AudioURL != "" {
+				voice := &telebot.Voice{
+					File:    telebot.FromURL(pron.AudioURL),
+					Caption: pron.Region,
+				}
+				if _, err := c.Bot().Send(c.Chat(), voice); err != nil {
+					log.Printf("Error sending word audio from URL %s: %v", pron.AudioURL, err)
+				}
+			}
+		}
 
 	case startCmd.CourseEnded:
 		newState = StateCourseList

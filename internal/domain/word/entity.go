@@ -44,3 +44,18 @@ type StudiedWord struct {
 	NextReviewAt       time.Time
 	ReviewIntervalDays uint
 }
+
+// DisplayablePronunciation contains both domain data and adapter-specific IDs.
+type DisplayablePronunciation struct {
+	Pronunciation
+	TelegramVoiceID string
+}
+
+// DisplayableWord is a DTO for the repository layer, containing all data needed by a use case.
+type DisplayableWord struct {
+	Word
+	CourseWordID       uint
+	TelegramImageID    string
+	TelegramImageDocID string
+	Pronunciations     []DisplayablePronunciation
+}
