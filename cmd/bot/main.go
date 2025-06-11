@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
-	"github.com/2000ostd/enssi-tel-bot/internal/db" // Using old db helper for now
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/database" // CORRECTED IMPORT
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
 	"github.com/joho/godotenv"
 )
@@ -21,8 +21,8 @@ func main() {
 		log.Fatal("FATAL: TEL_BOT_TOKEN environment variable not set.")
 	}
 
-	// Initialize database connection
-	dbConnection, err := db.ConnectDB()
+	// Initialize database connection using the new platform package
+	dbConnection, err := database.ConnectDB() // CORRECTED CALL
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize database connection: %v", err)
 	}
