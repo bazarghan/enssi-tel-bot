@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/db"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/database"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
@@ -19,7 +19,7 @@ func main() {
 	}
 
 	// Worker needs DB connection and a Telebot instance for the Notifier
-	dbConnection, err := db.ConnectDB()
+	dbConnection, err := database.ConnectDB()
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize database connection: %v", err)
 	}

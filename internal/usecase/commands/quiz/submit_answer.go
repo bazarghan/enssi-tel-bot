@@ -121,17 +121,23 @@ func (h *SubmitAnswerHandler) updateSRS(ctx context.Context, userID, wordID uint
 
 func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalScore int) quiz.Result {
 	result := quiz.Result{
-		Score:          finalScore,
-		TotalQuestions: len(attempt.Questions),
+		Score:           finalScore,
+		TotalQuestions:  len(attempt.Questions),
+		CourseID:        attempt.CourseID,
+		TriggerProgress: 0, // In this design, TriggerProgress is on the Quiz, not Attempt.
 	}
 
 	if attempt.Type == quiz.CourseBlock {
 		result.Passed = result.Score >= QuizPassThreshold
 		if !result.Passed {
 			result.ShouldResetProgress = true
-			// Simplified logic for progress reset
 			if attempt.CourseID > 0 {
-				result.SuggestedNewProgress = 0
+				// This logic can be refined, but for now, it resets to the block start.
+				if result.TriggerProgress >= WordsPerQuizBlock {
+					result.SuggestedNewProgress = result.TriggerProgress - WordsPerQuizBlock
+				} else {
+					result.SuggestedNewProgress = 0
+				}
 			}
 		}
 	} else {
@@ -140,4 +146,3 @@ func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalSc
 
 	return result
 }
-

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 	"gorm.io/gorm"
+	"time"
 )
 
 // WordRepository is the GORM implementation of the word repository port.
@@ -85,4 +86,23 @@ func (r *WordRepository) FindWordIDsByCourseBlock(ctx context.Context, courseID 
 		Offset(int(offset)).
 		Pluck("word_id", &wordIDs).Error
 	return wordIDs, err
+}
+
+// GetWordsDueForReview retrieves all WordStudied records for a user that are due for review by 'now'.
+func (r *WordRepository) GetWordsDueForReview(ctx context.Context, userID uint, now time.Time) ([]word.StudiedWord, error) {
+	var models []studiedWordModel
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND next_review_at <= ?", userID, now).
+		Find(&models).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	domainStudiedWords := make([]word.StudiedWord, len(models))
+	for i, m := range models {
+		domainStudiedWords[i] = toDomainStudiedWord(m)
+	}
+
+	return domainStudiedWords, nil
 }

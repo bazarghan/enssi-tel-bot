@@ -43,4 +43,6 @@ type Result struct {
 	Passed               bool
 	ShouldResetProgress  bool // For course block quizzes
 	SuggestedNewProgress uint // For course block quizzes
+	CourseID             uint // Added field
+	TriggerProgress      uint // Added field
 }

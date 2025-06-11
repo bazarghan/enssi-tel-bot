@@ -1,6 +1,9 @@
 package word
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository defines the port for word persistence operations.
 type Repository interface {
@@ -15,5 +18,7 @@ type Repository interface {
 
 	// FindWordIDsByCourseBlock retrieves a slice of word IDs for a specific block in a course.
 	FindWordIDsByCourseBlock(ctx context.Context, courseID uint, limit uint, offset uint) ([]uint, error)
-}
 
+	// GetWordsDueForReview retrieves all words for a user that are due for review.
+	GetWordsDueForReview(ctx context.Context, userID uint, now time.Time) ([]StudiedWord, error)
+}

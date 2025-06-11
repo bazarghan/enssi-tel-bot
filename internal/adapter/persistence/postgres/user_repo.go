@@ -125,3 +125,16 @@ func (r *UserRepository) FindAllIDs(ctx context.Context) ([]uint, error) {
 	}
 	return ids, nil
 }
+
+// FindTelegramID retrieves a user's Telegram ID.
+func (r *UserRepository) FindTelegramID(ctx context.Context, userID uint) (int64, error) {
+	var model userModel
+	err := r.db.WithContext(ctx).Model(&userModel{}).Where("id = ?", userID).First(&model).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, user.ErrNotFound
+		}
+		return 0, err
+	}
+	return model.TelegramID, nil
+}

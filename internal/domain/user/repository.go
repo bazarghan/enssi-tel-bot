@@ -18,4 +18,7 @@ type Repository interface {
 
 	// FindAllIDs retrieves all user IDs for batch processing.
 	FindAllIDs(ctx context.Context) ([]uint, error)
+
+	// FindTelegramID retrieves a user's Telegram ID from their internal application ID.
+	FindTelegramID(ctx context.Context, userID uint) (int64, error)
 }
