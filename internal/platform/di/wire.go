@@ -78,7 +78,7 @@ var achievementSet = wire.NewSet(
 )
 
 var imagegenSet = wire.NewSet(
-	wire.Value("tmp/achievements"), // Providing the output dir as a value
+	wire.Value("assets/imgs/achievements_gen"), // Using a sub-directory for generated images
 	imagegen.NewGenerator,
 	wire.Bind(new(achievement.ImageGenerator), new(*imagegen.Generator)),
 )
@@ -88,7 +88,7 @@ var notifierSet = wire.NewSet(
 	wire.Bind(new(notification.Notifier), new(*telegram.Notifier)),
 )
 
-// InitializeBotApp creates the dependency graph for the bot application.
+// InitializeBotApp creates the dependency graph for the bot application handlers.
 func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	wire.Build(
 		userSet,
@@ -102,7 +102,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 		callback.NewHandler,
 		wire.Struct(new(BotApp), "*"),
 	)
-	return nil, nil
+	return nil, nil // This return is a placeholder for Wire
 }
 
 // InitializeWorkerApp creates the dependency graph for the worker application.
@@ -115,6 +115,14 @@ func InitializeWorkerApp(db *gorm.DB, bot *telebot.Bot) (*WorkerApp, error) {
 		jobs.NewTriggerDailyReviewsJob,
 		wire.Struct(new(WorkerApp), "*"),
 	)
-	return nil, nil
+	return nil, nil // This return is a placeholder for Wire
 }
 
+// InitializeRegisterUserHandler is a helper to get just the user registration use case.
+// This is a temporary solution to simplify wiring the middleware in main.go.
+func InitializeRegisterUserHandler(db *gorm.DB) userCmd.RegisterUserHandler {
+	wire.Build(
+		userSet,
+	)
+	return userCmd.RegisterUserHandler{} // This return is a placeholder for Wire
+}
