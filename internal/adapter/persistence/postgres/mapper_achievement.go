@@ -1,0 +1,44 @@
+package postgres
+
+import "github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+
+// toDomainAchievement maps the gorm model to the domain entity.
+func toDomainAchievement(m achievementModel) achievement.Achievement {
+	return achievement.Achievement{
+		ID:              m.ID,
+		Title:           m.Title,
+		Description:     m.Description,
+		Type:            m.Type,
+		ImageURL:        m.ImageURL,
+		MinWordRequired: m.MinWordRequired,
+		TotalItems:      m.TotalItems,
+		GridWidth:       m.GridWidth,
+		GridHeight:      m.GridHeight,
+	}
+}
+
+// toDomainUserAchievement maps the gorm model to the domain entity.
+func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement {
+	return achievement.UserAchievement{
+		ID:            m.ID,
+		UserID:        m.UserID, // Note: This assumes UserID is stored directly.
+		AchievementID: m.AchievementID,
+		EarnedAt:      m.CreatedAt,
+		State:         &m.State.BitSet,
+	}
+}
+
+// toPersistenceUserAchievement maps the domain entity to the gorm model for saving.
+func toPersistenceUserAchievement(d achievement.UserAchievement) userAchievementModel {
+	model := userAchievementModel{
+		UserID:        d.UserID,
+		AchievementID: d.AchievementID,
+	}
+	if d.ID != 0 {
+		model.ID = d.ID // Set ID for updates
+	}
+	if d.State != nil {
+		model.State = GormBitSet{BitSet: *d.State}
+	}
+	return model
+}

@@ -4,69 +4,91 @@
 package di
 
 import (
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/imagegen"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/persistence/postgres"
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
-	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
-	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
+	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
+	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
+	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
+	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
+	userQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 	"github.com/google/wire"
 	"gorm.io/gorm"
-
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-
-	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
-
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
-	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-
-	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
-	getOverviewQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
-	listCoursesQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 )
 
-// App contains the application's dependencies.
+// App contains the application's resolved dependencies.
 type App struct {
-	CommandHandler *command.Handler
-
-	MessageHandler *message.Handler
+	CommandHandler  *command.Handler
+	MessageHandler  *message.Handler
+	CallbackHandler *callback.Handler
 }
 
-// The primary provider set for the user domain.
+// userSet provides all dependencies related to the user domain.
 var userSet = wire.NewSet(
 	postgres.NewUserRepository,
 	wire.Bind(new(domainUser.Repository), new(*postgres.UserRepository)),
-	registerCmd.NewRegisterUserHandler,
-	getProfileQry.NewGetProfileHandler,
+	userCmd.NewRegisterUserHandler,
+	userQueries.NewGetProfileHandler,
 )
 
-// The provider for the top-level command handler.
-var commandHandlerSet = wire.NewSet(
-	userSet,
-	command.NewHandler,
-)
-
-// The primary provider set for the course domain.
+// courseSet provides all dependencies related to the course domain.
 var courseSet = wire.NewSet(
 	postgres.NewCourseRepository,
 	wire.Bind(new(course.Repository), new(*postgres.CourseRepository)),
-	listCoursesQry.NewListCoursesHandler,
-	getOverviewQry.NewGetOverviewHandler,
+	courseQueries.NewListCoursesHandler,
+	courseQueries.NewGetOverviewHandler,
+	courseCmd.NewStartSessionHandler,
+	courseCmd.NewAdvanceWordHandler,
 )
 
+// wordSet provides all dependencies related to the word domain.
 var wordSet = wire.NewSet(
 	postgres.NewWordRepository,
 	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
 )
 
+// quizSet provides all dependencies related to the quiz domain.
+var quizSet = wire.NewSet(
+	postgres.NewQuizRepository,
+	wire.Bind(new(quiz.Repository), new(*postgres.QuizRepository)),
+	quizCmd.NewCreateCourseQuizHandler,
+	quizCmd.NewCreateReviewQuizHandler,
+	quizCmd.NewSubmitAnswerHandler,
+)
+var achievementSet = wire.NewSet(
+	postgres.NewAchievementRepository,
+	wire.Bind(new(achievement.Repository), new(*postgres.AchievementRepository)),
+	achCmd.NewAwardProgressHandler,
+	achQueries.NewGetAllHandler,
+)
+
+var imagegenSet = wire.NewSet(
+	wire.Value("tmp/achievements"), // Providing the output dir as a value
+	imagegen.NewGenerator,
+	wire.Bind(new(achievement.ImageGenerator), new(*imagegen.Generator)),
+)
+
 // InitializeApp creates the dependency graph for the application.
 func InitializeApp(db *gorm.DB) (*App, error) {
 	wire.Build(
-		commandHandlerSet,
+		userSet,
 		courseSet,
-		wordSet, // Add word providers
-		advanceCmd.NewAdvanceWordHandler,
-		startCmd.NewStartSessionHandler,
+		wordSet,
+		quizSet,
+		achievementSet,
+		imagegenSet,
+		command.NewHandler,
 		message.NewHandler,
+		callback.NewHandler,
 		wire.Struct(new(App), "*"),
 	)
 	return nil, nil
