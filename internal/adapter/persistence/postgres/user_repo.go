@@ -116,3 +116,12 @@ func (r *UserRepository) UpdateLastMenu(ctx context.Context, userID uint, menuSt
 	return nil
 }
 
+// FindAllIDs retrieves all user IDs.
+func (r *UserRepository) FindAllIDs(ctx context.Context) ([]uint, error) {
+	var ids []uint
+	err := r.db.WithContext(ctx).Model(&userModel{}).Pluck("id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("could not pluck user ids: %w", err)
+	}
+	return ids, nil
+}

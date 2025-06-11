@@ -15,5 +15,7 @@ type Repository interface {
 
 	// UpdateLastMenu updates the user's last known menu state.
 	UpdateLastMenu(ctx context.Context, userID uint, menuState string) error
-}
 
+	// FindAllIDs retrieves all user IDs for batch processing.
+	FindAllIDs(ctx context.Context) ([]uint, error)
+}

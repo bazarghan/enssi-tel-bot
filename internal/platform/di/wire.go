@@ -6,11 +6,13 @@ package di
 import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/imagegen"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/persistence/postgres"
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
@@ -18,21 +20,27 @@ import (
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	userQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 	"github.com/google/wire"
+	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
 )
 
-// App contains the application's resolved dependencies.
-type App struct {
+// BotApp contains the dependencies for the Telegram bot entry point.
+type BotApp struct {
 	CommandHandler  *command.Handler
 	MessageHandler  *message.Handler
 	CallbackHandler *callback.Handler
 }
 
-// userSet provides all dependencies related to the user domain.
+// WorkerApp contains the dependencies for the background worker entry point.
+type WorkerApp struct {
+	TriggerDailyReviewsJob *jobs.TriggerDailyReviewsJob
+}
+
 var userSet = wire.NewSet(
 	postgres.NewUserRepository,
 	wire.Bind(new(domainUser.Repository), new(*postgres.UserRepository)),
@@ -40,7 +48,6 @@ var userSet = wire.NewSet(
 	userQueries.NewGetProfileHandler,
 )
 
-// courseSet provides all dependencies related to the course domain.
 var courseSet = wire.NewSet(
 	postgres.NewCourseRepository,
 	wire.Bind(new(course.Repository), new(*postgres.CourseRepository)),
@@ -50,13 +57,11 @@ var courseSet = wire.NewSet(
 	courseCmd.NewAdvanceWordHandler,
 )
 
-// wordSet provides all dependencies related to the word domain.
 var wordSet = wire.NewSet(
 	postgres.NewWordRepository,
 	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
 )
 
-// quizSet provides all dependencies related to the quiz domain.
 var quizSet = wire.NewSet(
 	postgres.NewQuizRepository,
 	wire.Bind(new(quiz.Repository), new(*postgres.QuizRepository)),
@@ -64,6 +69,7 @@ var quizSet = wire.NewSet(
 	quizCmd.NewCreateReviewQuizHandler,
 	quizCmd.NewSubmitAnswerHandler,
 )
+
 var achievementSet = wire.NewSet(
 	postgres.NewAchievementRepository,
 	wire.Bind(new(achievement.Repository), new(*postgres.AchievementRepository)),
@@ -77,8 +83,13 @@ var imagegenSet = wire.NewSet(
 	wire.Bind(new(achievement.ImageGenerator), new(*imagegen.Generator)),
 )
 
-// InitializeApp creates the dependency graph for the application.
-func InitializeApp(db *gorm.DB) (*App, error) {
+var notifierSet = wire.NewSet(
+	telegram.NewNotifier,
+	wire.Bind(new(notification.Notifier), new(*telegram.Notifier)),
+)
+
+// InitializeBotApp creates the dependency graph for the bot application.
+func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	wire.Build(
 		userSet,
 		courseSet,
@@ -89,7 +100,21 @@ func InitializeApp(db *gorm.DB) (*App, error) {
 		command.NewHandler,
 		message.NewHandler,
 		callback.NewHandler,
-		wire.Struct(new(App), "*"),
+		wire.Struct(new(BotApp), "*"),
 	)
 	return nil, nil
 }
+
+// InitializeWorkerApp creates the dependency graph for the worker application.
+func InitializeWorkerApp(db *gorm.DB, bot *telebot.Bot) (*WorkerApp, error) {
+	wire.Build(
+		userSet,
+		wordSet,
+		quizSet,
+		notifierSet,
+		jobs.NewTriggerDailyReviewsJob,
+		wire.Struct(new(WorkerApp), "*"),
+	)
+	return nil, nil
+}
+
