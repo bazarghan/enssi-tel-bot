@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+
 	"strings"
 )
 
@@ -97,4 +98,3 @@ func FormatWordForDisplay(w word.Word) string {
 	}
 	return finalStr
 }
-

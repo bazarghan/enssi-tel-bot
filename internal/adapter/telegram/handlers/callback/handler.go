@@ -128,7 +128,10 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 
 		// Now, show the next step from the course flow
 		if courseRes.NextStep == courseCmd.ShowWord {
-			msg := formatters.FormatWordForDisplay(courseRes.Word)
+
+			wordDTO := courseRes.Word
+			// Unpack the DTO and pass the pure domain entity to the formatter.
+			msg := formatters.FormatWordForDisplay(wordDTO.DomainWord)
 			kb := keyboards.InCourseNavigationKeyboard()
 			_, err = c.Bot().Edit(c.Callback().Message, msg, kb, telebot.ModeMarkdownV2)
 		} else { // CourseEnded or another state

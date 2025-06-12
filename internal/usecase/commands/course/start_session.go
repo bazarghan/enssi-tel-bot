@@ -30,9 +30,8 @@ type PronunciationDisplayData struct {
 
 // WordDisplayData is a DTO for the use case layer.
 type WordDisplayData struct {
+	DomainWord         word.Word // The pure domain entity
 	CourseWordID       uint
-	Title              string
-	FormattedText      string
 	ImageURL           string
 	TelegramImageID    string
 	TelegramImageDocID string
@@ -127,11 +126,8 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 }
 
 // mapToWordDisplayData converts the repository DTO to the use case DTO.
-// In a real app, this might use a library like `automapper`.
+// It no longer does any formatting.
 func mapToWordDisplayData(repoWord word.DisplayableWord) WordDisplayData {
-	// Here, you would call a formatter to create the Markdown text
-	formattedText := "" // Placeholder, formatter will be called in handler
-
 	prons := make([]PronunciationDisplayData, len(repoWord.Pronunciations))
 	for i, p := range repoWord.Pronunciations {
 		prons[i] = PronunciationDisplayData{
@@ -143,10 +139,8 @@ func mapToWordDisplayData(repoWord word.DisplayableWord) WordDisplayData {
 	}
 
 	return WordDisplayData{
+		DomainWord:         repoWord.Word,
 		CourseWordID:       repoWord.CourseWordID,
-		Title:              repoWord.Title,
-		FormattedText:      formattedText,
-		ImageURL:           repoWord.ImageURL,
 		TelegramImageID:    repoWord.TelegramImageID,
 		TelegramImageDocID: repoWord.TelegramImageDocID,
 		Pronunciations:     prons,

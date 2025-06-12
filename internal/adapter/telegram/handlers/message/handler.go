@@ -247,8 +247,9 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 
 		// Format word text using the domain entity within the DTO
 		// This assumes the DTO can be easily converted or contains the necessary domain object.
-		// For simplicity, we assume WordDisplayData contains all fields needed for formatting.
-		msg := formatters.FormatWordForDisplayFromDTO(wordData) // A new formatter function
+
+		// Unpack the DTO and pass the pure domain entity to the formatter.
+		msg := formatters.FormatWordForDisplay(wordData.DomainWord)
 		kb := keyboards.InCourseNavigationKeyboard()
 
 		if err := c.Send(msg, kb, telebot.ModeMarkdownV2); err != nil {
