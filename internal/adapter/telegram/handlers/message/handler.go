@@ -57,6 +57,7 @@ func NewHandler(
 	userRepo user.Repository,
 	courseRepo course.Repository,
 	quizRepo quiz.Repository,
+	cacheMedia cacheCmd.CacheMediaHandler, // Dependency accepted here
 ) *Handler {
 
 	return &Handler{
@@ -67,6 +68,7 @@ func NewHandler(
 		userRepo:     userRepo,
 		courseRepo:   courseRepo,
 		quizRepo:     quizRepo,
+		cacheMedia:   cacheMedia, // Dependency assigned here
 	}
 }
 

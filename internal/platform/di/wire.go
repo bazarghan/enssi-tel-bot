@@ -15,16 +15,21 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
+
+	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+
 	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
+	wordCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
+
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	userQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
+
 	"github.com/google/wire"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
