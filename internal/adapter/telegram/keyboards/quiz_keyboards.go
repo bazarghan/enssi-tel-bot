@@ -4,22 +4,41 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"gopkg.in/telebot.v4"
-	"math/rand"
+)
+
+const (
+	QuizAnswerCallbackPrefix = "quiz_ans:"
 )
 
 // QuizQuestionOptionsKeyboard generates the inline keyboard for a quiz question.
 func QuizQuestionOptionsKeyboard(options []quiz.Option, attemptID uint) *telebot.ReplyMarkup {
 	inlineMenu := &telebot.ReplyMarkup{}
 
-	// Shuffle options for display
-	rand.Shuffle(len(options), func(i, j int) {
-		options[i], options[j] = options[j], options[i]
-	})
+	rows := make([]telebot.Row, 0, (len(options)+1)/2)
 
-	rows := make([]telebot.Row, len(options))
-	for i, opt := range options {
-		data := fmt.Sprintf("quiz_ans:%d:%d", attemptID, opt.ID)
-		rows[i] = inlineMenu.Row(inlineMenu.Data(opt.Text, data))
+	optionsText := []string{
+		"گزینه یک",
+		"گزینه دو",
+		"گزینه سه",
+		"گزینه چهار",
+		"گزینه پنج",
+		"گزینه شش",
+	}
+
+	for i := 0; i < len(options); i += 2 {
+
+		opt1 := options[i]
+		data1 := fmt.Sprintf("%s%d:%d", QuizAnswerCallbackPrefix, attemptID, opt1.ID)
+		btn1 := inlineMenu.Data(optionsText[i], data1)
+
+		if i+1 < len(options) {
+			opt2 := options[i+1]
+			data2 := fmt.Sprintf("%s%d:%d", QuizAnswerCallbackPrefix, attemptID, opt2.ID)
+			btn2 := inlineMenu.Data(optionsText[i+1], data2)
+			rows = append(rows, inlineMenu.Row(btn2, btn1))
+		} else {
+			rows = append(rows, inlineMenu.Row(btn1))
+		}
 	}
 
 	inlineMenu.Inline(rows...)

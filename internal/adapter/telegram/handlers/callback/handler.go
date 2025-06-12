@@ -146,12 +146,13 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			_, err = c.Bot().Edit(c.Callback().Message, msg, kb, telebot.ModeMarkdownV2)
 		}
 	} else {
+
 		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(len(res.NextQuestion.Options), func(i, j int) {
 			res.NextQuestion.Options[i], res.NextQuestion.Options[j] = res.NextQuestion.Options[j], res.NextQuestion.Options[i]
 		})
 
-		questionMsg := formatters.FormatQuizQuestion(res.NextQuestion, fullAttempt.CurrentQuestionIndex+1, len(fullAttempt.Questions))
+		questionMsg := formatters.FormatQuizQuestion(res.NextQuestion, fullAttempt.CurrentQuestionIndex, len(fullAttempt.Questions))
 		kb := keyboards.QuizQuestionOptionsKeyboard(res.NextQuestion.Options, uint(attemptID))
 		_, err = c.Bot().Edit(c.Callback().Message, questionMsg, kb, telebot.ModeMarkdownV2)
 	}

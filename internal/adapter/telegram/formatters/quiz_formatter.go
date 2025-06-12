@@ -10,13 +10,34 @@ import (
 
 // FormatQuizQuestion creates the text for a quiz question message.
 func FormatQuizQuestion(q quiz.Question, qNum, total int) string {
+
 	questionText := fmt.Sprintf(
 		"سوال %d از %d:\n\nمعنی کلمه *%s* چه می باشد؟",
 		qNum+1,
 		total,
 		tgmarkdown.Escape(q.Text),
 	)
-	return questionText
+
+	var textBuilder strings.Builder
+
+	textBuilder.WriteString(fmt.Sprintf("\n%s", questionText))
+	textBuilder.WriteString("\n\n")
+
+	for i, opt := range q.Options {
+
+		textBuilder.WriteString(
+			fmt.Sprintf(
+				">%d\\. %s\n",
+				i+1,
+				tgmarkdown.Escape(opt.Text),
+			),
+		)
+
+		seperatorText := "─────────────────────────"
+		textBuilder.WriteString(fmt.Sprintf(">%s\n", tgmarkdown.Escape(seperatorText)))
+	}
+
+	return textBuilder.String()
 }
 
 // FormatQuizResult creates the text for a final result message.
