@@ -103,7 +103,8 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 	}
 
 	nextWordToShowIndex := uint(newProgress.WordsCompleted + 1)
-	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, nextWordToShowIndex)
+
+	displayableWord, err := h.wordRepo.FindDisplayableWordByIndex(ctx, cmd.CourseID, nextWordToShowIndex)
 	if err != nil {
 		if errors.Is(err, word.ErrCourseWordLinkNotFound) {
 			// This might mean we're at the very end and the next thing is the final quiz.
@@ -116,5 +117,8 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 		return AdvanceWordResult{}, fmt.Errorf("failed to find next word: %w", err)
 	}
 
-	return AdvanceWordResult{NextStep: ShowWord, Word: nextWord}, nil
+	return AdvanceWordResult{
+		NextStep: ShowWord,
+		Word:     mapToWordDisplayData(displayableWord),
+	}, nil
 }

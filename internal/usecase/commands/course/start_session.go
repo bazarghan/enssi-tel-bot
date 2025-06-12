@@ -20,6 +20,25 @@ const (
 	CourseEnded
 )
 
+// PronunciationDisplayData is a DTO for the use case layer.
+type PronunciationDisplayData struct {
+	ID              uint
+	Region          string
+	AudioURL        string
+	TelegramVoiceID string
+}
+
+// WordDisplayData is a DTO for the use case layer.
+type WordDisplayData struct {
+	CourseWordID       uint
+	Title              string
+	FormattedText      string
+	ImageURL           string
+	TelegramImageID    string
+	TelegramImageDocID string
+	Pronunciations     []PronunciationDisplayData
+}
+
 // StartSessionCommand defines the input for starting a course session.
 type StartSessionCommand struct {
 	UserID   uint
@@ -29,7 +48,7 @@ type StartSessionCommand struct {
 // StartSessionResult tells the presentation layer what to show next.
 type StartSessionResult struct {
 	NextStep      Step
-	Word          word.Word
+	Word          WordDisplayData
 	MessageToUser string
 
 	QuizAttempt quiz.Attempt
@@ -88,7 +107,8 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 	}
 
 	nextWordIndex := uint(progress.WordsCompleted + 1)
-	nextWord, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, nextWordIndex)
+	displayableWord, err := h.wordRepo.FindDisplayableWordByIndex(ctx, cmd.CourseID, nextWordIndex)
+
 	if err != nil {
 		if errors.Is(err, word.ErrCourseWordLinkNotFound) {
 			return StartSessionResult{
@@ -101,6 +121,34 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 
 	return StartSessionResult{
 		NextStep: ShowWord,
-		Word:     nextWord,
+		Word:     mapToWordDisplayData(displayableWord),
 	}, nil
+
+}
+
+// mapToWordDisplayData converts the repository DTO to the use case DTO.
+// In a real app, this might use a library like `automapper`.
+func mapToWordDisplayData(repoWord word.DisplayableWord) WordDisplayData {
+	// Here, you would call a formatter to create the Markdown text
+	formattedText := "" // Placeholder, formatter will be called in handler
+
+	prons := make([]PronunciationDisplayData, len(repoWord.Pronunciations))
+	for i, p := range repoWord.Pronunciations {
+		prons[i] = PronunciationDisplayData{
+			ID:              p.ID,
+			Region:          p.Region,
+			AudioURL:        p.AudioURL,
+			TelegramVoiceID: p.TelegramVoiceID,
+		}
+	}
+
+	return WordDisplayData{
+		CourseWordID:       repoWord.CourseWordID,
+		Title:              repoWord.Title,
+		FormattedText:      formattedText,
+		ImageURL:           repoWord.ImageURL,
+		TelegramImageID:    repoWord.TelegramImageID,
+		TelegramImageDocID: repoWord.TelegramImageDocID,
+		Pronunciations:     prons,
+	}
 }

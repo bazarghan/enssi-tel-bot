@@ -90,12 +90,17 @@ var notifierSet = wire.NewSet(
 	wire.Bind(new(notification.Notifier), new(*telegram.Notifier)),
 )
 
+var wordCacheSet = wire.NewSet(
+	wordCmd.NewCacheMediaHandler,
+)
+
 // InitializeBotApp creates the dependency graph for the bot application handlers.
 func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	wire.Build(
 		userSet,
 		courseSet,
 		wordSet,
+		wordCacheSet, // Add the new set
 		quizSet,
 		achievementSet,
 		imagegenSet,

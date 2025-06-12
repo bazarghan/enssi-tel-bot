@@ -18,8 +18,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
-
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
+	cacheCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	"gopkg.in/telebot.v4"
 )
@@ -44,6 +44,8 @@ type Handler struct {
 	userRepo     user.Repository
 	quizRepo     quiz.Repository
 	courseRepo   course.Repository
+
+	cacheMedia cacheCmd.CacheMediaHandler
 }
 
 // NewHandler creates a new message handler.
@@ -240,34 +242,42 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 
 	switch res.NextStep {
 	case startCmd.ShowWord:
+		wordData := res.Word
 		newState = fmt.Sprintf("%s:%d", StateInCourseBase, courseID)
-		msg = formatters.FormatWordForDisplay(res.Word)
-		kb = keyboards.InCourseNavigationKeyboard()
 
-		// Send the main text message with keyboard
+		// Format word text using the domain entity within the DTO
+		// This assumes the DTO can be easily converted or contains the necessary domain object.
+		// For simplicity, we assume WordDisplayData contains all fields needed for formatting.
+		msg := formatters.FormatWordForDisplayFromDTO(wordData) // A new formatter function
+		kb := keyboards.InCourseNavigationKeyboard()
+
 		if err := c.Send(msg, kb, telebot.ModeMarkdownV2); err != nil {
 			log.Printf("Error sending word text message: %v", err)
-			return err // If text fails, don't send media
+			return err
 		}
 
-		// Send the image if it exists
-		if res.Word.ImageURL != "" {
-			photo := &telebot.Photo{File: telebot.FromURL(res.Word.ImageURL)}
+		// --- Image Sending Logic ---
+		if wordData.TelegramImageID != "" {
+			photo := &telebot.Photo{File: telebot.File{FileID: wordData.TelegramImageID}}
 			if _, err := c.Bot().Send(c.Chat(), photo); err != nil {
-				log.Printf("Error sending word image from URL %s: %v", res.Word.ImageURL, err)
+				log.Printf("Failed to send image by FileID %s, falling back to URL. Error: %v", wordData.TelegramImageID, err)
+				// Invalidate bad FileID here if needed
+				h.sendWordImageByUrlAndCache(c, wordData)
 			}
+		} else {
+			h.sendWordImageByUrlAndCache(c, wordData)
 		}
 
-		// Send all available pronunciations
-		for _, pron := range res.Word.Pronunciations {
-			if pron.AudioURL != "" {
-				voice := &telebot.Voice{
-					File:    telebot.FromURL(pron.AudioURL),
-					Caption: pron.Region,
-				}
+		// --- Audio Sending Logic ---
+		for _, pron := range wordData.Pronunciations {
+			if pron.TelegramVoiceID != "" {
+				voice := &telebot.Voice{File: telebot.File{FileID: pron.TelegramVoiceID}, Caption: pron.Region}
 				if _, err := c.Bot().Send(c.Chat(), voice); err != nil {
-					log.Printf("Error sending word audio from URL %s: %v", pron.AudioURL, err)
+					log.Printf("Failed to send voice by FileID %s, falling back to URL. Error: %v", pron.TelegramVoiceID, err)
+					h.sendWordAudioByUrlAndCache(c, pron)
 				}
+			} else {
+				h.sendWordAudioByUrlAndCache(c, pron)
 			}
 		}
 
@@ -319,4 +329,46 @@ func (h *Handler) handleViewMyAchievements(c telebot.Context, u user.User) error
 		// This would be populated from a use case result
 	}
 	return c.Send("Here are your achievements:", keyboards.AchievementsListKeyboard(achDTOs))
+}
+
+func (h *Handler) sendWordImageByUrlAndCache(c telebot.Context, wordData startCmd.WordDisplayData) {
+	if wordData.ImageURL == "" {
+		return
+	}
+	photo := &telebot.Photo{File: telebot.FromURL(wordData.ImageURL)}
+	sentMsg, err := c.Bot().Send(c.Chat(), photo)
+	if err != nil {
+		log.Printf("Failed to send image by URL %s: %v", wordData.ImageURL, err)
+		return
+	}
+	if sentMsg.Photo != nil {
+		cmd := cacheCmd.CacheImageCommand{
+			CourseWordID: wordData.CourseWordID,
+			ImageFileID:  sentMsg.Photo.FileID,
+		}
+		if err := h.cacheMedia.HandleImage(context.Background(), cmd); err != nil {
+			log.Printf("Failed to cache new image FileID: %v", err)
+		}
+	}
+}
+
+func (h *Handler) sendWordAudioByUrlAndCache(c telebot.Context, pronData startCmd.PronunciationDisplayData) {
+	if pronData.AudioURL == "" {
+		return
+	}
+	voice := &telebot.Voice{File: telebot.FromURL(pronData.AudioURL), Caption: pronData.Region}
+	sentMsg, err := c.Bot().Send(c.Chat(), voice)
+	if err != nil {
+		log.Printf("Failed to send voice by URL %s: %v", pronData.AudioURL, err)
+		return
+	}
+	if sentMsg.Voice != nil {
+		cmd := cacheCmd.CacheVoiceCommand{
+			PronunciationID: pronData.ID,
+			VoiceFileID:     sentMsg.Voice.FileID,
+		}
+		if err := h.cacheMedia.HandleVoice(context.Background(), cmd); err != nil {
+			log.Printf("Failed to cache new voice FileID: %v", err)
+		}
+	}
 }
