@@ -279,8 +279,6 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 					log.Printf("Failed to send voice by FileID %s, falling back to URL. Error: %v", pron.TelegramVoiceID, err)
 					h.sendWordAudioByUrlAndCache(c, pron)
 				}
-			} else {
-				h.sendWordAudioByUrlAndCache(c, pron)
 			}
 		}
 

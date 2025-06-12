@@ -37,12 +37,12 @@ func (optionModel) TableName() string { return "quiz_question_options" }
 
 type attemptModel struct {
 	gorm.Model
-	QuizID                   uint `gorm:"not null"`
-	UserID                   uint `gorm:"not null"`
-	Score                    int  `gorm:"default:0"`
-	IsCompleted              bool `gorm:"default:false"`
-	Answers                  []answerModel
-	CurrentQuestionIndex     int `gorm:"default:0"`
+	QuizID                   uint          `gorm:"not null"`
+	UserID                   uint          `gorm:"not null"`
+	Score                    int           `gorm:"default:0"`
+	IsCompleted              bool          `gorm:"default:false"`
+	Answers                  []answerModel `gorm:"foreignKey:QuizAttemptID"`
+	CurrentQuestionNum       int           `gorm:"default:0"`
 	CurrentQuestionMessageID int
 }
 

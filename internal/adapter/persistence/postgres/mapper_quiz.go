@@ -16,7 +16,7 @@ func toDomainAttempt(m attemptModel, qm quizModel) quiz.Attempt {
 		QuizID:                   m.QuizID,
 		Score:                    m.Score,
 		IsCompleted:              m.IsCompleted,
-		CurrentQuestionIndex:     m.CurrentQuestionIndex,
+		CurrentQuestionIndex:     m.CurrentQuestionNum,
 		CurrentQuestionMessageID: m.CurrentQuestionMessageID,
 		Questions:                questions,
 		Type:                     qm.Type,
@@ -44,4 +44,3 @@ func toDomainOption(m optionModel) quiz.Option {
 		IsCorrect: m.IsCorrect,
 	}
 }
-
