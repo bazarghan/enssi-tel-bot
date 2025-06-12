@@ -8,7 +8,8 @@ import (
 // userModel is the GORM-specific struct for the 'users' table. It is unexported.
 type userModel struct {
 	gorm.Model
-	Profile profileModel `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+
+	Profile profileModel `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	TelegramID                   int64 `gorm:"not null;uniqueIndex"`
 	LastActive                   time.Time
