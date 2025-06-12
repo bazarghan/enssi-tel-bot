@@ -165,7 +165,7 @@ func (r *QuizRepository) SaveAnswer(ctx context.Context, attemptID, questionID, 
 
 func (r *QuizRepository) IncrementQuestionIndex(ctx context.Context, attemptID uint) error {
 	return r.db.WithContext(ctx).Model(&attemptModel{}).Where("id = ?", attemptID).
-		Update("current_question_index", gorm.Expr("current_question_index + 1")).Error
+		Update("current_question_num", gorm.Expr("current_question_num + 1")).Error
 }
 
 func (r *QuizRepository) MarkAttemptCompleted(ctx context.Context, attemptID uint) (int, error) {
@@ -301,4 +301,3 @@ func getKeys(m map[string]bool) []string {
 	}
 	return keys
 }
-

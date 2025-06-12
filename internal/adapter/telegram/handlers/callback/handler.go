@@ -62,11 +62,13 @@ func (h *Handler) Handle(c telebot.Context) error {
 		return nil
 	}
 
-	if strings.HasPrefix(cb.Data, QuizAnswerCallbackPrefix) {
+	data := strings.TrimSpace(cb.Data)
+
+	if strings.HasPrefix(data, QuizAnswerCallbackPrefix) {
 		return h.handleQuizAnswer(c)
 	}
 
-	if strings.HasPrefix(cb.Data, ShowAchievementCallbackPrefix) {
+	if strings.HasPrefix(data, ShowAchievementCallbackPrefix) {
 		return h.handleShowAchievement(c)
 	}
 
@@ -83,7 +85,10 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		return c.Send("Error identifying user.")
 	}
 
-	payload := strings.TrimPrefix(c.Callback().Data, QuizAnswerCallbackPrefix)
+	// The telegram callbacks often have whitespace
+	data := strings.TrimSpace(c.Callback().Data)
+
+	payload := strings.TrimPrefix(data, QuizAnswerCallbackPrefix)
 	parts := strings.Split(payload, ":")
 	if len(parts) != 2 {
 		log.Printf("Invalid quiz answer payload: %s", payload)
@@ -102,6 +107,7 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	res, err := h.submitAnswer.Handle(context.Background(), cmd)
 	if err != nil {
 		if errors.Is(err, quiz.ErrQuestionAlreadyAnswered) {
+			log.Printf("Error %w, %d: %v", quiz.ErrQuestionAlreadyAnswered, attemptID, err)
 			return nil // Silently ignore duplicate clicks
 		}
 		log.Printf("Error submitting quiz answer for attempt %d: %v", attemptID, err)
@@ -165,7 +171,8 @@ func (h *Handler) handleShowAchievement(c telebot.Context) error {
 		return c.Send("Error identifying user.")
 	}
 
-	payload := strings.TrimPrefix(c.Callback().Data, ShowAchievementCallbackPrefix)
+	data := strings.TrimSpace(c.Callback().Data)
+	payload := strings.TrimPrefix(data, ShowAchievementCallbackPrefix)
 	achievementID, err := strconv.ParseUint(payload, 10, 32)
 	if err != nil {
 		log.Printf("Invalid achievement ID in callback payload: %s", payload)
