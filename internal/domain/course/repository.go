@@ -24,4 +24,7 @@ type Repository interface {
 
 	// IncrementProgress advances a user's progress in a course by one.
 	IncrementProgress(ctx context.Context, userID, courseID uint) (UserProgress, error)
+
+	// Set the UserProgress for teh course
+	SetProgress(ctx context.Context, userID, courseID, newProgress uint) error
 }

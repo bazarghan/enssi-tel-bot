@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
@@ -19,6 +20,8 @@ import (
 
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+
+	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 	"gopkg.in/telebot.v4"
@@ -36,6 +39,8 @@ type Handler struct {
 	quizRepo             quiz.Repository
 	achRepo              achievement.Repository
 	imgSvc               achievement.ImageGenerator
+	userRepo             user.Repository
+	getOverview          courseQueries.GetOverviewHandler
 }
 
 // NewHandler creates a new callback handler with all its dependencies.
@@ -45,6 +50,8 @@ func NewHandler(
 	quizRepo quiz.Repository,
 	achRepo achievement.Repository,
 	imgSvc achievement.ImageGenerator,
+	userRepo user.Repository,
+	getOverview courseQueries.GetOverviewHandler,
 ) *Handler {
 	return &Handler{
 		submitAnswer:         submitAnswer,
@@ -52,6 +59,8 @@ func NewHandler(
 		quizRepo:             quizRepo,
 		achRepo:              achRepo,
 		imgSvc:               imgSvc,
+		userRepo:             userRepo,
+		getOverview:          getOverview,
 	}
 }
 
@@ -120,31 +129,73 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		log.Printf("Could not fetch full attempt %d for formatting: %v", attemptID, err)
 	}
 	if res.IsCompleted {
+
 		completionCmd := courseCmd.HandleQuizCompletionCommand{
 			UserID:   ctxUser.ID,
 			CourseID: fullAttempt.CourseID,
 			Result:   res.FinalResult,
 		}
-		courseRes, err := h.handleQuizCompletion.Handle(context.Background(), completionCmd)
+		_, err := h.handleQuizCompletion.Handle(context.Background(), completionCmd)
 		if err != nil {
 			log.Printf("Error handling quiz completion for attempt %d: %v", attemptID, err)
 			_, err = c.Bot().Edit(c.Callback().Message, "Error processing quiz result.")
 			return err
 		}
+		// --- NEW LOGIC: Format and show the quiz result ---
 
-		// Now, show the next step from the course flow
-		if courseRes.NextStep == courseCmd.ShowWord {
+		// 1. Format the result message using your existing formatter.
+		resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 
-			wordDTO := courseRes.Word
-			// Unpack the DTO and pass the pure domain entity to the formatter.
-			msg := formatters.FormatWordForDisplay(wordDTO.DomainWord)
-			kb := keyboards.InCourseNavigationKeyboard()
-			_, err = c.Bot().Edit(c.Callback().Message, msg, kb, telebot.ModeMarkdownV2)
-		} else { // CourseEnded or another state
-			msg := tgmarkdown.Escape(courseRes.MessageToUser)
-			kb := keyboards.BackToCourseListKeyboard()
-			_, err = c.Bot().Edit(c.Callback().Message, msg, kb, telebot.ModeMarkdownV2)
+		// 3. Edit the original quiz message to show the results.
+		//    By NOT providing a keyboard here, the old inline buttons are automatically removed.
+		if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
+			// If editing fails, log it but don't stop the flow. We can still send the next message.
+			log.Printf("Could not edit quiz result message: %v", err)
 		}
+
+		// 4. Send a NEW message to show the reply keyboard for continuing.
+		promptMsg := "آزمون شما تمام شد برای ادامه رو کلمه بعدی بزنید\\."
+
+		// --- NEW LOGIC: SEND COURSE OVERVIEW INSTEAD OF SIMPLE PROMPT ---
+
+		// 4. Fetch the data needed for the course overview screen.
+		overview, err := h.getOverview.Handle(context.Background(), courseQueries.GetOverviewQuery{
+			UserID:   ctxUser.ID,
+			CourseID: fullAttempt.CourseID,
+		})
+		if err != nil {
+			log.Printf("Failed to get course overview after quiz: %v", err)
+			// Send a fallback message if we can't get the overview
+			_, errSend := c.Bot().Send(c.Chat(), "Quiz complete!", keyboards.BackToCourseListKeyboard())
+			return errSend
+		}
+
+		// 5. Map the result to the presentation DTO
+		overviewDTO := dto.CourseOverview{
+			ID:                     overview.ID,
+			Title:                  overview.Title,
+			PersianTitle:           overview.PersianTitle,
+			PersianFullDescription: overview.PersianFullDescription,
+			TotalWords:             overview.TotalWords,
+			ProgressPercentage:     overview.ProgressPercentage,
+			IsCompleted:            overview.IsCompleted,
+			IsStarted:              overview.IsStarted,
+		}
+
+		kb := keyboards.CourseDetailsKeyboard(overviewDTO)
+
+		// 7. Send the overview as a new message.
+		if _, err := c.Bot().Send(c.Chat(), promptMsg, kb, telebot.ModeMarkdownV2); err != nil {
+			log.Printf("Could not send course overview prompt: %v", err)
+			return err
+		}
+
+		// After the quiz is done, set the user's state back to the course details view
+		newState := fmt.Sprintf("course_details:%d", fullAttempt.CourseID)
+		if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, newState); err != nil {
+			log.Printf("Failed to update user menu state after quiz: %v", err)
+		}
+
 	} else {
 
 		rand.Seed(time.Now().UnixNano())

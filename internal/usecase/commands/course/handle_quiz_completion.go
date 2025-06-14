@@ -93,9 +93,14 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 	} else {
 		// If failed, reset progress.
 		if cmd.Result.ShouldResetProgress {
-			// This requires a new method in the repository.
-			// For now, we log it. A future slice would add `SetProgress`.
-			log.Printf("TODO: Resetting progress for user %d in course %d to %d", cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
+
+			err := h.courseRepo.SetProgress(ctx, cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
+			if err != nil {
+				log.Printf("Failed to reset progress for user %d in course %d: %v", cmd.UserID, cmd.CourseID, err)
+				// Not returning an error here, as failing to reset progress is not critical for the flow
+			} else {
+				log.Printf("Successfully reset progress for user %d in course %d to %d", cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
+			}
 		}
 	}
 

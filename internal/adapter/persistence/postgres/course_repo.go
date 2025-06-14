@@ -160,3 +160,12 @@ func (r *CourseRepository) GetTotalWords(ctx context.Context, courseID uint) (in
 	err := r.db.WithContext(ctx).Model(&courseWordModel{}).Where("course_id = ?", courseID).Count(&totalWords).Error
 	return int(totalWords), err
 }
+
+// Add this new function to the file
+func (r *CourseRepository) SetProgress(ctx context.Context, userID, courseID, newProgress uint) error {
+	result := r.db.WithContext(ctx).Model(&userCourseModel{}).
+		Where("user_id = ? AND course_id = ?", userID, courseID).
+		Update("progress", newProgress)
+
+	return result.Error
+}

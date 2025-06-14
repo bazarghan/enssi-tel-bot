@@ -60,7 +60,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	if err != nil {
 		return nil, err
 	}
-	callbackHandler := callback.NewHandler(submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator)
+	callbackHandler := callback.NewHandler(submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
 	botApp := &BotApp{
 		CommandHandler:  handler,
 		MessageHandler:  messageHandler,
