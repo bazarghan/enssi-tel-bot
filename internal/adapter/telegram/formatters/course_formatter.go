@@ -18,12 +18,25 @@ func FormatCourseListMessage(courses []dto.CourseSummary) string {
 // FormatCourseOverview formats the detailed course view.
 func FormatCourseOverview(co dto.CourseOverview) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("*%s*\n", tgmarkdown.Escape(co.PersianTitle)))
-	if co.Title != co.PersianTitle {
-		sb.WriteString(fmt.Sprintf("_\\(%s\\)_\n", tgmarkdown.Escape(co.Title)))
+
+	var message string
+	if !co.IsStarted {
+		message = "اگه آماده ای پس منتظر چی هستی بزن رو شروع دوره که بی معطلی یادگیری رو شروع کنیم، در ضمن نگران نباش می تونی به صورت همزمان چند تا دوره رو شروع کنی و جلو ببری پس خیالت از این بابت راحت باشه 😉"
+	} else if co.IsCompleted {
+		message = "تبریک بابت تموم کردن دوره! 👏 حالا اگه دوست داری مطالب رو مرور کنی یا یه نگاهی دوباره بندازی، کافیه روی «مرور» بزنی و هرجا لازم بود مرورش کنی."
+	} else {
+		message = "خوش اومدی! وقتشه ادامه مسیر یادگیری‌ت رو پیش ببری. با یک کلیک روی «ادامه دوره» برگرد سراغ مطالب و یادگیری رو منظم‌تر ادامه بده."
 	}
-	sb.WriteString(fmt.Sprintf("\n%s\n", tgmarkdown.Escape(co.PersianFullDescription)))
-	sb.WriteString(fmt.Sprintf("\nتعداد کلمات: *%d*\n", co.TotalWords))
+
+	sb.WriteString("\\.\n")
+	sb.WriteString(">  \n")
+	descriptionLines := strings.Split(tgmarkdown.Escape(co.PersianFullDescription), "\n")
+	for _, line := range descriptionLines {
+		// Prefix each line with "> " to create a valid blockquote
+		sb.WriteString(fmt.Sprintf("> %s\n", line))
+	}
+	sb.WriteString(">  \n")
+	sb.WriteString(fmt.Sprintf("\n%s\n\n", tgmarkdown.Escape(message)))
 
 	if co.IsCompleted {
 		sb.WriteString("وضعیت: *تکمیل شده* 🏆\n")
@@ -34,4 +47,3 @@ func FormatCourseOverview(co dto.CourseOverview) string {
 	}
 	return sb.String()
 }
-
