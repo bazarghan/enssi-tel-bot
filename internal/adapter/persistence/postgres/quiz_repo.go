@@ -109,6 +109,13 @@ func (r *QuizRepository) GetAttempt(ctx context.Context, attemptID uint) (quiz.A
 		return quiz.Attempt{}, err
 	}
 
+	// Fetch the answers for this attempt
+	var userAnswers []answerModel
+	if err := r.db.WithContext(ctx).Where("quiz_attempt_id = ?", attemptID).Find(&userAnswers).Error; err != nil {
+		// Non-fatal, we can still show the attempt without the answers
+		log.Printf("Could not fetch user answers for attempt %d: %v", attemptID, err)
+	}
+
 	var qm quizModel
 	err := r.db.WithContext(ctx).
 		Preload("Questions.Options").
@@ -120,7 +127,7 @@ func (r *QuizRepository) GetAttempt(ctx context.Context, attemptID uint) (quiz.A
 		return quiz.Attempt{}, err
 	}
 
-	return toDomainAttempt(am, qm), nil
+	return toDomainAttempt(am, qm, userAnswers), nil
 }
 
 func (r *QuizRepository) CreateAttempt(ctx context.Context, userID, quizID uint) (quiz.Attempt, error) {

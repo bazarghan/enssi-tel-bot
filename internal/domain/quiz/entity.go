@@ -34,6 +34,7 @@ type Attempt struct {
 	Questions                []Question
 	Type                     QuizType
 	CourseID                 uint // May be 0 for review quizzes
+	UserAnswers              map[uint]uint
 }
 
 // Result holds the final outcome of a completed quiz attempt.

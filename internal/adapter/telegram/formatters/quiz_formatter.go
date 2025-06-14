@@ -63,9 +63,11 @@ func FormatQuizResult(r quiz.Result, attempt quiz.Attempt) string {
 		reviewTextBuilder.WriteString("📝 *مرور سوالات:*\n")
 
 		for i, q := range attempt.Questions {
-			// In a full implementation, you'd fetch the user's answer.
-			// For this slice, we'll just show the correct answer.
+
 			var correctOptText string
+			var chosenOptText string
+			var wasChoiceCorrect bool
+
 			for _, opt := range q.Options {
 				if opt.IsCorrect {
 					correctOptText = opt.Text
@@ -73,8 +75,33 @@ func FormatQuizResult(r quiz.Result, attempt quiz.Attempt) string {
 				}
 			}
 
+			// Find the user's chosen answer's text using the map
+			if chosenOptID, ok := attempt.UserAnswers[q.ID]; ok {
+				for _, opt := range q.Options {
+					if opt.ID == chosenOptID {
+						chosenOptText = opt.Text
+						wasChoiceCorrect = opt.IsCorrect
+						break
+					}
+				}
+			} else {
+				chosenOptText = "پاسخ ندادی"
+			}
+			// Build the review string for this question
 			reviewTextBuilder.WriteString(fmt.Sprintf("\n> *سوال %d:* %s\n", i+1, tgmarkdown.Escape(q.Text)))
-			reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ صحیح:* %s\n", tgmarkdown.Escape(correctOptText)))
+
+			if wasChoiceCorrect {
+				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s\\(✅\\)\n", tgmarkdown.Escape(chosenOptText)))
+			} else {
+				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s\\(❌\\)\n", tgmarkdown.Escape(chosenOptText)))
+				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ صحیح:* %s\n", tgmarkdown.Escape(correctOptText)))
+			}
+			reviewTextBuilder.WriteString(">  \n")
+
+			if i == len(attempt.Questions)-1 {
+				reviewTextBuilder.WriteString("\\.\n")
+			}
+
 		}
 	}
 
