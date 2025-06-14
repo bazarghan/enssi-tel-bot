@@ -4,10 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
+
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
@@ -20,6 +25,7 @@ type Handler struct {
 	registerUser registerCmd.RegisterUserHandler
 	getProfile   getProfileQry.GetProfileHandler
 	userRepo     user.Repository
+	quizRepo     quiz.Repository
 }
 
 // NewHandler creates a new command handler.
@@ -27,11 +33,13 @@ func NewHandler(
 	registerUser registerCmd.RegisterUserHandler,
 	getProfile getProfileQry.GetProfileHandler,
 	userRepo user.Repository,
+	quizRepo quiz.Repository,
 ) *Handler {
 	return &Handler{
 		registerUser: registerUser,
 		getProfile:   getProfile,
 		userRepo:     userRepo,
+		quizRepo:     quizRepo,
 	}
 }
 
@@ -50,7 +58,27 @@ func (h *Handler) HandleStart(c telebot.Context) error {
 		return c.Send("متاسفم، مشکلی در شروع گفتگو پیش آمد. لطفا دوباره با /start تلاش کنید.")
 	}
 
-	// TODO: Logic to cancel active quiz needs to be re-implemented in a later slice.
+	// --- NEW LOGIC: Check for and pause any active quiz ---
+	if strings.HasPrefix(result.User.LastMenu, "in_quiz:") {
+		parts := strings.Split(result.User.LastMenu, ":")
+		if len(parts) == 3 {
+			attemptID, err := strconv.ParseUint(parts[2], 10, 64)
+			if err == nil {
+				attempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
+				if err == nil && attempt.CurrentQuestionMessageID != 0 {
+					pausedMsg := "آزمون متوقف شد. شما به منوی اصلی بازگشتید."
+					messageToEdit := &telebot.Message{
+						ID:   attempt.CurrentQuestionMessageID,
+						Chat: c.Chat(),
+					}
+					if _, err := c.Bot().Edit(messageToEdit, pausedMsg); err != nil {
+						log.Printf("Failed to edit old quiz message %d on /start: %v", attempt.CurrentQuestionMessageID, err)
+					}
+				}
+			}
+		}
+	}
+	// --- END OF NEW LOGIC ---
 
 	if err := h.userRepo.UpdateLastMenu(context.Background(), result.User.ID, "main"); err != nil {
 		log.Printf("[HandleStart] Error updating last menu for UserID %d: %v", result.User.ID, err)

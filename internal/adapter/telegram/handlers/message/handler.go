@@ -194,6 +194,38 @@ func (h *Handler) displayCourseOverview(c telebot.Context, u user.User, courseID
 }
 
 func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
+
+	// 1. Check if the user was in a quiz using their last menu state.
+	if strings.HasPrefix(u.LastMenu, "in_quiz:") {
+		parts := strings.Split(u.LastMenu, ":")
+		if len(parts) == 3 {
+			attemptID, err := strconv.ParseUint(parts[2], 10, 64)
+			if err == nil {
+				// 2. Fetch the quiz attempt from the database to get the message ID.
+				attempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
+				if err != nil {
+					log.Printf("Could not get attempt %d to edit message: %v", attemptID, err)
+				} else if attempt.CurrentQuestionMessageID != 0 {
+					// 3. Edit the original quiz message to show it's paused.
+					//    By not providing a new keyboard, the inline keyboard is automatically removed.
+					pausedMsg := "آزمون متوقف شد. شما به منوی اصلی بازگشتید."
+
+					// We need to create a telebot.Message object to edit it.
+					// The Chat ID is important.
+					messageToEdit := &telebot.Message{
+						ID:   attempt.CurrentQuestionMessageID,
+						Chat: c.Chat(),
+					}
+
+					if _, err := c.Bot().Edit(messageToEdit, pausedMsg); err != nil {
+						// This error is not critical, the user can still proceed.
+						log.Printf("Failed to edit old quiz message %d: %v", attempt.CurrentQuestionMessageID, err)
+					}
+				}
+			}
+		}
+	}
+
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateMain); err != nil {
 		log.Printf("[handleReturnToMainMenu] Failed to update user state for UserID %d: %v", u.ID, err)
 	}
