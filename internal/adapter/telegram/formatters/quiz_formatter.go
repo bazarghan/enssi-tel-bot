@@ -43,16 +43,15 @@ func FormatQuizQuestion(q quiz.Question, qNum, total int) string {
 // FormatQuizResult creates the text for a final result message.
 func FormatQuizResult(r quiz.Result, attempt quiz.Attempt) string {
 	var resultMessageBuilder strings.Builder
-	resultMessageBuilder.WriteString(">" + tgmarkdown.Escape("آزمون به پایان رسید!") + "\n")
-	resultMessageBuilder.WriteString(">\n")
+	resultMessageBuilder.WriteString("\u200b\n" + tgmarkdown.Escape("آزمون به پایان رسید!") + "\n\n")
 	scoreLine := fmt.Sprintf("تو به %d سوال از %d سوال پاسخ صحیح دادی.", r.Score, r.TotalQuestions)
-	resultMessageBuilder.WriteString(">" + tgmarkdown.Escape(scoreLine) + "\n")
+	resultMessageBuilder.WriteString(tgmarkdown.Escape(scoreLine) + "\n")
 
 	if r.Passed {
 		resultMessageBuilder.WriteString(">" + tgmarkdown.Escape("آفرین! تونستی آزمون رو با موفقیت پشت سر بذاری. 🎉"))
 	} else {
 		resultMessageBuilder.WriteString(">" + tgmarkdown.Escape("متاسفانه نتونستی حد نصاب قبولی رو کسب کنی. 😔") + "\n")
-		resultMessageBuilder.WriteString(">" + tgmarkdown.Escape("به همین دلیل باید این بخش رو دوباره مرور کنی."))
+		resultMessageBuilder.WriteString(tgmarkdown.Escape("به همین دلیل باید این بخش رو دوباره مرور کنی."))
 	}
 
 	// --- Build Review Text ---
@@ -88,7 +87,7 @@ func FormatQuizResult(r quiz.Result, attempt quiz.Attempt) string {
 				chosenOptText = "پاسخ ندادی"
 			}
 			// Build the review string for this question
-			reviewTextBuilder.WriteString(fmt.Sprintf("\n> *سوال %d:* %s\n", i+1, tgmarkdown.Escape(q.Text)))
+			reviewTextBuilder.WriteString(fmt.Sprintf("\n>  \n> *سوال %d:* %s\n", i+1, tgmarkdown.Escape(q.Text)))
 
 			if wasChoiceCorrect {
 				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s\\(✅\\)\n", tgmarkdown.Escape(chosenOptText)))
