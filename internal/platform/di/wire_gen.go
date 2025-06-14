@@ -51,7 +51,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	advanceWordHandler := course2.NewAdvanceWordHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
+	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
 	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
 	awardProgressHandler := achievement.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)

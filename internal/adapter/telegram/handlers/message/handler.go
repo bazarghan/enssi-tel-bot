@@ -21,11 +21,14 @@ import (
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	cacheCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
+	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
+
 	"gopkg.in/telebot.v4"
 )
 
 const (
 	BtnStartLearning       = "شروع یادگیری"
+	BtnMyProfile           = "پروفایل"
 	StateMain              = "main"
 	StateCourseList        = "course_list"
 	StateCourseDetailsBase = "course_details"
@@ -35,23 +38,22 @@ const (
 
 // Handler holds dependencies for message handlers.
 type Handler struct {
-	listCourses courseQueries.ListCoursesHandler
-	getOverview courseQueries.GetOverviewHandler
-
-	advanceWord advanceCmd.AdvanceWordHandler
-
+	listCourses  courseQueries.ListCoursesHandler
+	getOverview  courseQueries.GetOverviewHandler
+	getProfile   getProfileQry.GetProfileHandler
+	advanceWord  advanceCmd.AdvanceWordHandler
 	startSession startCmd.StartSessionHandler
 	userRepo     user.Repository
 	quizRepo     quiz.Repository
 	courseRepo   course.Repository
-
-	cacheMedia cacheCmd.CacheMediaHandler
+	cacheMedia   cacheCmd.CacheMediaHandler
 }
 
 // NewHandler creates a new message handler.
 func NewHandler(
 	listCourses courseQueries.ListCoursesHandler,
 	getOverview courseQueries.GetOverviewHandler,
+	getProfile getProfileQry.GetProfileHandler,
 	advanceWord advanceCmd.AdvanceWordHandler,
 	startSession startCmd.StartSessionHandler,
 	userRepo user.Repository,
@@ -63,6 +65,7 @@ func NewHandler(
 	return &Handler{
 		listCourses:  listCourses,
 		getOverview:  getOverview,
+		getProfile:   getProfile,
 		startSession: startSession,
 		advanceWord:  advanceWord,
 		userRepo:     userRepo,
@@ -94,6 +97,10 @@ func (h *Handler) Handle(c telebot.Context) error {
 	case ctxUser.LastMenu == StateMain:
 		if userInput == BtnStartLearning {
 			return h.handleStartLearning(c, ctxUser)
+		}
+
+		if userInput == BtnMyProfile {
+			return h.handleGetProfile(c, ctxUser)
 		}
 
 	case ctxUser.LastMenu == StateCourseList:
@@ -144,6 +151,33 @@ func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 	}
 
 	return c.Send(msg, kb)
+}
+
+func (h *Handler) handleGetProfile(c telebot.Context, u user.User) error {
+
+	query := getProfileQry.GetProfileQuery{UserID: u.ID}
+	result, err := h.getProfile.Handle(context.Background(), query)
+	if err != nil {
+		log.Printf("[HandleProfile] Could not get user profile for user ID %d: %v", u.ID, err)
+		return c.Send("متاسفانه در دریافت اطلاعات پروفایل مشکلی پیش آمد.")
+	}
+
+	// Map usecase result to a presentation DTO
+	profileDTO := dto.UserProfile{
+		FirstName:     result.FirstName,
+		Username:      result.Username,
+		LastName:      result.LastName,
+		Score:         result.Score,
+		WordsStudied:  result.WordsStudied,
+		CoursesActive: result.CoursesActive,
+	}
+
+	formattedProfile := formatters.FormatUserProfile(profileDTO)
+
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateProfileMenu)
+
+	// We send the profile message and the profile menu keyboard
+	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
 }
 
 func (h *Handler) handleCourseSelection(c telebot.Context, u user.User, selectionText string) error {
