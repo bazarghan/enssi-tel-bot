@@ -3,8 +3,9 @@ package quiz
 type QuizType string
 
 const (
-	CourseBlock QuizType = "COURSE_BLOCK"
-	Review      QuizType = "REVIEW"
+	CourseBlock       QuizType = "COURSE_BLOCK"
+	Review            QuizType = "REVIEW"
+	QuizPassThreshold          = 9
 )
 
 // Question represents a single quiz question and its possible options.

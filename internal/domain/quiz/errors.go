@@ -11,4 +11,5 @@ var (
 	ErrUserMismatch            = errors.New("user does not own this quiz attempt")
 	ErrNoWordsForQuiz          = errors.New("not enough words available to create a quiz")
 	ErrQuizCreation            = errors.New("failed to create quiz structure")
+	ErrQuizAlreadyPassed       = errors.New("quiz for this block has already been passed")
 )

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -307,4 +308,30 @@ func getKeys(m map[string]bool) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func (r *QuizRepository) GetHighestScoreForCourseBlock(ctx context.Context, userID, courseID, triggerProgress uint) (int, error) {
+	var maxScore sql.NullInt64 // Use sql.NullInt64 to handle cases where no rows are found (score is NULL)
+
+	err := r.db.WithContext(ctx).Model(&attemptModel{}).
+		Select("MAX(score)").
+		Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
+		Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ?",
+			userID, courseID, triggerProgress, true).
+		Row().Scan(&maxScore)
+
+	if err != nil {
+		// If no rows are found, gorm returns sql.ErrNoRows which we can treat as a score of 0.
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	if !maxScore.Valid {
+		// This happens if MAX(score) returns NULL because no attempts were found.
+		return 0, nil
+	}
+
+	return int(maxScore.Int64), nil
 }

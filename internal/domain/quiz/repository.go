@@ -29,5 +29,7 @@ type Repository interface {
 
 	// UpdateMessageID updates the telegram message ID for the current question.
 	UpdateMessageID(ctx context.Context, attemptID uint, messageID int) error
-}
 
+	// Returns the highest score for a completed attempt on a course block. Returns 0 if no completed attempt is found.
+	GetHighestScoreForCourseBlock(ctx context.Context, userID, courseID, triggerProgress uint) (int, error)
+}

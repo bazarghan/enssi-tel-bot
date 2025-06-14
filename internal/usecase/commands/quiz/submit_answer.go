@@ -9,8 +9,6 @@ import (
 	"log"
 )
 
-const QuizPassThreshold = 9
-
 // SubmitAnswerCommand defines the input.
 type SubmitAnswerCommand struct {
 	AttemptID uint
@@ -128,7 +126,7 @@ func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalSc
 	}
 
 	if attempt.Type == quiz.CourseBlock {
-		result.Passed = result.Score >= QuizPassThreshold
+		result.Passed = result.Score >= quiz.QuizPassThreshold
 		if !result.Passed {
 			result.ShouldResetProgress = true
 			if attempt.CourseID > 0 {

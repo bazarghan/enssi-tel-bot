@@ -34,26 +34,39 @@ func NewCreateCourseQuizHandler(quizRepo quiz.Repository, wordRepo word.Reposito
 
 // Handle executes the command.
 func (h CreateCourseQuizHandler) Handle(ctx context.Context, cmd CreateCourseQuizCommand) (CreateCourseQuizResult, error) {
-	// 1. Check if an active attempt already exists.
+
+	// 1. Get the user's best score for this specific quiz block.
+	highestScore, err := h.quizRepo.GetHighestScoreForCourseBlock(ctx, cmd.UserID, cmd.CourseID, cmd.TriggerProgress)
+	if err != nil {
+		return CreateCourseQuizResult{}, fmt.Errorf("failed to check highest score for quiz: %w", err)
+	}
+
+	// 2. Compare the score against the domain's pass threshold.
+	if highestScore >= quiz.QuizPassThreshold {
+		// If they have already passed, return the specific error.
+		return CreateCourseQuizResult{}, quiz.ErrQuizAlreadyPassed
+	}
+
+	// 3. Check if an active attempt already exists.
 	activeAttempt, err := h.quizRepo.FindActiveCourseBlockAttempt(ctx, cmd.UserID, cmd.CourseID, cmd.TriggerProgress)
 	if err == nil {
 		return CreateCourseQuizResult{QuizAttempt: activeAttempt}, nil // Return existing attempt
 	}
 
-	// 2. Get word IDs for the block.
+	// 4. Get word IDs for the block.
 	offset := cmd.TriggerProgress - WordsPerQuizBlock
 	wordIDs, err := h.wordRepo.FindWordIDsByCourseBlock(ctx, cmd.CourseID, WordsPerQuizBlock, offset)
 	if err != nil {
 		return CreateCourseQuizResult{}, fmt.Errorf("could not get words for quiz: %w", err)
 	}
 
-	// 3. Create quiz structure.
+	// 5. Create quiz structure.
 	quizID, err := h.quizRepo.CreateQuiz(ctx, quiz.CourseBlock, cmd.CourseID, cmd.TriggerProgress, wordIDs)
 	if err != nil {
 		return CreateCourseQuizResult{}, fmt.Errorf("could not create quiz structure: %w", err)
 	}
 
-	// 4. Create a new attempt.
+	// 6. Create a new attempt.
 	newAttempt, err := h.quizRepo.CreateAttempt(ctx, cmd.UserID, quizID)
 	if err != nil {
 		return CreateCourseQuizResult{}, fmt.Errorf("could not create quiz attempt: %w", err)

@@ -95,7 +95,8 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 			TriggerProgress: uint(progress.WordsCompleted),
 		}
 		quizResult, err := h.createCourseQuiz.Handle(ctx, quizCmd)
-		if err != nil && !errors.Is(err, quiz.ErrAttemptAlreadyCompleted) {
+
+		if err != nil && !errors.Is(err, quiz.ErrAttemptAlreadyCompleted) && !errors.Is(err, quiz.ErrQuizAlreadyPassed) {
 			log.Printf("Failed to create or find quiz for user %d, course %d: %v", cmd.UserID, cmd.CourseID, err)
 		} else if quizResult.QuizAttempt.ID != 0 && !quizResult.QuizAttempt.IsCompleted {
 			return StartSessionResult{
