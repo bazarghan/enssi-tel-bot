@@ -82,4 +82,4 @@ type studiedWordModel struct {
 	ReviewIntervalDays uint      `gorm:"default:1"`
 }
 
-func (studiedWordModel) TableName() string { return "words_studied" }
+func (studiedWordModel) TableName() string { return "word_studieds" }
