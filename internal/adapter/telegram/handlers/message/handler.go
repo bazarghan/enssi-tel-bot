@@ -20,6 +20,7 @@ import (
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	cacheCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
+	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 
@@ -38,15 +39,16 @@ const (
 
 // Handler holds dependencies for message handlers.
 type Handler struct {
-	listCourses  courseQueries.ListCoursesHandler
-	getOverview  courseQueries.GetOverviewHandler
-	getProfile   getProfileQry.GetProfileHandler
-	advanceWord  advanceCmd.AdvanceWordHandler
-	startSession startCmd.StartSessionHandler
-	userRepo     user.Repository
-	quizRepo     quiz.Repository
-	courseRepo   course.Repository
-	cacheMedia   cacheCmd.CacheMediaHandler
+	listCourses        courseQueries.ListCoursesHandler
+	getOverview        courseQueries.GetOverviewHandler
+	getProfile         getProfileQry.GetProfileHandler
+	getAllAchievements achQueries.GetAllHandler
+	advanceWord        advanceCmd.AdvanceWordHandler
+	startSession       startCmd.StartSessionHandler
+	userRepo           user.Repository
+	quizRepo           quiz.Repository
+	courseRepo         course.Repository
+	cacheMedia         cacheCmd.CacheMediaHandler
 }
 
 // NewHandler creates a new message handler.
@@ -54,6 +56,7 @@ func NewHandler(
 	listCourses courseQueries.ListCoursesHandler,
 	getOverview courseQueries.GetOverviewHandler,
 	getProfile getProfileQry.GetProfileHandler,
+	getAllAchievements achQueries.GetAllHandler,
 	advanceWord advanceCmd.AdvanceWordHandler,
 	startSession startCmd.StartSessionHandler,
 	userRepo user.Repository,
@@ -63,15 +66,16 @@ func NewHandler(
 ) *Handler {
 
 	return &Handler{
-		listCourses:  listCourses,
-		getOverview:  getOverview,
-		getProfile:   getProfile,
-		startSession: startSession,
-		advanceWord:  advanceWord,
-		userRepo:     userRepo,
-		courseRepo:   courseRepo,
-		quizRepo:     quizRepo,
-		cacheMedia:   cacheMedia, // Dependency assigned here
+		listCourses:        listCourses,
+		getOverview:        getOverview,
+		getProfile:         getProfile,
+		getAllAchievements: getAllAchievements,
+		startSession:       startSession,
+		advanceWord:        advanceWord,
+		userRepo:           userRepo,
+		courseRepo:         courseRepo,
+		quizRepo:           quizRepo,
+		cacheMedia:         cacheMedia, // Dependency assigned here
 	}
 }
 
@@ -387,15 +391,32 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 }
 
 func (h *Handler) handleViewMyAchievements(c telebot.Context, u user.User) error {
-	// This requires a use case to get achievements.
-	// For now, we assume a simplified query.
-	// In a full implementation, you'd call a GetUserAchievements use case.
-	log.Printf("User %d viewing achievements.", u.ID)
-	// Placeholder DTOs
-	achDTOs := []dto.AchievementView{
-		// This would be populated from a use case result
+	// 1. Call the use case to get all defined achievements.
+	allAchievements, err := h.getAllAchievements.Handle(context.Background())
+	if err != nil {
+		log.Printf("Failed to get achievements for user %d: %v", u.ID, err)
+		return c.Send("متاسفانه در دریافت لیست دستاوردها مشکلی پیش آمد.")
 	}
-	return c.Send("Here are your achievements:", keyboards.AchievementsListKeyboard(achDTOs))
+
+	// 2. Map the use case result to the DTO needed for the keyboard.
+	// We are listing all achievements; the specific "EarnedOn" date isn't needed here.
+	achDTOs := make([]dto.AchievementView, len(allAchievements))
+	for i, ach := range allAchievements {
+		achDTOs[i] = dto.AchievementView{
+			ID:          ach.ID,
+			Title:       ach.Title,
+			Description: ach.Description,
+		}
+	}
+
+	// 3. Generate the keyboard with the list of achievements.
+	kb := keyboards.AchievementsListKeyboard(achDTOs)
+
+	// 4. Update the user's state so the bot knows they are in the achievements menu.
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, "achievements_list")
+
+	// 5. Send the message with the inline keyboard.
+	return c.Send("می توانید با کلیک بر روی هر دستاورد، پیشرفت خود را مشاهده کنید:", kb)
 }
 
 func (h *Handler) sendWordImageByUrlAndCache(c telebot.Context, wordData startCmd.WordDisplayData) {

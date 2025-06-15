@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bits-and-blooms/bitset"
 	"log"
 	"math/rand"
 	"os"
@@ -226,11 +227,23 @@ func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID
 	}
 
 	userAch, err := h.achRepo.GetUserAchievement(context.Background(), userID, achievementID)
-	if err != nil && !errors.Is(err, achievement.ErrUserAchNotFound) {
-		log.Printf("Could not get user achievement progress for user %d, ach %d: %v", userID, achievementID, err)
-		return
+	if err != nil {
+		if errors.Is(err, achievement.ErrUserAchNotFound) {
+			// This is not an error. It means the user has 0% progress.
+			// We must create a new, empty achievement object with a non-nil bitset to represent this.
+			userAch = achievement.UserAchievement{
+				UserID:        userID,
+				AchievementID: achievementID,
+				State:         bitset.New(ach.TotalItems), // Creates a new, empty bitset of the correct size
+			}
+		} else {
+			// This is a real database error.
+			log.Printf("Could not get user achievement progress for user %d, ach %d: %v", userID, achievementID, err)
+			return
+		}
 	}
 
+	// Now, userAch.State is GUARANTEED to be a valid, non-nil bitset.
 	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
 	if err != nil {
 		log.Printf("Failed to generate achievement image: %v", err)
@@ -238,13 +251,12 @@ func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID
 	}
 	defer os.Remove(generatedPath)
 
-	caption := fmt.Sprintf("🏆 *%s*\n\n\\_%s\\_", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
+	caption := fmt.Sprintf("🏆 *%s*\n\n`%s`", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
 	photo := &telebot.Photo{
 		File:    telebot.FromDisk(generatedPath),
 		Caption: caption,
 	}
 
-	// Send the photo as a new message.
 	if _, err := c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2); err != nil {
 		log.Printf("Failed to send achievement photo: %v", err)
 	}

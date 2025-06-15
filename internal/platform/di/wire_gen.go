@@ -13,19 +13,19 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
-	achievement2 "github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+	achievement3 "github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	course3 "github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
 	quiz2 "github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	user3 "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	word2 "github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
+	achievement2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	course2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
-	achievement3 "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	user2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 	"github.com/google/wire"
@@ -46,14 +46,15 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	courseRepository := postgres.NewCourseRepository(db)
 	listCoursesHandler := course.NewListCoursesHandler(courseRepository)
 	getOverviewHandler := course.NewGetOverviewHandler(courseRepository)
+	getAllHandler := achievement.NewGetAllHandler(achievementRepository)
 	wordRepository := postgres.NewWordRepository(db)
 	createCourseQuizHandler := quiz.NewCreateCourseQuizHandler(quizRepository, wordRepository)
 	advanceWordHandler := course2.NewAdvanceWordHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
+	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getAllHandler, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
 	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
-	awardProgressHandler := achievement.NewAwardProgressHandler(achievementRepository)
+	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	string2 := _wireStringValue
 	generator, err := imagegen.NewGenerator(string2)
@@ -117,9 +118,9 @@ var wordSet = wire.NewSet(postgres.NewWordRepository, wire.Bind(new(word2.Reposi
 
 var quizSet = wire.NewSet(postgres.NewQuizRepository, wire.Bind(new(quiz2.Repository), new(*postgres.QuizRepository)), quiz.NewCreateCourseQuizHandler, quiz.NewCreateReviewQuizHandler, quiz.NewSubmitAnswerHandler)
 
-var achievementSet = wire.NewSet(postgres.NewAchievementRepository, wire.Bind(new(achievement2.Repository), new(*postgres.AchievementRepository)), achievement.NewAwardProgressHandler, achievement3.NewGetAllHandler)
+var achievementSet = wire.NewSet(postgres.NewAchievementRepository, wire.Bind(new(achievement3.Repository), new(*postgres.AchievementRepository)), achievement2.NewAwardProgressHandler, achievement.NewGetAllHandler)
 
-var imagegenSet = wire.NewSet(wire.Value("assets/imgs/achievements_gen"), imagegen.NewGenerator, wire.Bind(new(achievement2.ImageGenerator), new(*imagegen.Generator)))
+var imagegenSet = wire.NewSet(wire.Value("assets/imgs/achievements_gen"), imagegen.NewGenerator, wire.Bind(new(achievement3.ImageGenerator), new(*imagegen.Generator)))
 
 var notifierSet = wire.NewSet(telegram.NewNotifier, wire.Bind(new(notification.Notifier), new(*telegram.Notifier)))
 
