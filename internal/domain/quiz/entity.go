@@ -28,6 +28,7 @@ type Attempt struct {
 	ID                       uint
 	UserID                   uint
 	QuizID                   uint
+	TriggerProgress          uint
 	Score                    int
 	IsCompleted              bool
 	CurrentQuestionIndex     int

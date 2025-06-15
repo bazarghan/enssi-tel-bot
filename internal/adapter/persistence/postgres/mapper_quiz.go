@@ -20,6 +20,7 @@ func toDomainAttempt(m attemptModel, qm quizModel, answers []answerModel) quiz.A
 		ID:                       m.ID,
 		UserID:                   m.UserID,
 		QuizID:                   m.QuizID,
+		TriggerProgress:          qm.TriggerProgress, // <-- ADD THIS MAPPING
 		Score:                    m.Score,
 		IsCompleted:              m.IsCompleted,
 		CurrentQuestionIndex:     m.CurrentQuestionNum,

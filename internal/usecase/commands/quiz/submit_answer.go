@@ -122,7 +122,7 @@ func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalSc
 		Score:           finalScore,
 		TotalQuestions:  len(attempt.Questions),
 		CourseID:        attempt.CourseID,
-		TriggerProgress: 0, // In this design, TriggerProgress is on the Quiz, not Attempt.
+		TriggerProgress: attempt.TriggerProgress,
 	}
 
 	if attempt.Type == quiz.CourseBlock {
