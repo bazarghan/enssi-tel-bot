@@ -107,3 +107,14 @@ func (r *AchievementRepository) FindUserAchievements(ctx context.Context, userID
 	}
 	return userAchievements, nil
 }
+
+func (r *AchievementRepository) FindByTitle(ctx context.Context, title string) (achievement.Achievement, error) {
+	var model achievementModel
+	if err := r.db.WithContext(ctx).Where("title = ?", title).First(&model).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return achievement.Achievement{}, achievement.ErrNotFound
+		}
+		return achievement.Achievement{}, err
+	}
+	return toDomainAchievement(model), nil
+}

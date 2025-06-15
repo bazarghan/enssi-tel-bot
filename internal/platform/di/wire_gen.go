@@ -47,20 +47,20 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	listCoursesHandler := course.NewListCoursesHandler(courseRepository)
 	getOverviewHandler := course.NewGetOverviewHandler(courseRepository)
 	getAllHandler := achievement.NewGetAllHandler(achievementRepository)
-	wordRepository := postgres.NewWordRepository(db)
-	createCourseQuizHandler := quiz.NewCreateCourseQuizHandler(quizRepository, wordRepository)
-	advanceWordHandler := course2.NewAdvanceWordHandler(courseRepository, wordRepository, createCourseQuizHandler)
-	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
-	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getAllHandler, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
-	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
-	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
-	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	string2 := _wireStringValue
 	generator, err := imagegen.NewGenerator(string2)
 	if err != nil {
 		return nil, err
 	}
+	wordRepository := postgres.NewWordRepository(db)
+	createCourseQuizHandler := quiz.NewCreateCourseQuizHandler(quizRepository, wordRepository)
+	advanceWordHandler := course2.NewAdvanceWordHandler(courseRepository, wordRepository, createCourseQuizHandler)
+	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
+	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
+	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
+	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
+	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
+	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	callbackHandler := callback.NewHandler(submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
 	botApp := &BotApp{
 		CommandHandler:  handler,

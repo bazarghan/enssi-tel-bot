@@ -8,6 +8,7 @@ import (
 
 var (
 	BtnViewAchievements = telebot.Btn{Text: "🏆 دستاوردها"}
+	BtnReturnToProfile  = telebot.Btn{Text: "بازگشت به پروفایل"}
 )
 
 const ShowAchievementCallbackPrefix = "ach_show:"
@@ -43,15 +44,32 @@ func ProfileMenuKeyboard() *telebot.ReplyMarkup {
 	return menu
 }
 
-// AchievementsListKeyboard shows earned achievements as inline buttons.
 func AchievementsListKeyboard(achievements []dto.AchievementView) *telebot.ReplyMarkup {
-	menu := &telebot.ReplyMarkup{}
+	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
+
 	var rows []telebot.Row
+	var cols []telebot.Btn
+
 	for _, ach := range achievements {
-		callbackData := fmt.Sprintf("%s%d", ShowAchievementCallbackPrefix, ach.ID) // Assumes const is defined
-		btn := menu.Data(fmt.Sprintf("🏆 %s", ach.Title), callbackData)
-		rows = append(rows, menu.Row(btn))
+		btn := menu.Text(fmt.Sprintf("🏆 %s", ach.Title))
+		cols = append(cols, btn)
+
+		if len(cols) == 2 {
+			rows = append(rows, menu.Row(cols...))
+			cols = nil
+		}
 	}
-	menu.Inline(rows...)
+
+	if len(cols) > 0 {
+		rows = append(rows, menu.Row(cols...))
+	}
+
+	rows = append(
+		rows,
+		menu.Row(BtnReturnToProfile),
+		menu.Row(menu.Text(BtnReturnToMainMenu)),
+	)
+
+	menu.Reply(rows...)
 	return menu
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bits-and-blooms/bitset"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -16,6 +18,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
+
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
@@ -30,6 +34,7 @@ import (
 const (
 	BtnStartLearning       = "شروع یادگیری"
 	BtnMyProfile           = "پروفایل"
+	BtnReturnToProfile     = "بازگشت به پروفایل"
 	StateMain              = "main"
 	StateCourseList        = "course_list"
 	StateCourseDetailsBase = "course_details"
@@ -49,6 +54,8 @@ type Handler struct {
 	quizRepo           quiz.Repository
 	courseRepo         course.Repository
 	cacheMedia         cacheCmd.CacheMediaHandler
+	achRepo            achievement.Repository
+	imgSvc             achievement.ImageGenerator
 }
 
 // NewHandler creates a new message handler.
@@ -57,12 +64,14 @@ func NewHandler(
 	getOverview courseQueries.GetOverviewHandler,
 	getProfile getProfileQry.GetProfileHandler,
 	getAllAchievements achQueries.GetAllHandler,
+	achRepo achievement.Repository,
+	imgSvc achievement.ImageGenerator,
 	advanceWord advanceCmd.AdvanceWordHandler,
 	startSession startCmd.StartSessionHandler,
 	userRepo user.Repository,
 	courseRepo course.Repository,
 	quizRepo quiz.Repository,
-	cacheMedia cacheCmd.CacheMediaHandler, // Dependency accepted here
+	cacheMedia cacheCmd.CacheMediaHandler,
 ) *Handler {
 
 	return &Handler{
@@ -74,6 +83,8 @@ func NewHandler(
 		advanceWord:        advanceWord,
 		userRepo:           userRepo,
 		courseRepo:         courseRepo,
+		achRepo:            achRepo,
+		imgSvc:             imgSvc,
 		quizRepo:           quizRepo,
 		cacheMedia:         cacheMedia, // Dependency assigned here
 	}
@@ -109,6 +120,14 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 	case ctxUser.LastMenu == StateCourseList:
 		return h.handleCourseSelection(c, ctxUser, userInput)
+
+	case ctxUser.LastMenu == "achievements_list":
+		// Handle the back button first
+		if userInput == BtnReturnToProfile {
+			return h.handleReturnToProfile(c, ctxUser)
+		} else {
+			return h.handleAchievementSelection(c, ctxUser, userInput)
+		}
 
 	case stateBase == StateCourseDetailsBase && stateID != "":
 		return h.handleCourseAction(c, ctxUser, userInput, stateID)
@@ -459,4 +478,57 @@ func (h *Handler) sendWordAudioByUrlAndCache(c telebot.Context, pronData startCm
 			log.Printf("Failed to cache new voice FileID: %v", err)
 		}
 	}
+}
+
+func (h *Handler) handleReturnToProfile(c telebot.Context, u user.User) error {
+	// This is the same logic from your /myprofile command
+	query := getProfileQry.GetProfileQuery{UserID: u.ID}
+	_, err := h.getProfile.Handle(context.Background(), query)
+	if err != nil {
+		return c.Send("Could not get profile.")
+	}
+	profileDTO := dto.UserProfile{ /* ... map fields ... */ }
+	formattedProfile := formatters.FormatUserProfile(profileDTO)
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateProfileMenu)
+	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
+}
+
+func (h *Handler) handleAchievementSelection(c telebot.Context, u user.User, userInput string) error {
+	// Assume any other button is an achievement title
+	// 1. Clean the button text to get the real title
+	cleanTitle := strings.TrimPrefix(userInput, "🏆 ")
+
+	// 2. Find the achievement by its title
+	ach, err := h.achRepo.FindByTitle(context.Background(), cleanTitle)
+	if err != nil {
+		log.Printf("Could not find achievement by title '%s': %v", cleanTitle, err)
+		return nil // Ignore if the title is not found
+	}
+
+	// 3. Re-implement the logic to generate and send the image
+	userAch, err := h.achRepo.GetUserAchievement(context.Background(), u.ID, ach.ID)
+	if err != nil {
+		if errors.Is(err, achievement.ErrUserAchNotFound) {
+			userAch = achievement.UserAchievement{
+				UserID: u.ID, AchievementID: ach.ID, State: bitset.New(ach.TotalItems),
+			}
+		} else {
+			log.Printf("Could not get user achievement progress: %v", err)
+			return c.Send("Could not retrieve achievement progress.")
+		}
+	}
+
+	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
+	if err != nil {
+		log.Printf("Failed to generate achievement image: %v", err)
+		return c.Send("Could not create achievement image.")
+	}
+	defer os.Remove(generatedPath)
+
+	caption := fmt.Sprintf("🏆 *%s*\n\n`%s`", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
+	photo := &telebot.Photo{File: telebot.FromDisk(generatedPath), Caption: caption}
+
+	_, err = c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2)
+	return err
+
 }
