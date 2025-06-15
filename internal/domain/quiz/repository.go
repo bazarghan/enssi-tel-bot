@@ -32,4 +32,7 @@ type Repository interface {
 
 	// Returns the highest score for a completed attempt on a course block. Returns 0 if no completed attempt is found.
 	GetHighestScoreForCourseBlock(ctx context.Context, userID, courseID, triggerProgress uint) (int, error)
+
+	// Returns the pendingReview Attempt
+	FindPendingReviewAttempt(ctx context.Context, userID uint) (Attempt, error)
 }

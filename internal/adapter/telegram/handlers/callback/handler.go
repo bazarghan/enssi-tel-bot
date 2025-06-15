@@ -131,6 +131,37 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	}
 	if res.IsCompleted {
 
+		// --- NEW: Check if the completed quiz was a Daily Review ---
+		if fullAttempt.Type == quiz.Review {
+			// 1. Mark the user's daily review as completed for today.
+			if err := h.userRepo.UpdateLastReviewSession(context.Background(), ctxUser.ID); err != nil {
+				log.Printf("Failed to update last review session for user %d: %v", ctxUser.ID, err)
+			}
+
+			// 2. Format and show the results, just like a normal quiz.
+			resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
+			if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
+				log.Printf("Could not edit review quiz result message: %v", err)
+			}
+
+			// 3.Build the main menu, explicitly passing `false` for hasPendingReview.
+			//    We know the review is complete, so the button should be hidden.
+			mainMenuKeyboard := keyboards.NewMainMenu(ctxUser.IsAdmin, false)
+
+			// 4. Send the final confirmation message with the new, clean main menu.
+			if _, err := c.Bot().Send(c.Chat(), "آزمون مرور شما به پایان رسید!", mainMenuKeyboard); err != nil {
+				log.Printf("Failed to send final review completion message: %v", err)
+			}
+
+			// 5.Update the user's state back to 'main' so they are no longer "in_quiz".
+			if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "main"); err != nil {
+				log.Printf("Failed to update user menu state after review quiz: %v", err)
+			}
+
+			return nil
+		}
+		// --- END OF REVIEW QUIZ LOGIC ---
+
 		completionCmd := courseCmd.HandleQuizCompletionCommand{
 			UserID:   ctxUser.ID,
 			CourseID: fullAttempt.CourseID,

@@ -335,3 +335,22 @@ func (r *QuizRepository) GetHighestScoreForCourseBlock(ctx context.Context, user
 
 	return int(maxScore.Int64), nil
 }
+
+func (r *QuizRepository) FindPendingReviewAttempt(ctx context.Context, userID uint) (quiz.Attempt, error) {
+	var am attemptModel
+	err := r.db.WithContext(ctx).
+		Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
+		Where("quiz_attempts.user_id = ? AND quizzes.type = ? AND quiz_attempts.is_completed = ?",
+			userID, quiz.Review, false).
+		Order("quiz_attempts.created_at DESC").
+		First(&am).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return quiz.Attempt{}, quiz.ErrAttemptNotFound
+		}
+		return quiz.Attempt{}, err
+	}
+
+	return r.GetAttempt(ctx, am.ID)
+}

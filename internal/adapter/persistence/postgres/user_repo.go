@@ -138,3 +138,9 @@ func (r *UserRepository) FindTelegramID(ctx context.Context, userID uint) (int64
 	}
 	return model.TelegramID, nil
 }
+
+func (r *UserRepository) UpdateLastReviewSession(ctx context.Context, userID uint) error {
+	return r.db.WithContext(ctx).Model(&userModel{}).
+		Where("id = ?", userID).
+		Update("last_review_session_completed_at", time.Now()).Error
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/bits-and-blooms/bitset"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +34,7 @@ import (
 
 const (
 	BtnStartLearning       = "شروع یادگیری"
+	BtnDailyReview         = "📝 مرور روزانه"
 	BtnMyProfile           = "پروفایل"
 	BtnReturnToProfile     = "بازگشت به پروفایل"
 	StateMain              = "main"
@@ -118,6 +120,10 @@ func (h *Handler) Handle(c telebot.Context) error {
 			return h.handleGetProfile(c, ctxUser)
 		}
 
+		if userInput == BtnDailyReview {
+			return h.handleDailyReview(c, ctxUser)
+		}
+
 	case ctxUser.LastMenu == StateCourseList:
 		return h.handleCourseSelection(c, ctxUser, userInput)
 
@@ -149,6 +155,14 @@ func (h *Handler) Handle(c telebot.Context) error {
 }
 
 func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
+
+	pendingReview, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID)
+	if err == nil && pendingReview.ID != 0 {
+		// If a pending review exists, block the user and tell them what to do.
+		blockMsg := "شما یک آزمون مرور روزانه برای انجام دادن دارید. لطفا ابتدا آن را با استفاده از دکمه 'مرور روزانه' تکمیل کنید."
+		return c.Send(tgmarkdown.Escape(blockMsg))
+	}
+
 	query := courseQueries.ListCoursesQuery{UserID: u.ID}
 	courses, err := h.listCourses.Handle(context.Background(), query)
 	if err != nil {
@@ -283,10 +297,15 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 		}
 	}
 
+	// --- check here ---
+	pendingReview, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID)
+	hasPendingReview := err == nil && pendingReview.ID != 0
+	// --- End of check ---
+
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateMain); err != nil {
 		log.Printf("[handleReturnToMainMenu] Failed to update user state for UserID %d: %v", u.ID, err)
 	}
-	return c.Send("به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin))
+	return c.Send("به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin, hasPendingReview))
 }
 
 func (h *Handler) handleCourseAction(c telebot.Context, u user.User, actionText, courseIDStr string) error {
@@ -397,7 +416,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 		// Fallback for unhandled steps
 		newState = StateMain
 		msg = "An unknown error occurred. Returning to main menu."
-		kb = keyboards.NewMainMenu(false) // Assuming non-admin for safety
+		kb = keyboards.NewMainMenu(false, false)
 		sendErr = c.Send(msg)
 	}
 
@@ -478,6 +497,32 @@ func (h *Handler) sendWordAudioByUrlAndCache(c telebot.Context, pronData startCm
 			log.Printf("Failed to cache new voice FileID: %v", err)
 		}
 	}
+}
+
+func (h *Handler) handleDailyReview(c telebot.Context, u user.User) error {
+	attempt, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID)
+	if err != nil {
+		return c.Send("خطا در یافتن آزمون مرور روزانه شما. لطفا دوباره تلاش کنید.")
+	}
+
+	// Start the quiz by sending the first question
+	// This reuses the same logic from sendLearningContext
+	question := attempt.Questions[attempt.CurrentQuestionIndex]
+
+	// Update the user's state
+	newState := fmt.Sprintf("in_quiz:0:%d", attempt.ID) // courseID is 0 for review
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
+
+	// Shuffle options and send the question
+	rand.Shuffle(len(question.Options), func(i, j int) { /* shuffle logic */ })
+	msg := formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
+	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID)
+	sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
+	if err == nil {
+		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
+	}
+	return err
+
 }
 
 func (h *Handler) handleReturnToProfile(c telebot.Context, u user.User) error {

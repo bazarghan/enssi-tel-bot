@@ -91,7 +91,19 @@ func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userI
 
 	// Notify the user.
 	message := fmt.Sprintf("👋 سلام! %d کلمه برای مرور روزانه شما آماده است. برای شروع، وارد ربات شوید و به آزمون پاسخ دهید.", len(wordsDue))
-	if err := j.notifier.Notify(userID, message); err != nil {
-		log.Printf("ERROR: Failed to send review notification to user %d: %v", userID, err)
+	// --- NEW LOGIC: Always send the main menu and reset the user's state ---
+
+	// 1. Send the notification with the full, updated main menu.
+	log.Printf("Sending updated main menu with review button to user %d", userID)
+	if err := j.notifier.NotifyWithMainMenu(userID, message); err != nil {
+		log.Printf("ERROR: Failed to send main menu notification to user %d: %v", userID, err)
+		return // Stop if we can't notify the user
 	}
+
+	// 2. Update the user's state in the database to 'main'.
+	if err := j.userRepo.UpdateLastMenu(ctx, userID, "main"); err != nil {
+		log.Printf("ERROR: Failed to update user menu state for user %d after sending review notification: %v", userID, err)
+	}
+	// --- END OF NEW LOGIC ---
+
 }

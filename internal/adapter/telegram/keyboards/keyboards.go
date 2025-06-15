@@ -14,16 +14,21 @@ var (
 const ShowAchievementCallbackPrefix = "ach_show:"
 
 // NewMainMenu creates the main menu keyboard, conditionally showing admin buttons.
-func NewMainMenu(isAdmin bool) *telebot.ReplyMarkup {
+func NewMainMenu(isAdmin bool, hasPendingReview bool) *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 
 	btnStartLearning := menu.Text("شروع یادگیری")
 	btnMyProfile := menu.Text("پروفایل")
 	btnAdminPanel := menu.Text("پنل ادمین")
+	btnDailyReview := menu.Text("📝 مرور روزانه")
 
 	rows := []telebot.Row{
 		menu.Row(btnStartLearning),
 		menu.Row(btnMyProfile),
+	}
+	// Conditionally add the daily review button as the top option
+	if hasPendingReview {
+		rows = append(rows, menu.Row(btnDailyReview))
 	}
 
 	if isAdmin {

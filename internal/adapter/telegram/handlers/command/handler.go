@@ -92,7 +92,11 @@ func (h *Handler) HandleStart(c telebot.Context) error {
 		startText = "سلام! 👋 به ربات آموزش زبان خوش آمدید. برای شروع یادگیری از دکame‌های زیر استفاده کنید."
 	}
 
-	mainMenuKeyboard := keyboards.NewMainMenu(result.User.IsAdmin)
+	// Check for a pending daily review quiz
+	pendingReview, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), result.User.ID)
+	hasPendingReview := err == nil && pendingReview.ID != 0
+
+	mainMenuKeyboard := keyboards.NewMainMenu(result.User.IsAdmin, hasPendingReview)
 	return c.Send(tgmarkdown.Escape(startText), mainMenuKeyboard, telebot.ModeMarkdownV2)
 }
 
