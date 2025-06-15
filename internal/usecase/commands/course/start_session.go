@@ -46,11 +46,11 @@ type StartSessionCommand struct {
 
 // StartSessionResult tells the presentation layer what to show next.
 type StartSessionResult struct {
-	NextStep      Step
-	Word          WordDisplayData
-	MessageToUser string
-
-	QuizAttempt quiz.Attempt
+	NextStep             Step
+	Word                 WordDisplayData
+	MessageToUser        string
+	QuizAttempt          quiz.Attempt
+	UpdatedAchievementID uint
 }
 
 // StartSessionHandler processes the command.

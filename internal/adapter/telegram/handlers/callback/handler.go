@@ -135,7 +135,7 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			CourseID: fullAttempt.CourseID,
 			Result:   res.FinalResult,
 		}
-		_, err := h.handleQuizCompletion.Handle(context.Background(), completionCmd)
+		completionResult, err := h.handleQuizCompletion.Handle(context.Background(), completionCmd)
 		if err != nil {
 			log.Printf("Error handling quiz completion for attempt %d: %v", attemptID, err)
 			_, err = c.Bot().Edit(c.Callback().Message, "Error processing quiz result.")
@@ -151,6 +151,10 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
 			// If editing fails, log it but don't stop the flow. We can still send the next message.
 			log.Printf("Could not edit quiz result message: %v", err)
+		}
+
+		if completionResult.UpdatedAchievementID != 0 {
+			h.sendAchievementUpdate(c, ctxUser.ID, completionResult.UpdatedAchievementID)
 		}
 
 		// 4. Send a NEW message to show the reply keyboard for continuing.
@@ -214,6 +218,38 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	return nil
 }
 
+func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID uint) {
+	ach, err := h.achRepo.FindByID(context.Background(), achievementID)
+	if err != nil {
+		log.Printf("Could not find achievement %d to send update: %v", achievementID, err)
+		return
+	}
+
+	userAch, err := h.achRepo.GetUserAchievement(context.Background(), userID, achievementID)
+	if err != nil && !errors.Is(err, achievement.ErrUserAchNotFound) {
+		log.Printf("Could not get user achievement progress for user %d, ach %d: %v", userID, achievementID, err)
+		return
+	}
+
+	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
+	if err != nil {
+		log.Printf("Failed to generate achievement image: %v", err)
+		return
+	}
+	defer os.Remove(generatedPath)
+
+	caption := fmt.Sprintf("🏆 *%s*\n\n\\_%s\\_", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
+	photo := &telebot.Photo{
+		File:    telebot.FromDisk(generatedPath),
+		Caption: caption,
+	}
+
+	// Send the photo as a new message.
+	if _, err := c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2); err != nil {
+		log.Printf("Failed to send achievement photo: %v", err)
+	}
+}
+
 // handleShowAchievement generates and sends a progressive achievement image.
 func (h *Handler) handleShowAchievement(c telebot.Context) error {
 	defer c.Respond()
@@ -231,35 +267,6 @@ func (h *Handler) handleShowAchievement(c telebot.Context) error {
 		return nil
 	}
 
-	ach, err := h.achRepo.FindByID(context.Background(), uint(achievementID))
-	if err != nil {
-		log.Printf("Could not find achievement %d: %v", achievementID, err)
-		return c.Send("Achievement details not found.")
-	}
-
-	userAch, err := h.achRepo.GetUserAchievement(context.Background(), ctxUser.ID, uint(achievementID))
-	if err != nil && !errors.Is(err, achievement.ErrUserAchNotFound) {
-		log.Printf("Could not get user achievement progress for user %d, ach %d: %v", ctxUser.ID, achievementID, err)
-		return c.Send("Error retrieving your progress.")
-	}
-
-	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
-	if err != nil {
-		log.Printf("Failed to generate achievement image: %v", err)
-		return c.Send("Error creating achievement image.")
-	}
-	defer os.Remove(generatedPath)
-
-	caption := fmt.Sprintf("🏆 *%s*\n\n_%s_", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
-	photo := &telebot.Photo{
-		File:    telebot.FromDisk(generatedPath),
-		Caption: caption,
-	}
-
-	_, err = c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2)
-	if err != nil {
-		log.Printf("Failed to send achievement photo: %v", err)
-	}
-
+	h.sendAchievementUpdate(c, ctxUser.ID, uint(achievementID))
 	return nil
 }

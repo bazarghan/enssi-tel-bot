@@ -48,16 +48,13 @@ func NewHandleQuizCompletionHandler(
 
 // Handle executes the command.
 func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizCompletionCommand) (HandleQuizCompletionResult, error) {
+	// This variable will hold the ID of the achievement if it's updated.
+	var updatedAchievementID uint
+
 	if cmd.Result.Passed {
-		// Mark the words from the quiz block as studied.
-		// In a real system, you'd fetch the words associated with the quiz.
-		// For now, we assume the trigger progress marks the end of the block.
+		// --- LOGIC FOR A PASSED QUIZ ---
 
-		offset := cmd.Result.SuggestedNewProgress // On pass, this is the start of the block
-		if cmd.Result.TriggerProgress > WordsPerQuizBlock {
-			offset = cmd.Result.TriggerProgress - WordsPerQuizBlock
-		}
-
+		// 1. Award Achievement Progress
 		domainCourse, err := h.courseRepo.FindByID(ctx, cmd.CourseID)
 		if err != nil {
 			log.Printf("Cannot find course %d to award achievement: %v", cmd.CourseID, err)
@@ -69,15 +66,22 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 			}
 			if err := h.awardProgressHandler.Handle(ctx, achCmd); err != nil {
 				log.Printf("Failed to award achievement progress: %v", err)
+			} else {
+				// If awarding was successful, store the ID to be returned later.
+				updatedAchievementID = domainCourse.LinkedAchievementID
 			}
 		}
 
+		// 2. Mark words from the passed block as "studied" in the SRS
+		offset := uint(0)
+		if cmd.Result.TriggerProgress > WordsPerQuizBlock {
+			offset = cmd.Result.TriggerProgress - WordsPerQuizBlock
+		}
 		wordsInBlock, err := h.wordRepo.FindWordIDsByCourseBlock(ctx, cmd.CourseID, WordsPerQuizBlock, offset)
 		if err != nil {
 			log.Printf("Could not get words for block to mark as studied: %v", err)
 		} else {
 			for _, wordID := range wordsInBlock {
-				// Mark as studied using the SRS primitive.
 				studiedWord, err := h.wordRepo.FindStudiedWord(ctx, cmd.UserID, wordID)
 				if err != nil && !errors.Is(err, word.ErrStudiedWordNotFound) {
 					log.Printf("error checking for studied word %d: %v", wordID, err)
@@ -86,24 +90,32 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 				if errors.Is(err, word.ErrStudiedWordNotFound) {
 					studiedWord = word.StudiedWord{UserID: cmd.UserID, WordID: wordID}
 				}
-				studiedWord.CalculateNextReview(true)
+				studiedWord.CalculateNextReview(true) // 'true' because they passed the quiz
 				h.wordRepo.SaveStudiedWord(ctx, studiedWord)
 			}
 		}
-	} else {
-		// If failed, reset progress.
-		if cmd.Result.ShouldResetProgress {
 
+	} else {
+		// --- LOGIC FOR A FAILED QUIZ ---
+		if cmd.Result.ShouldResetProgress {
 			err := h.courseRepo.SetProgress(ctx, cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
 			if err != nil {
 				log.Printf("Failed to reset progress for user %d in course %d: %v", cmd.UserID, cmd.CourseID, err)
-				// Not returning an error here, as failing to reset progress is not critical for the flow
 			} else {
 				log.Printf("Successfully reset progress for user %d in course %d to %d", cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
 			}
 		}
 	}
 
+	// 3. After handling the quiz consequences, determine the next step in the course.
 	startSessionHandler := NewStartSessionHandler(h.courseRepo, h.wordRepo, h.createCourseQuiz)
-	return startSessionHandler.Handle(ctx, StartSessionCommand{UserID: cmd.UserID, CourseID: cmd.CourseID})
+	result, err := startSessionHandler.Handle(ctx, StartSessionCommand{UserID: cmd.UserID, CourseID: cmd.CourseID})
+	if err != nil {
+		return HandleQuizCompletionResult{}, err
+	}
+
+	// 4. IMPORTANT: Add the achievement ID to the final result before returning.
+	result.UpdatedAchievementID = updatedAchievementID
+
+	return result, nil
 }

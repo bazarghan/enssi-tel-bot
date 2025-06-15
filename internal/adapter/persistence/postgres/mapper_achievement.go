@@ -21,7 +21,6 @@ func toDomainAchievement(m achievementModel) achievement.Achievement {
 func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement {
 	return achievement.UserAchievement{
 		ID:            m.ID,
-		UserID:        m.UserID, // Note: This assumes UserID is stored directly.
 		AchievementID: m.AchievementID,
 		EarnedAt:      m.CreatedAt,
 		State:         &m.State.BitSet,
@@ -29,9 +28,10 @@ func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement
 }
 
 // toPersistenceUserAchievement maps the domain entity to the gorm model for saving.
-func toPersistenceUserAchievement(d achievement.UserAchievement) userAchievementModel {
+func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint) userAchievementModel {
 	model := userAchievementModel{
-		UserID:        d.UserID,
+
+		ProfileID:     profileID, // Use the found profileID
 		AchievementID: d.AchievementID,
 	}
 	if d.ID != 0 {

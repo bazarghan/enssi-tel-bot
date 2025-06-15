@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"gorm.io/gorm"
 )
@@ -46,11 +48,10 @@ func (r *AchievementRepository) FindByID(ctx context.Context, achievementID uint
 // GetUserAchievement retrieves a user's specific progress on an achievement.
 func (r *AchievementRepository) GetUserAchievement(ctx context.Context, userID, achievementID uint) (achievement.UserAchievement, error) {
 	var model userAchievementModel
-	// Note: The old schema linked to ProfileID. The new domain uses UserID.
-	// This implementation assumes a direct UserID link for simplicity.
-	// A join on profiles might be needed if the schema is more complex.
+
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND achievement_id = ?", userID, achievementID).
+		Joins("JOIN profiles ON profiles.id = profile_achievements.profile_id").
+		Where("profiles.user_id = ? AND profile_achievements.achievement_id = ?", userID, achievementID).
 		First(&model).Error
 
 	if err != nil {
@@ -64,7 +65,20 @@ func (r *AchievementRepository) GetUserAchievement(ctx context.Context, userID, 
 
 // SaveUserAchievement creates or updates a user's achievement progress.
 func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achievement.UserAchievement) error {
-	model := toPersistenceUserAchievement(ua)
+	// 1. Find the profile_id for the given user_id
+	var profileID uint
+	err := r.db.WithContext(ctx).Model(&profileModel{}).Select("id").Where("user_id = ?", ua.UserID).Row().Scan(&profileID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("could not find profile for user_id %d to save achievement", ua.UserID)
+		}
+		return err
+	}
+	if profileID == 0 {
+		return fmt.Errorf("found zero value for profile_id for user_id %d", ua.UserID)
+	}
+
+	model := toPersistenceUserAchievement(ua, profileID)
 	// GORM's Save method handles both INSERT (if ID is 0) and UPDATE.
 	if err := r.db.WithContext(ctx).Save(&model).Error; err != nil {
 		return achievement.ErrSaveFailed
@@ -75,10 +89,11 @@ func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achi
 // FindUserAchievements retrieves all of a user's achievement progress records, preloading the base achievement data.
 func (r *AchievementRepository) FindUserAchievements(ctx context.Context, userID uint) ([]achievement.UserAchievement, error) {
 	var models []userAchievementModel
-	// This assumes user_id is on the user_achievements table. Adjust join if it's via profile_id.
+
 	err := r.db.WithContext(ctx).
 		Joins("Achievement"). // Preload the associated Achievement details
-		Where("user_id = ?", userID).
+		Joins("JOIN profiles ON profiles.id = profile_achievements.profile_id").
+		Where("profiles.user_id = ?", userID).
 		Find(&models).Error
 
 	if err != nil {
