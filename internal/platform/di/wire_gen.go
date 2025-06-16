@@ -81,7 +81,7 @@ func InitializeWorkerApp(db *gorm.DB, bot *telebot.Bot) (*WorkerApp, error) {
 	quizRepository := postgres.NewQuizRepository(db)
 	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
 	notifier := telegram.NewNotifier(bot, userRepository)
-	triggerDailyReviewsJob := jobs.NewTriggerDailyReviewsJob(userRepository, wordRepository, createReviewQuizHandler, notifier)
+	triggerDailyReviewsJob := jobs.NewTriggerDailyReviewsJob(userRepository, wordRepository, quizRepository, createReviewQuizHandler, notifier)
 	workerApp := &WorkerApp{
 		TriggerDailyReviewsJob: triggerDailyReviewsJob,
 	}

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+
+	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"log"
 	"time"
 )
@@ -15,7 +17,8 @@ import (
 type TriggerDailyReviewsJob struct {
 	userRepo         user.Repository
 	wordRepo         word.Repository
-	createReviewQuiz quiz.CreateReviewQuizHandler
+	quizRepo         quiz.Repository
+	createReviewQuiz quizCmd.CreateReviewQuizHandler
 	notifier         notification.Notifier
 }
 
@@ -23,12 +26,14 @@ type TriggerDailyReviewsJob struct {
 func NewTriggerDailyReviewsJob(
 	userRepo user.Repository,
 	wordRepo word.Repository,
-	createReviewQuiz quiz.CreateReviewQuizHandler,
+	quizRepo quiz.Repository,
+	createReviewQuiz quizCmd.CreateReviewQuizHandler,
 	notifier notification.Notifier,
 ) *TriggerDailyReviewsJob {
 	return &TriggerDailyReviewsJob{
 		userRepo:         userRepo,
 		wordRepo:         wordRepo,
+		quizRepo:         quizRepo,
 		createReviewQuiz: createReviewQuiz,
 		notifier:         notifier,
 	}
@@ -54,6 +59,17 @@ func (j *TriggerDailyReviewsJob) Run() {
 }
 
 func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userID uint) {
+	// --- NEW: Check for and DELETE any old pending review quiz ---
+	pendingReview, err := j.quizRepo.FindPendingReviewAttempt(ctx, userID)
+	if err == nil && pendingReview.ID != 0 {
+		log.Printf("User %d has an old, incomplete daily review (AttemptID: %d). Deleting it to create a fresh one.", userID, pendingReview.ID)
+		if deleteErr := j.quizRepo.DeleteAttempt(ctx, pendingReview.ID); deleteErr != nil {
+			log.Printf("ERROR: Failed to delete old pending review attempt %d: %v", pendingReview.ID, deleteErr)
+			// We still continue, as we might be able to create a new one anyway.
+		}
+	}
+	// --- END OF NEW LOGIC ---
+
 	// Check if the user already completed a review today.
 	domainUser, err := j.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -82,7 +98,7 @@ func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userI
 	}
 
 	// Create a review quiz.
-	cmd := quiz.CreateReviewQuizCommand{UserID: userID, WordsToReview: wordsDue}
+	cmd := quizCmd.CreateReviewQuizCommand{UserID: userID, WordsToReview: wordsDue}
 	_, err = j.createReviewQuiz.Handle(ctx, cmd)
 	if err != nil {
 		log.Printf("ERROR: Failed to create review quiz for user %d: %v", userID, err)
@@ -90,7 +106,7 @@ func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userI
 	}
 
 	// Notify the user.
-	message := fmt.Sprintf("👋 سلام! %d کلمه برای مرور روزانه شما آماده است. برای شروع، وارد ربات شوید و به آزمون پاسخ دهید.", len(wordsDue))
+	message := fmt.Sprintf("سلام %d کلمه برای مرور روزانه شما آماده است برای مرور در منوی اصلی رو دکمه مرور روزانه بزنید.", len(wordsDue))
 	// --- NEW LOGIC: Always send the main menu and reset the user's state ---
 
 	// 1. Send the notification with the full, updated main menu.

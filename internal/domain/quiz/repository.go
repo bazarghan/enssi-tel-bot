@@ -35,4 +35,7 @@ type Repository interface {
 
 	// Returns the pendingReview Attempt
 	FindPendingReviewAttempt(ctx context.Context, userID uint) (Attempt, error)
+
+	// Delete Attempt by attemptID
+	DeleteAttempt(ctx context.Context, attemptID uint) error
 }

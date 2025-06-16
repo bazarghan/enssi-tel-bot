@@ -354,3 +354,9 @@ func (r *QuizRepository) FindPendingReviewAttempt(ctx context.Context, userID ui
 
 	return r.GetAttempt(ctx, am.ID)
 }
+
+func (r *QuizRepository) DeleteAttempt(ctx context.Context, attemptID uint) error {
+
+	result := r.db.WithContext(ctx).Delete(&attemptModel{}, attemptID)
+	return result.Error
+}
