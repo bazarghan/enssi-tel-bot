@@ -53,6 +53,16 @@ func main() {
 		log.Fatalf("FATAL: Could not initialize bot: %v", err)
 	}
 
+	// 4. NOW THAT WE HAVE THE DB AND THE BOT, initialize the remaining handler
+	broadcastHandler, err := di.InitializeBroadcastHandler(dbConnection, botInstance)
+	if err != nil {
+		log.Fatalf("FATAL: Could not initialize broadcast handler: %v", err)
+	}
+
+	// 5. Manually inject the broadcast handler into our message handler's public field
+	botApp.MessageHandler.Broadcast = broadcastHandler
+	log.Println("Application services and handlers initialized successfully.")
+
 	log.Println("Bot starting...")
 	botInstance.Start()
 }

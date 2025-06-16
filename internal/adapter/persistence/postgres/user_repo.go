@@ -144,3 +144,9 @@ func (r *UserRepository) UpdateLastReviewSession(ctx context.Context, userID uin
 		Where("id = ?", userID).
 		Update("last_review_session_completed_at", time.Now()).Error
 }
+
+func (r *UserRepository) CountTotalUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&userModel{}).Count(&count).Error
+	return count, err
+}

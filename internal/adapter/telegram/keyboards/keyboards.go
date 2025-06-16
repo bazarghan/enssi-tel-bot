@@ -11,7 +11,23 @@ var (
 	BtnReturnToProfile  = telebot.Btn{Text: "بازگشت به پروفایل"}
 )
 
-const ShowAchievementCallbackPrefix = "ach_show:"
+const (
+	ShowAchievementCallbackPrefix = "ach_show:"
+	BtnAdminStats                 = "📊 آمار ربات"
+	BtnAdminBroadcast             = "📢 ارسال پیام همگانی"
+)
+
+// Add this new function to the file
+func AdminPanelKeyboard() *telebot.ReplyMarkup {
+	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
+
+	menu.Reply(
+		menu.Row(menu.Text(BtnAdminStats), menu.Text(BtnAdminBroadcast)),
+		menu.Row(menu.Text(BtnReturnToMainMenu)),
+	)
+
+	return menu
+}
 
 // NewMainMenu creates the main menu keyboard, conditionally showing admin buttons.
 func NewMainMenu(isAdmin bool, hasPendingReview bool) *telebot.ReplyMarkup {

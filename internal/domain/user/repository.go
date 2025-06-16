@@ -21,4 +21,7 @@ type Repository interface {
 
 	// Update the Last Review session
 	UpdateLastReviewSession(ctx context.Context, userID uint) error
+
+	// Count the total number of users
+	CountTotalUsers(ctx context.Context) (int64, error)
 }

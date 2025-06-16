@@ -42,7 +42,7 @@ func FormatCourseOverview(co dto.CourseOverview) string {
 	descriptionLines := strings.Split(tgmarkdown.Escape(co.PersianFullDescription), "\n")
 	for _, line := range descriptionLines {
 		// Prefix each line with "> " to create a valid blockquote
-		sb.WriteString(fmt.Sprintf("> %s\n", line))
+		sb.WriteString(fmt.Sprintf(">%s\n", line))
 	}
 	sb.WriteString(">  \n")
 	sb.WriteString(fmt.Sprintf("\n%s\n\n", tgmarkdown.Escape(message)))

@@ -20,12 +20,14 @@ import (
 	user3 "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	word2 "github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 	achievement2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
+	admin2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
 	course2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/admin"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	user2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
@@ -49,6 +51,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	courseRepository := postgres.NewCourseRepository(db)
 	listCoursesHandler := course.NewListCoursesHandler(courseRepository)
 	getOverviewHandler := course.NewGetOverviewHandler(courseRepository)
+	getStatsHandler := admin.NewGetStatsHandler(userRepository)
 	getAllHandler := achievement.NewGetAllHandler(achievementRepository)
 	string2 := _wireStringValue
 	generator, err := imagegen.NewGenerator(string2)
@@ -60,7 +63,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
 	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, handler)
+	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, handler)
 	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
 	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
@@ -99,6 +102,15 @@ func InitializeRegisterUserHandler(db *gorm.DB) user.RegisterUserHandler {
 	return registerUserHandler
 }
 
+// This injector's specific job is to build the BroadcastHandler,
+// because it's the only one that needs the live bot instance.
+func InitializeBroadcastHandler(db *gorm.DB, bot *telebot.Bot) (admin2.BroadcastHandler, error) {
+	userRepository := postgres.NewUserRepository(db)
+	notifier := telegram.NewNotifier(bot, userRepository)
+	broadcastHandler := admin2.NewBroadcastHandler(userRepository, notifier)
+	return broadcastHandler, nil
+}
+
 // wire.go:
 
 // BotApp contains the dependencies for the Telegram bot entry point.
@@ -120,6 +132,8 @@ var courseSet = wire.NewSet(postgres.NewCourseRepository, wire.Bind(new(course3.
 var reviewSet = wire.NewSet(review.NewHandler)
 
 var wordSet = wire.NewSet(postgres.NewWordRepository, wire.Bind(new(word2.Repository), new(*postgres.WordRepository)))
+
+var adminStatsSet = wire.NewSet(admin.NewGetStatsHandler)
 
 var quizSet = wire.NewSet(postgres.NewQuizRepository, wire.Bind(new(quiz2.Repository), new(*postgres.QuizRepository)), quiz.NewCreateCourseQuizHandler, quiz.NewCreateReviewQuizHandler, quiz.NewSubmitAnswerHandler)
 

@@ -21,12 +21,14 @@ import (
 	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 
 	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
+	adminCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	wordCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
+	adminQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/admin"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	userQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
@@ -74,6 +76,8 @@ var wordSet = wire.NewSet(
 	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
 )
 
+var adminStatsSet = wire.NewSet(adminQueries.NewGetStatsHandler)
+
 var quizSet = wire.NewSet(
 	postgres.NewQuizRepository,
 	wire.Bind(new(quiz.Repository), new(*postgres.QuizRepository)),
@@ -113,6 +117,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 		wordCacheSet,
 		quizSet,
 		achievementSet,
+		adminStatsSet,
 		reviewSet,
 		imagegenSet,
 		command.NewHandler,
@@ -143,4 +148,15 @@ func InitializeRegisterUserHandler(db *gorm.DB) userCmd.RegisterUserHandler {
 		userSet,
 	)
 	return userCmd.RegisterUserHandler{} // This return is a placeholder for Wire
+}
+
+// This injector's specific job is to build the BroadcastHandler,
+// because it's the only one that needs the live bot instance.
+func InitializeBroadcastHandler(db *gorm.DB, bot *telebot.Bot) (adminCmd.BroadcastHandler, error) {
+	wire.Build(
+		userSet,     // Needed for userRepo
+		notifierSet, // Needed for the Notifier
+		adminCmd.NewBroadcastHandler,
+	)
+	return adminCmd.BroadcastHandler{}, nil
 }

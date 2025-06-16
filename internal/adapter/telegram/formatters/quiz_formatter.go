@@ -23,6 +23,7 @@ func FormatQuizQuestion(q quiz.Question, qNum, total int) string {
 	textBuilder.WriteString(fmt.Sprintf("\n%s", questionText))
 	textBuilder.WriteString("\n\n")
 
+	textBuilder.WriteString(">  \n")
 	for i, opt := range q.Options {
 
 		textBuilder.WriteString(
@@ -33,9 +34,15 @@ func FormatQuizQuestion(q quiz.Question, qNum, total int) string {
 			),
 		)
 
-		seperatorText := "─────────────────────────"
-		textBuilder.WriteString(fmt.Sprintf(">%s\n", tgmarkdown.Escape(seperatorText)))
+		if i < len(q.Options)-1 {
+			seperatorText := "──────────────────────"
+			textBuilder.WriteString(fmt.Sprintf(">%s\n", tgmarkdown.Escape(seperatorText)))
+		}
+
 	}
+
+	textBuilder.WriteString(">  \n\n")
+	textBuilder.WriteString("\\.\n")
 
 	return textBuilder.String()
 }
@@ -90,9 +97,9 @@ func FormatQuizResult(r quiz.Result, attempt quiz.Attempt) string {
 			reviewTextBuilder.WriteString(fmt.Sprintf("\n>  \n> *سوال %d:* %s\n", i+1, tgmarkdown.Escape(q.Text)))
 
 			if wasChoiceCorrect {
-				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s\\(✅\\)\n", tgmarkdown.Escape(chosenOptText)))
+				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s \\(✅\\)\n", tgmarkdown.Escape(chosenOptText)))
 			} else {
-				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s\\(❌\\)\n", tgmarkdown.Escape(chosenOptText)))
+				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ شما:* %s \\(❌\\)\n", tgmarkdown.Escape(chosenOptText)))
 				reviewTextBuilder.WriteString(fmt.Sprintf("> *پاسخ صحیح:* %s\n", tgmarkdown.Escape(correctOptText)))
 			}
 			reviewTextBuilder.WriteString(">  \n")

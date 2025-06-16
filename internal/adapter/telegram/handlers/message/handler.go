@@ -24,11 +24,13 @@ import (
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 
+	adminCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	cacheCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
+	adminQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/admin"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
@@ -41,11 +43,14 @@ const (
 	BtnDailyReview         = "📝 مرور روزانه"
 	BtnMyProfile           = "پروفایل"
 	BtnReturnToProfile     = "بازگشت به پروفایل"
+	BtnAdminPanel          = "پنل ادمین"
 	StateMain              = "main"
 	StateCourseList        = "course_list"
+	StateAchievementList   = "achievements_list"
 	StateCourseDetailsBase = "course_details"
 	StateProfileMenu       = "profile_menu"
 	StateInCourseBase      = "in_course"
+	StateAdminPanel        = "admin_panel"
 )
 
 // Handler holds dependencies for message handlers.
@@ -53,6 +58,8 @@ type Handler struct {
 	listCourses        courseQueries.ListCoursesHandler
 	getOverview        courseQueries.GetOverviewHandler
 	getProfile         getProfileQry.GetProfileHandler
+	getStats           adminQueries.GetStatsHandler
+	Broadcast          adminCmd.BroadcastHandler
 	getAllAchievements achQueries.GetAllHandler
 	advanceWord        advanceCmd.AdvanceWordHandler
 	startSession       startCmd.StartSessionHandler
@@ -72,6 +79,7 @@ func NewHandler(
 	listCourses courseQueries.ListCoursesHandler,
 	getOverview courseQueries.GetOverviewHandler,
 	getProfile getProfileQry.GetProfileHandler,
+	getStats adminQueries.GetStatsHandler,
 	getAllAchievements achQueries.GetAllHandler,
 	achRepo achievement.Repository,
 	imgSvc achievement.ImageGenerator,
@@ -84,12 +92,14 @@ func NewHandler(
 	createReviewQuiz quizCmd.CreateReviewQuizHandler,
 	cacheMedia cacheCmd.CacheMediaHandler,
 	hasPendingReview reviewQueries.Handler,
+
 ) *Handler {
 
 	return &Handler{
 		listCourses:        listCourses,
 		getOverview:        getOverview,
 		getProfile:         getProfile,
+		getStats:           getStats,
 		getAllAchievements: getAllAchievements,
 		startSession:       startSession,
 		advanceWord:        advanceWord,
@@ -107,6 +117,7 @@ func NewHandler(
 
 // Handle routes incoming text messages based on content and user state.
 func (h *Handler) Handle(c telebot.Context) error {
+
 	ctxUser, ok := c.Get("dbUser").(user.User)
 	if !ok {
 		log.Printf("[MessageHandler] Critical: User not found in context for telegram ID %d", c.Sender().ID)
@@ -125,6 +136,7 @@ func (h *Handler) Handle(c telebot.Context) error {
 	// State-based routing
 	switch {
 	case ctxUser.LastMenu == StateMain:
+
 		if userInput == BtnStartLearning {
 			return h.handleStartLearning(c, ctxUser)
 		}
@@ -137,26 +149,61 @@ func (h *Handler) Handle(c telebot.Context) error {
 			return h.handleDailyReview(c, ctxUser)
 		}
 
+		if userInput == BtnAdminPanel {
+			return h.handleAdminPanel(c, ctxUser)
+		}
+
 	case ctxUser.LastMenu == StateCourseList:
+
 		return h.handleCourseSelection(c, ctxUser, userInput)
 
-	case ctxUser.LastMenu == "achievements_list":
-		// Handle the back button first
+	case ctxUser.LastMenu == StateAchievementList:
+
 		if userInput == BtnReturnToProfile {
 			return h.handleReturnToProfile(c, ctxUser)
 		} else {
 			return h.handleAchievementSelection(c, ctxUser, userInput)
 		}
 
+	case ctxUser.LastMenu == StateAdminPanel:
+
+		if userInput == keyboards.BtnAdminStats {
+			return h.handleGetStats(c)
+		}
+		if userInput == keyboards.BtnAdminBroadcast {
+			h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "admin_broadcast_pending")
+			return c.Send("لطفا پیامی که میخواهید برای همه کاربران ارسال شود را وارد کنید:")
+		}
+
+	case ctxUser.LastMenu == "admin_broadcast_pending":
+		// Any text received in this state is the message to be broadcast
+		broadcastCmd := adminCmd.BroadcastCommand{Message: userInput} // Assuming adminCmd alias
+
+		recipients, err := h.Broadcast.Handle(context.Background(), broadcastCmd) // Assuming dependency is `broadcast`
+		if err != nil {
+			log.Printf("Broadcast failed: %v", err)
+			return c.Send("ارسال پیام همگانی با خطا مواجه شد.")
+		}
+
+		// Send confirmation to the admin and return them to the admin panel
+		confirmationMsg := fmt.Sprintf("✅ پیام شما برای %d کاربر ارسال شد.", recipients)
+		c.Send(confirmationMsg)
+
+		h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "admin_panel")
+		return c.Send("به پنل ادمین بازگشتید.", keyboards.AdminPanelKeyboard())
+
 	case stateBase == StateCourseDetailsBase && stateID != "":
+
 		return h.handleCourseAction(c, ctxUser, userInput, stateID)
 
 	case stateBase == StateInCourseBase && stateID != "":
+
 		if userInput == keyboards.NextWordButtonText {
 			return h.handleNextWord(c, ctxUser, stateID)
 		}
 
 	case stateBase == StateProfileMenu:
+
 		if userInput == keyboards.BtnViewAchievements.Text {
 			return h.handleViewMyAchievements(c, ctxUser)
 		}
@@ -579,6 +626,31 @@ func (h *Handler) handleReturnToProfile(c telebot.Context, u user.User) error {
 	formattedProfile := formatters.FormatUserProfile(profileDTO)
 	h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateProfileMenu)
 	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
+}
+
+func (h *Handler) handleAdminPanel(c telebot.Context, u user.User) error {
+
+	if !u.IsAdmin {
+		return nil // Ignore if a non-admin somehow sends this text
+	}
+	// Set the user's state to the admin panel
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, "admin_panel")
+	// Send the new admin keyboard
+	return c.Send("به پنل ادمین خوش آمدید.", keyboards.AdminPanelKeyboard())
+
+}
+
+func (h *Handler) handleGetStats(c telebot.Context) error {
+	stats, err := h.getStats.Handle(context.Background())
+	if err != nil {
+		log.Printf("Failed to get admin stats: %v", err)
+		return c.Send("خطا در دریافت آمار.")
+	}
+
+	// Format the message and send it back to the admin
+	statsMsg := fmt.Sprintf("📊 *آمار ربات*\n\nتعداد کل کاربران: *%d*", stats.TotalUsers)
+	return c.Send(statsMsg, telebot.ModeMarkdownV2)
+
 }
 
 func (h *Handler) handleAchievementSelection(c telebot.Context, u user.User, userInput string) error {

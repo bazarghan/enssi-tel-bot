@@ -54,7 +54,7 @@ func FormatWordForDisplay(w word.Word) string {
 	if len(persianMeaningsByPOS) > 0 {
 		mb.WriteString("*معانی فارسی* :\n>\n")
 		for posTitle, meanings := range persianMeaningsByPOS {
-			mb.WriteString(fmt.Sprintf("> `[ %s ]` :\n", tgmarkdown.Escape(posTitle)))
+			mb.WriteString(fmt.Sprintf("> `[%s]` \n", tgmarkdown.Escape(posTitle)))
 			for _, m := range meanings {
 				mb.WriteString(fmt.Sprintf(">  \\- %s\n", tgmarkdown.Escape(m)))
 			}
@@ -65,11 +65,11 @@ func FormatWordForDisplay(w word.Word) string {
 	// --- Definitions ---
 	if w.PrimaryDef != "" {
 		mb.WriteString("\n*تعریف اصلی*:\n")
-		mb.WriteString(fmt.Sprintf(">  \n> %s\n>  \n\n", tgmarkdown.Escape(w.PrimaryDef)))
+		mb.WriteString(fmt.Sprintf(">  \n>%s\n>  \n\n", tgmarkdown.Escape(w.PrimaryDef)))
 	}
 	if w.SecondaryDef != "" {
 		mb.WriteString("*تعریف بلند*:\n")
-		mb.WriteString(fmt.Sprintf(">  \n> %s\n>  \n\n", tgmarkdown.Escape(w.SecondaryDef)))
+		mb.WriteString(fmt.Sprintf(">  \n>%s\n>  \n\n", tgmarkdown.Escape(w.SecondaryDef)))
 	}
 
 	// --- English Meanings ---
@@ -84,7 +84,7 @@ func FormatWordForDisplay(w word.Word) string {
 	if len(englishMeaningsByPOS) > 0 {
 		mb.WriteString("*معانی انگلیسی* :\n>\n")
 		for posTitle, meanings := range englishMeaningsByPOS {
-			mb.WriteString(fmt.Sprintf("> `[ %s ]` :\n", tgmarkdown.Escape(strings.ToLower(posTitle))))
+			mb.WriteString(fmt.Sprintf("> `[%s]` \n", tgmarkdown.Escape(strings.ToLower(posTitle))))
 			for _, m := range meanings {
 				mb.WriteString(fmt.Sprintf("> \\- %s\n", tgmarkdown.Escape(m)))
 			}
