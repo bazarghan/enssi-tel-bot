@@ -64,12 +64,12 @@ func FormatWordForDisplay(w word.Word) string {
 
 	// --- Definitions ---
 	if w.PrimaryDef != "" {
-		mb.WriteString("*تعریف اصلی*:\n")
-		mb.WriteString(fmt.Sprintf("> %s\n\n", tgmarkdown.Escape(w.PrimaryDef)))
+		mb.WriteString("\n*تعریف اصلی*:\n")
+		mb.WriteString(fmt.Sprintf(">  \n> %s\n>  \n\n", tgmarkdown.Escape(w.PrimaryDef)))
 	}
 	if w.SecondaryDef != "" {
 		mb.WriteString("*تعریف بلند*:\n")
-		mb.WriteString(fmt.Sprintf("> %s\n\n", tgmarkdown.Escape(w.SecondaryDef)))
+		mb.WriteString(fmt.Sprintf(">  \n> %s\n>  \n\n", tgmarkdown.Escape(w.SecondaryDef)))
 	}
 
 	// --- English Meanings ---
@@ -88,9 +88,10 @@ func FormatWordForDisplay(w word.Word) string {
 			for _, m := range meanings {
 				mb.WriteString(fmt.Sprintf("> \\- %s\n", tgmarkdown.Escape(m)))
 			}
-			mb.WriteString("> \n")
+			mb.WriteString(">  \n")
 		}
 	}
+	mb.WriteString("\\.\n")
 
 	finalStr := mb.String()
 	if finalStr == "" {
