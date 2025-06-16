@@ -9,10 +9,19 @@ import (
 
 // FormatCourseListMessage creates a formatted message for the list of courses.
 func FormatCourseListMessage(courses []dto.CourseSummary) string {
+
+	message := "حالا که تصمیم گرفتی یادگیری رو شروع کنی تو این مرحله باید مجموعه ای که می خوای رو انتخاب کنی و ادامه بدی 🙂"
 	if len(courses) == 0 {
-		return tgmarkdown.Escape("در حال حاضر دوره‌ای برای نمایش وجود ندارد.")
+		message = "در حال حاضر هیچ دوره ای برای نمایش وجود ندارد."
 	}
-	return tgmarkdown.Escape("لطفا یک دوره را برای شروع انتخاب کنید:")
+
+	var sb strings.Builder
+
+	sb.WriteString("\\.\n")
+	sb.WriteString(">  \n")
+	sb.WriteString(fmt.Sprintf(">%s\n>  \n\n\\.\n", tgmarkdown.Escape(message)))
+
+	return sb.String()
 }
 
 // FormatCourseOverview formats the detailed course view.

@@ -207,7 +207,7 @@ func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 		log.Printf("[handleStartLearning] Failed to update user state for UserID %d: %v", u.ID, err)
 	}
 
-	return c.Send(msg, kb)
+	return c.Send(msg, kb, telebot.ModeMarkdownV2)
 }
 
 func (h *Handler) handleGetProfile(c telebot.Context, u user.User) error {
