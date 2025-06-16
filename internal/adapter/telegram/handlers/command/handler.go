@@ -12,9 +12,11 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
+	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 	"gopkg.in/telebot.v4"
@@ -22,10 +24,12 @@ import (
 
 // Handler holds dependencies for command handlers.
 type Handler struct {
-	registerUser registerCmd.RegisterUserHandler
-	getProfile   getProfileQry.GetProfileHandler
-	userRepo     user.Repository
-	quizRepo     quiz.Repository
+	registerUser     registerCmd.RegisterUserHandler
+	getProfile       getProfileQry.GetProfileHandler
+	userRepo         user.Repository
+	quizRepo         quiz.Repository
+	wordRepo         word.Repository
+	hasPendingReview reviewQueries.Handler
 }
 
 // NewHandler creates a new command handler.
@@ -34,12 +38,16 @@ func NewHandler(
 	getProfile getProfileQry.GetProfileHandler,
 	userRepo user.Repository,
 	quizRepo quiz.Repository,
+	wordRepo word.Repository,
+	hasPendingReview reviewQueries.Handler,
 ) *Handler {
 	return &Handler{
-		registerUser: registerUser,
-		getProfile:   getProfile,
-		userRepo:     userRepo,
-		quizRepo:     quizRepo,
+		registerUser:     registerUser,
+		getProfile:       getProfile,
+		userRepo:         userRepo,
+		quizRepo:         quizRepo,
+		wordRepo:         wordRepo,
+		hasPendingReview: hasPendingReview,
 	}
 }
 
@@ -92,11 +100,18 @@ func (h *Handler) HandleStart(c telebot.Context) error {
 		startText = "سلام! 👋 به ربات آموزش زبان خوش آمدید. برای شروع یادگیری از دکame‌های زیر استفاده کنید."
 	}
 
-	// Check for a pending daily review quiz
-	pendingReview, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), result.User.ID)
-	hasPendingReview := err == nil && pendingReview.ID != 0
+	// --- THIS IS THE REFACTORED CODE ---
+	query := reviewQueries.HasPendingReviewQuery{UserID: result.User.ID}
+	hasPendingReview, err := h.hasPendingReview.Handle(context.Background(), query)
+	if err != nil {
+		// Log the error but proceed with a non-review menu as a safe default
+		log.Printf("Could not check for pending review for user %d: %v", result.User.ID, err)
+		hasPendingReview = false
+	}
+	// --- END OF REFACTORED CODE ---
 
 	mainMenuKeyboard := keyboards.NewMainMenu(result.User.IsAdmin, hasPendingReview)
+
 	return c.Send(tgmarkdown.Escape(startText), mainMenuKeyboard, telebot.ModeMarkdownV2)
 }
 

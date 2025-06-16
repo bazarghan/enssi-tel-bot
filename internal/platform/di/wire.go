@@ -28,6 +28,7 @@ import (
 
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
+	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	userQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 
 	"github.com/google/wire"
@@ -62,6 +63,10 @@ var courseSet = wire.NewSet(
 	courseCmd.NewStartSessionHandler,
 	courseCmd.NewAdvanceWordHandler,
 	courseCmd.NewHandleQuizCompletionHandler,
+)
+
+var reviewSet = wire.NewSet(
+	reviewQueries.NewHandler,
 )
 
 var wordSet = wire.NewSet(
@@ -105,9 +110,10 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 		userSet,
 		courseSet,
 		wordSet,
-		wordCacheSet, // Add the new set
+		wordCacheSet,
 		quizSet,
 		achievementSet,
+		reviewSet,
 		imagegenSet,
 		command.NewHandler,
 		message.NewHandler,

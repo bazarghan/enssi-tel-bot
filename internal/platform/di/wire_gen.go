@@ -27,6 +27,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	user2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 	"github.com/google/wire"
 	"gopkg.in/telebot.v4"
@@ -42,7 +43,9 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	achievementRepository := postgres.NewAchievementRepository(db)
 	getProfileHandler := user2.NewGetProfileHandler(userRepository, achievementRepository)
 	quizRepository := postgres.NewQuizRepository(db)
-	handler := command.NewHandler(registerUserHandler, getProfileHandler, userRepository, quizRepository)
+	wordRepository := postgres.NewWordRepository(db)
+	handler := review.NewHandler(userRepository, wordRepository)
+	commandHandler := command.NewHandler(registerUserHandler, getProfileHandler, userRepository, quizRepository, wordRepository, handler)
 	courseRepository := postgres.NewCourseRepository(db)
 	listCoursesHandler := course.NewListCoursesHandler(courseRepository)
 	getOverviewHandler := course.NewGetOverviewHandler(courseRepository)
@@ -52,18 +55,18 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 	if err != nil {
 		return nil, err
 	}
-	wordRepository := postgres.NewWordRepository(db)
 	createCourseQuizHandler := quiz.NewCreateCourseQuizHandler(quizRepository, wordRepository)
 	advanceWordHandler := course2.NewAdvanceWordHandler(courseRepository, wordRepository, createCourseQuizHandler)
 	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
+	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
 	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, cacheMediaHandler)
+	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, handler)
 	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
 	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	callbackHandler := callback.NewHandler(submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
 	botApp := &BotApp{
-		CommandHandler:  handler,
+		CommandHandler:  commandHandler,
 		MessageHandler:  messageHandler,
 		CallbackHandler: callbackHandler,
 	}
@@ -113,6 +116,8 @@ type WorkerApp struct {
 var userSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(user3.Repository), new(*postgres.UserRepository)), user.NewRegisterUserHandler, user2.NewGetProfileHandler)
 
 var courseSet = wire.NewSet(postgres.NewCourseRepository, wire.Bind(new(course3.Repository), new(*postgres.CourseRepository)), course.NewListCoursesHandler, course.NewGetOverviewHandler, course2.NewStartSessionHandler, course2.NewAdvanceWordHandler, course2.NewHandleQuizCompletionHandler)
+
+var reviewSet = wire.NewSet(review.NewHandler)
 
 var wordSet = wire.NewSet(postgres.NewWordRepository, wire.Bind(new(word2.Repository), new(*postgres.WordRepository)))
 

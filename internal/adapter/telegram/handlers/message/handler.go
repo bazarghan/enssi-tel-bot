@@ -10,12 +10,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
@@ -24,9 +26,11 @@ import (
 
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
+	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	cacheCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
+	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 
 	"gopkg.in/telebot.v4"
@@ -55,9 +59,12 @@ type Handler struct {
 	userRepo           user.Repository
 	quizRepo           quiz.Repository
 	courseRepo         course.Repository
+	wordRepo           word.Repository
+	createReviewQuiz   quizCmd.CreateReviewQuizHandler
 	cacheMedia         cacheCmd.CacheMediaHandler
 	achRepo            achievement.Repository
 	imgSvc             achievement.ImageGenerator
+	hasPendingReview   reviewQueries.Handler
 }
 
 // NewHandler creates a new message handler.
@@ -73,7 +80,10 @@ func NewHandler(
 	userRepo user.Repository,
 	courseRepo course.Repository,
 	quizRepo quiz.Repository,
+	wordRepo word.Repository,
+	createReviewQuiz quizCmd.CreateReviewQuizHandler,
 	cacheMedia cacheCmd.CacheMediaHandler,
+	hasPendingReview reviewQueries.Handler,
 ) *Handler {
 
 	return &Handler{
@@ -86,9 +96,12 @@ func NewHandler(
 		userRepo:           userRepo,
 		courseRepo:         courseRepo,
 		achRepo:            achRepo,
-		imgSvc:             imgSvc,
 		quizRepo:           quizRepo,
+		wordRepo:           wordRepo,
+		createReviewQuiz:   createReviewQuiz,
+		imgSvc:             imgSvc,
 		cacheMedia:         cacheMedia, // Dependency assigned here
+		hasPendingReview:   hasPendingReview,
 	}
 }
 
@@ -156,11 +169,18 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 
-	pendingReview, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID)
-	if err == nil && pendingReview.ID != 0 {
+	reviewQuery := reviewQueries.HasPendingReviewQuery{UserID: u.ID}
+	hasPendingReview, err := h.hasPendingReview.Handle(context.Background(), reviewQuery)
+	if err != nil {
+		// Log the error but proceed with a non-review menu as a safe default
+		log.Printf("Could not check for pending review for user %d: %v", u.ID, err)
+		hasPendingReview = false
+	}
+
+	if hasPendingReview {
 		// If a pending review exists, block the user and tell them what to do.
 		blockMsg := "شما یک آزمون مرور روزانه برای انجام دادن دارید. لطفا ابتدا آن را با استفاده از دکمه 'مرور روزانه' تکمیل کنید."
-		return c.Send(tgmarkdown.Escape(blockMsg))
+		return c.Send(blockMsg)
 	}
 
 	query := courseQueries.ListCoursesQuery{UserID: u.ID}
@@ -297,10 +317,15 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 		}
 	}
 
-	// --- check here ---
-	pendingReview, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID)
-	hasPendingReview := err == nil && pendingReview.ID != 0
-	// --- End of check ---
+	// --- THIS IS THE REFACTORED CODE ---
+	query := reviewQueries.HasPendingReviewQuery{UserID: u.ID}
+	hasPendingReview, err := h.hasPendingReview.Handle(context.Background(), query)
+	if err != nil {
+		// Log the error but proceed with a non-review menu as a safe default
+		log.Printf("Could not check for pending review for user %d: %v", u.ID, err)
+		hasPendingReview = false
+	}
+	// --- END OF REFACTORED CODE ---
 
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateMain); err != nil {
 		log.Printf("[handleReturnToMainMenu] Failed to update user state for UserID %d: %v", u.ID, err)
@@ -500,21 +525,40 @@ func (h *Handler) sendWordAudioByUrlAndCache(c telebot.Context, pronData startCm
 }
 
 func (h *Handler) handleDailyReview(c telebot.Context, u user.User) error {
-	attempt, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID)
-	if err != nil {
-		return c.Send("خطا در یافتن آزمون مرور روزانه شما. لطفا دوباره تلاش کنید.")
+
+	// 1. First, check for any old pending review and delete it to ensure a fresh start.
+	if oldAttempt, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID); err == nil && oldAttempt.ID != 0 {
+		log.Printf("Found and deleting stale review attempt %d for user %d.", oldAttempt.ID, u.ID)
+		h.quizRepo.DeleteAttempt(context.Background(), oldAttempt.ID)
 	}
 
-	// Start the quiz by sending the first question
-	// This reuses the same logic from sendLearningContext
+	// 2. Now, find ALL words that are currently due for review.
+	wordsToReview, err := h.wordRepo.GetWordsDueForReview(context.Background(), u.ID, time.Now())
+	if err != nil {
+		log.Printf("Failed to get words for review for user %d: %v", u.ID, err)
+		return c.Send("خطا در آماده سازی آزمون مرور شما.")
+	}
+
+	if len(wordsToReview) == 0 {
+		return c.Send("شما در حال حاضر هیچ کلمه ای برای مرور ندارید. آفرین!")
+	}
+
+	// 3. Create a brand new, fresh quiz with these words.
+	reviewCmd := quizCmd.CreateReviewQuizCommand{UserID: u.ID, WordsToReview: wordsToReview}
+	newQuiz, err := h.createReviewQuiz.Handle(context.Background(), reviewCmd)
+	if err != nil {
+		log.Printf("Failed to create fresh review quiz for user %d: %v", u.ID, err)
+		return c.Send("خطا در ساخت آزمون مرور شما.")
+	}
+
+	// 4. Start the new quiz by sending the first question.
+	attempt := newQuiz.QuizAttempt
 	question := attempt.Questions[attempt.CurrentQuestionIndex]
 
-	// Update the user's state
-	newState := fmt.Sprintf("in_quiz:0:%d", attempt.ID) // courseID is 0 for review
+	newState := fmt.Sprintf("in_quiz:0:%d", attempt.ID)
 	h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
 
-	// Shuffle options and send the question
-	rand.Shuffle(len(question.Options), func(i, j int) { /* shuffle logic */ })
+	rand.Shuffle(len(question.Options), func(i, j int) { question.Options[i], question.Options[j] = question.Options[j], question.Options[i] })
 	msg := formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
 	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID)
 	sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
@@ -522,7 +566,6 @@ func (h *Handler) handleDailyReview(c telebot.Context, u user.User) error {
 		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
 	}
 	return err
-
 }
 
 func (h *Handler) handleReturnToProfile(c telebot.Context, u user.User) error {
