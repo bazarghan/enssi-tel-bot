@@ -16,7 +16,6 @@ go.work.sum
 # Build
 /bin/
 /dist/
-/pkg/
 
 # IDE
 .vscode/
