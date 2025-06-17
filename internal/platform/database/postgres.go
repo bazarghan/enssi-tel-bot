@@ -2,28 +2,26 @@ package database
 
 import (
 	"fmt"
-	"os"
+	"strconv"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-// ConnectDB establishes a new connection to the PostgreSQL database using environment variables.
-func ConnectDB() (*gorm.DB, error) {
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	dbSSLMode := os.Getenv("DB_SSLMODE")
+func ConnectDB(cfg config.Database) (*gorm.DB, error) {
+	// Validate required fields
+	if cfg.Host == "" || cfg.User == "" || cfg.Password == "" || cfg.Name == "" || cfg.Port == 0 {
+		return nil, fmt.Errorf("database configuration is incomplete")
+	}
 
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
-		dbHost,
-		dbPort,
-		dbUser,
-		dbPassword,
-		dbName,
-		dbSSLMode,
+		cfg.Host,
+		strconv.Itoa(cfg.Port), // Convert int port to string
+		cfg.User,
+		cfg.Password,
+		cfg.Name,
+		cfg.SSLMode,
 	)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -33,3 +31,4 @@ func ConnectDB() (*gorm.DB, error) {
 
 	return db, nil
 }
+

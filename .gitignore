@@ -27,6 +27,7 @@ go.work.sum
 # Environment
 .env
 .env.local
+configs/config.yaml
 
 # OS
 .DS_Store

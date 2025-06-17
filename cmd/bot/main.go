@@ -2,27 +2,27 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/database" // CORRECTED IMPORT
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/database"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	// Load configuration
-	err := godotenv.Load()
+	// 1. Load centralized configuration
+	cfg, err := config.LoadConfig("./configs") // Point to the configs directory
 	if err != nil {
-		log.Println("Warning: .env file not found, relying on environment variables.")
-	}
-	token := os.Getenv("TEL_BOT_TOKEN")
-	if token == "" {
-		log.Fatal("FATAL: TEL_BOT_TOKEN environment variable not set.")
+		log.Fatalf("FATAL: Could not load configuration: %v", err)
 	}
 
-	// Initialize database connection using the new platform package
-	dbConnection, err := database.ConnectDB() // CORRECTED CALL
+	// Validate essential config
+	if cfg.Telegram.Token == "" {
+		log.Fatal("FATAL: Telegram token (ENSSI_TELEGRAM_TOKEN) is not set.")
+	}
+
+	// 2. Initialize database connection using the config struct
+	dbConnection, err := database.ConnectDB(cfg.Database)
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize database connection: %v", err)
 	}
@@ -36,32 +36,30 @@ func main() {
 	}
 	log.Println("Application services and handlers initialized successfully.")
 
-	// We need the RegisterUserHandler specifically for the middleware, so we initialize it here as well.
-	// In a more advanced setup, the DI container could provide the whole configured middleware chain.
+	// We need the RegisterUserHandler specifically for the middleware
 	registerUserHandler := di.InitializeRegisterUserHandler(dbConnection)
 
-	// Initialize the bot instance, passing in the configured handlers
+	// 3. Initialize the bot instance, passing the token from our config struct
 	botInstance, err := telegram.InitializeBot(
-		token,
+		cfg.Telegram.Token,
 		botApp.CommandHandler,
 		botApp.MessageHandler,
 		botApp.CallbackHandler,
 		registerUserHandler,
 	)
-
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize bot: %v", err)
 	}
 
-	// 4. NOW THAT WE HAVE THE DB AND THE BOT, initialize the remaining handler
+	// Initialize the broadcast handler
 	broadcastHandler, err := di.InitializeBroadcastHandler(dbConnection, botInstance)
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize broadcast handler: %v", err)
 	}
 
-	// 5. Manually inject the broadcast handler into our message handler's public field
+	// Manually inject the broadcast handler into our message handler
 	botApp.MessageHandler.Broadcast = broadcastHandler
-	log.Println("Application services and handlers initialized successfully.")
+	log.Println("Broadcast handler injected successfully.")
 
 	log.Println("Bot starting...")
 	botInstance.Start()

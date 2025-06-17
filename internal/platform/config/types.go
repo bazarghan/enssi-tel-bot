@@ -1,1 +1,22 @@
 package config
+
+// Config is the top-level struct holding all application configuration.
+type Config struct {
+	Database Database `mapstructure:"database"`
+	Telegram Telegram `mapstructure:"telegram"`
+}
+
+// Database holds all configuration for the database connection.
+type Database struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Name     string `mapstructure:"name"`
+	SSLMode  string `mapstructure:"sslmode"`
+}
+
+// Telegram holds all configuration related to the Telegram Bot API.
+type Telegram struct {
+	Token string `mapstructure:"token"`
+}
