@@ -463,11 +463,22 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 		}
 
 	case startCmd.CourseEnded:
+
 		newState = StateCourseList
 		msg = tgmarkdown.Escape(res.MessageToUser)
 		kb = keyboards.BackToCourseListKeyboard()
 		sendErr = c.Send(msg, kb, telebot.ModeMarkdownV2)
+
 	case startCmd.ShowQuiz:
+
+		if res.IsNewQuiz {
+			introMsg := "شما این بخش را به پایان رساندید! 🎉 حالا بیایید ببینیم چقدر یاد گرفته اید. یک آزمون کوتاه در پیش است."
+			err := c.Send(tgmarkdown.Escape(introMsg), keyboards.QuizKeyboard(), telebot.ModeMarkdownV2)
+			if err != nil {
+				log.Printf("something went wrong when sending the keyboard %w", err)
+			}
+		}
+
 		attempt := res.QuizAttempt
 		question := attempt.Questions[attempt.CurrentQuestionIndex]
 		newState = fmt.Sprintf("in_quiz:%d:%d", courseID, attempt.ID) // A more specific state

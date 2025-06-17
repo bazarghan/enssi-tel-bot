@@ -19,6 +19,7 @@ type CreateCourseQuizCommand struct {
 // CreateCourseQuizResult is the output.
 type CreateCourseQuizResult struct {
 	QuizAttempt quiz.Attempt
+	IsNew       bool
 }
 
 // CreateCourseQuizHandler creates a quiz for a block of words in a course.
@@ -72,5 +73,5 @@ func (h CreateCourseQuizHandler) Handle(ctx context.Context, cmd CreateCourseQui
 		return CreateCourseQuizResult{}, fmt.Errorf("could not create quiz attempt: %w", err)
 	}
 
-	return CreateCourseQuizResult{QuizAttempt: newAttempt}, nil
+	return CreateCourseQuizResult{QuizAttempt: newAttempt, IsNew: true}, nil
 }

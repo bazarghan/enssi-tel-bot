@@ -50,6 +50,7 @@ type StartSessionResult struct {
 	Word                 WordDisplayData
 	MessageToUser        string
 	QuizAttempt          quiz.Attempt
+	IsNewQuiz            bool
 	UpdatedAchievementID uint
 }
 
@@ -102,6 +103,7 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 			return StartSessionResult{
 				NextStep:    ShowQuiz,
 				QuizAttempt: quizResult.QuizAttempt,
+				IsNewQuiz:   quizResult.IsNew,
 			}, nil
 		}
 	}

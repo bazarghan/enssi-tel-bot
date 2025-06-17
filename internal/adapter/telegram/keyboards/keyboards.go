@@ -29,6 +29,17 @@ func AdminPanelKeyboard() *telebot.ReplyMarkup {
 	return menu
 }
 
+func QuizKeyboard() *telebot.ReplyMarkup {
+
+	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
+
+	menu.Reply(
+		menu.Row(menu.Text(BtnReturnToMainMenu)),
+	)
+	return menu
+
+}
+
 // NewMainMenu creates the main menu keyboard, conditionally showing admin buttons.
 func NewMainMenu(isAdmin bool, hasPendingReview bool) *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}

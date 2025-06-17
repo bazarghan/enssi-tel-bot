@@ -98,6 +98,7 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 			return AdvanceWordResult{
 				NextStep:    ShowQuiz,
 				QuizAttempt: quizResult.QuizAttempt,
+				IsNewQuiz:   quizResult.IsNew,
 			}, nil
 		}
 	}
