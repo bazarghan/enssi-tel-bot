@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: enssi_postgres
+    restart: unless-stopped
+    environment:
+      # These credentials should match what you have in `configs/config.yaml`
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_db_password # IMPORTANT: Change this password
+      POSTGRES_DB: enssi_bot_db
+    ports:
+      # Expose the database port to the host machine for local debugging/access.
+      - "5432:5432"
+    volumes:
+      # Persist database data on the host machine.
+      - postgres_data:/var/lib/postgresql/data
+
+  # Main Bot Application Service
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enssi_bot_app
+    restart: unless-stopped
+    command: ["./enssi-bot"] # This command runs the bot binary
+    depends_on:
+      - db # Ensures the database is started before the bot
+    volumes:
+      # Mount the configs directory to allow for live changes without rebuilding.
+      - ./configs:/root/configs
+    env_file:
+      # Load secrets (like the bot token) from a .env file.
+      - .env
+
+  # Background Worker Service
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enssi_worker_app
+    restart: unless-stopped
+    command: ["./enssi-worker"] # This command runs the worker binary
+    depends_on:
+      - db # Ensures the database is started before the worker
+    volumes:
+      - ./configs:/root/configs
+    env_file:
+      - .env
+
+# Define the named volume for persisting database data
+volumes:
+  postgres_data:
