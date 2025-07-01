@@ -18,6 +18,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
@@ -35,6 +36,7 @@ const (
 
 // Handler holds dependencies for all callback handlers.
 type Handler struct {
+	logger               logger.Logger
 	submitAnswer         submitCmd.SubmitAnswerHandler
 	handleQuizCompletion courseCmd.HandleQuizCompletionHandler
 	quizRepo             quiz.Repository
@@ -46,6 +48,7 @@ type Handler struct {
 
 // NewHandler creates a new callback handler with all its dependencies.
 func NewHandler(
+	appLogger logger.Logger,
 	submitAnswer submitCmd.SubmitAnswerHandler,
 	handleQuizCompletion courseCmd.HandleQuizCompletionHandler,
 	quizRepo quiz.Repository,
@@ -55,6 +58,7 @@ func NewHandler(
 	getOverview courseQueries.GetOverviewHandler,
 ) *Handler {
 	return &Handler{
+		logger:               appLogger,
 		submitAnswer:         submitAnswer,
 		handleQuizCompletion: handleQuizCompletion,
 		quizRepo:             quizRepo,

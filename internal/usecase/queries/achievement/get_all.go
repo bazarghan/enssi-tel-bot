@@ -3,6 +3,7 @@ package achievement
 import (
 	"context"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // GetAllResult is a DTO for the use case layer.
@@ -14,12 +15,13 @@ type GetAllResult struct {
 
 // GetAllHandler processes the query to list all defined achievements.
 type GetAllHandler struct {
-	repo achievement.Repository
+	logger logger.Logger
+	repo   achievement.Repository
 }
 
 // NewGetAllHandler creates a new handler.
-func NewGetAllHandler(repo achievement.Repository) GetAllHandler {
-	return GetAllHandler{repo: repo}
+func NewGetAllHandler(appLogger logger.Logger, repo achievement.Repository) GetAllHandler {
+	return GetAllHandler{logger: appLogger, repo: repo}
 }
 
 // Handle executes the query.

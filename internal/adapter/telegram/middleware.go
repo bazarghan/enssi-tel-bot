@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
@@ -69,20 +70,25 @@ func UserLockMiddleware(lockManager *UserLockManager) telebot.MiddlewareFunc {
 }
 
 // ErrorHandlerMiddleware logs handler errors and notifies the user.
-func ErrorHandlerMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
-	return func(c telebot.Context) error {
-		if err := next(c); err != nil {
-			log.Printf("[Handler ERROR] user=%d err=%v", c.Sender().ID, err)
-			// Simplified error response
-			if c.Callback() != nil {
-				_ = c.Respond(&telebot.CallbackResponse{
-					Text:      "An unexpected error occurred.",
-					ShowAlert: true,
-				})
-			} else {
-				_ = c.Send("An unexpected error occurred. Please try again.")
+func ErrorHandlerMiddleware(appLogger logger.Logger) telebot.MiddlewareFunc {
+	return func(next telebot.HandlerFunc) telebot.HandlerFunc {
+		return func(c telebot.Context) error {
+			if err := next(c); err != nil {
+				appLogger.Error(
+					"Handler error",
+					"error", err,
+					"senderID", c.Sender().ID,
+				)
+				if c.Callback() != nil {
+					_ = c.Respond(&telebot.CallbackResponse{
+						Text:      "An unexpected error occurred.",
+						ShowAlert: true,
+					})
+				} else {
+					_ = c.Send("An unexpected error occurred. Please try again.")
+				}
 			}
+			return nil // Error is handled
 		}
-		return nil // Error is handled
 	}
 }

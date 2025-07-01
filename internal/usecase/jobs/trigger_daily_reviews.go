@@ -8,6 +8,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"log"
 	"time"
@@ -15,6 +17,7 @@ import (
 
 // TriggerDailyReviewsJob is a use case representing the entire daily job.
 type TriggerDailyReviewsJob struct {
+	logger           logger.Logger
 	userRepo         user.Repository
 	wordRepo         word.Repository
 	quizRepo         quiz.Repository
@@ -24,6 +27,7 @@ type TriggerDailyReviewsJob struct {
 
 // NewTriggerDailyReviewsJob creates a new job handler.
 func NewTriggerDailyReviewsJob(
+	appLogger logger.Logger,
 	userRepo user.Repository,
 	wordRepo word.Repository,
 	quizRepo quiz.Repository,
@@ -31,6 +35,7 @@ func NewTriggerDailyReviewsJob(
 	notifier notification.Notifier,
 ) *TriggerDailyReviewsJob {
 	return &TriggerDailyReviewsJob{
+		logger:           appLogger,
 		userRepo:         userRepo,
 		wordRepo:         wordRepo,
 		quizRepo:         quizRepo,

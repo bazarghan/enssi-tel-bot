@@ -4,6 +4,7 @@ package config
 type Config struct {
 	Database Database `mapstructure:"database"`
 	Telegram Telegram `mapstructure:"telegram"`
+	Log      Log      `mapstructure:"log"`
 }
 
 // Database holds all configuration for the database connection.
@@ -19,4 +20,8 @@ type Database struct {
 // Telegram holds all configuration related to the Telegram Bot API.
 type Telegram struct {
 	Token string `mapstructure:"token"`
+}
+
+type Log struct {
+	Level string `mapstructure:"level"`
 }

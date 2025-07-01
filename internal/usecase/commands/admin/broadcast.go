@@ -7,6 +7,7 @@ import (
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 type BroadcastCommand struct {
@@ -14,12 +15,22 @@ type BroadcastCommand struct {
 }
 
 type BroadcastHandler struct {
+	logger   logger.Logger
 	userRepo user.Repository
 	notifier notification.Notifier
 }
 
-func NewBroadcastHandler(userRepo user.Repository, notifier notification.Notifier) BroadcastHandler {
-	return BroadcastHandler{userRepo: userRepo, notifier: notifier}
+func NewBroadcastHandler(
+	appLogger logger.Logger,
+	userRepo user.Repository,
+	notifier notification.Notifier,
+) BroadcastHandler {
+	return BroadcastHandler{
+
+		logger:   appLogger,
+		userRepo: userRepo,
+		notifier: notifier,
+	}
 }
 
 func (h BroadcastHandler) Handle(ctx context.Context, cmd BroadcastCommand) (recipients int, err error) {

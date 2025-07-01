@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	"log"
 )
 
@@ -22,12 +23,13 @@ type CourseSummary struct {
 
 // ListCoursesHandler processes the query to list all courses.
 type ListCoursesHandler struct {
+	logger     logger.Logger
 	courseRepo course.Repository
 }
 
 // NewListCoursesHandler creates a new handler.
-func NewListCoursesHandler(courseRepo course.Repository) ListCoursesHandler {
-	return ListCoursesHandler{courseRepo: courseRepo}
+func NewListCoursesHandler(appLogger logger.Logger, courseRepo course.Repository) ListCoursesHandler {
+	return ListCoursesHandler{logger: appLogger, courseRepo: courseRepo}
 }
 
 // Handle executes the query.

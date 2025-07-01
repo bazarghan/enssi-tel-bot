@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
-	"log"
 )
 
 type Step int
@@ -56,6 +58,7 @@ type StartSessionResult struct {
 
 // StartSessionHandler processes the command.
 type StartSessionHandler struct {
+	logger           logger.Logger
 	courseRepo       course.Repository
 	wordRepo         word.Repository
 	createCourseQuiz quizCmd.CreateCourseQuizHandler
@@ -63,11 +66,13 @@ type StartSessionHandler struct {
 
 // NewStartSessionHandler creates a new handler.
 func NewStartSessionHandler(
+	appLogger logger.Logger,
 	courseRepo course.Repository,
 	wordRepo word.Repository,
 	createCourseQuiz quizCmd.CreateCourseQuizHandler,
 ) StartSessionHandler {
 	return StartSessionHandler{
+		logger:           appLogger,
 		courseRepo:       courseRepo,
 		wordRepo:         wordRepo,
 		createCourseQuiz: createCourseQuiz,

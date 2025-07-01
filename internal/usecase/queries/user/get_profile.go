@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	"log"
 	"time"
 )
@@ -29,6 +30,7 @@ type GetProfileResult struct {
 
 // GetProfileHandler processes the query.
 type GetProfileHandler struct {
+	logger   logger.Logger
 	userRepo user.Repository
 	achRepo  achievement.Repository
 	// Dependencies on other repositories (WordStudied, UserCourse) will be added in later slices.
@@ -41,8 +43,16 @@ type AchievementResult struct {
 }
 
 // NewGetProfileHandler creates a new handler.
-func NewGetProfileHandler(userRepo user.Repository, achRepo achievement.Repository) GetProfileHandler {
-	return GetProfileHandler{userRepo: userRepo, achRepo: achRepo}
+func NewGetProfileHandler(
+	appLogger logger.Logger,
+	userRepo user.Repository,
+	achRepo achievement.Repository,
+) GetProfileHandler {
+	return GetProfileHandler{
+		logger:   appLogger,
+		userRepo: userRepo,
+		achRepo:  achRepo,
+	}
 }
 
 // Handle executes the query.

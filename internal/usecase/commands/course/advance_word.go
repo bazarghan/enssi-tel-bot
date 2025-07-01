@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	"log"
 )
@@ -22,6 +24,7 @@ type AdvanceWordResult = StartSessionResult
 
 // AdvanceWordHandler processes the command.
 type AdvanceWordHandler struct {
+	logger           logger.Logger
 	courseRepo       course.Repository
 	wordRepo         word.Repository
 	createCourseQuiz quizCmd.CreateCourseQuizHandler
@@ -29,11 +32,14 @@ type AdvanceWordHandler struct {
 
 // NewAdvanceWordHandler creates a new handler.
 func NewAdvanceWordHandler(
+
+	appLogger logger.Logger,
 	courseRepo course.Repository,
 	wordRepo word.Repository,
 	createCourseQuiz quizCmd.CreateCourseQuizHandler,
 ) AdvanceWordHandler {
 	return AdvanceWordHandler{
+		logger:           appLogger,
 		courseRepo:       courseRepo,
 		wordRepo:         wordRepo,
 		createCourseQuiz: createCourseQuiz,

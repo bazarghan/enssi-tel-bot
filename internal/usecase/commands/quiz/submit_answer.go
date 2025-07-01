@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	"log"
 )
 
@@ -25,13 +26,22 @@ type SubmitAnswerResult struct {
 
 // SubmitAnswerHandler processes a user's quiz answer.
 type SubmitAnswerHandler struct {
+	logger   logger.Logger
 	quizRepo quiz.Repository
 	wordRepo word.Repository
 }
 
 // NewSubmitAnswerHandler creates a new handler.
-func NewSubmitAnswerHandler(quizRepo quiz.Repository, wordRepo word.Repository) SubmitAnswerHandler {
-	return SubmitAnswerHandler{quizRepo: quizRepo, wordRepo: wordRepo}
+func NewSubmitAnswerHandler(
+	appLogger logger.Logger,
+	quizRepo quiz.Repository,
+	wordRepo word.Repository,
+) SubmitAnswerHandler {
+	return SubmitAnswerHandler{
+		logger:   appLogger,
+		quizRepo: quizRepo,
+		wordRepo: wordRepo,
+	}
 }
 
 // Handle executes the command.

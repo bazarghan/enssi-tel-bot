@@ -10,6 +10,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // HandleQuizCompletionCommand defines the input for processing a quiz result.
@@ -21,6 +22,7 @@ type HandleQuizCompletionCommand struct {
 
 // HandleQuizCompletionHandler processes the command.
 type HandleQuizCompletionHandler struct {
+	logger               logger.Logger
 	courseRepo           course.Repository
 	wordRepo             word.Repository
 	createCourseQuiz     quizCmd.CreateCourseQuizHandler
@@ -33,12 +35,14 @@ type HandleQuizCompletionResult = StartSessionResult
 
 // NewHandleQuizCompletionHandler creates a new handler.
 func NewHandleQuizCompletionHandler(
+	appLogger logger.Logger,
 	courseRepo course.Repository,
 	wordRepo word.Repository,
 	createCourseQuiz quizCmd.CreateCourseQuizHandler,
 	awardProgressHandler achCmd.AwardProgressHandler,
 ) HandleQuizCompletionHandler {
 	return HandleQuizCompletionHandler{
+		logger:               appLogger,
 		courseRepo:           courseRepo,
 		wordRepo:             wordRepo,
 		createCourseQuiz:     createCourseQuiz,
@@ -108,8 +112,10 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 	}
 
 	// 3. After handling the quiz consequences, determine the next step in the course.
-	startSessionHandler := NewStartSessionHandler(h.courseRepo, h.wordRepo, h.createCourseQuiz)
+
+	startSessionHandler := NewStartSessionHandler(h.logger, h.courseRepo, h.wordRepo, h.createCourseQuiz)
 	result, err := startSessionHandler.Handle(ctx, StartSessionCommand{UserID: cmd.UserID, CourseID: cmd.CourseID})
+
 	if err != nil {
 		return HandleQuizCompletionResult{}, err
 	}

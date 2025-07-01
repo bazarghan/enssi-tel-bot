@@ -7,17 +7,27 @@ import (
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // Handler processes the HasPendingReviewQuery.
 type Handler struct {
+	logger   logger.Logger
 	userRepo user.Repository
 	wordRepo word.Repository
 }
 
 // NewHandler creates a new handler.
-func NewHandler(userRepo user.Repository, wordRepo word.Repository) Handler {
-	return Handler{userRepo: userRepo, wordRepo: wordRepo}
+func NewHandler(
+	appLogger logger.Logger,
+	userRepo user.Repository,
+	wordRepo word.Repository,
+) Handler {
+	return Handler{
+		logger:   appLogger,
+		userRepo: userRepo,
+		wordRepo: wordRepo,
+	}
 }
 
 // Handle executes the query. It returns true if a user is eligible for a daily review.

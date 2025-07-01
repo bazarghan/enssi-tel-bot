@@ -21,6 +21,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 
@@ -55,6 +56,7 @@ const (
 
 // Handler holds dependencies for message handlers.
 type Handler struct {
+	logger             logger.Logger
 	listCourses        courseQueries.ListCoursesHandler
 	getOverview        courseQueries.GetOverviewHandler
 	getProfile         getProfileQry.GetProfileHandler
@@ -76,6 +78,7 @@ type Handler struct {
 
 // NewHandler creates a new message handler.
 func NewHandler(
+	appLogger logger.Logger,
 	listCourses courseQueries.ListCoursesHandler,
 	getOverview courseQueries.GetOverviewHandler,
 	getProfile getProfileQry.GetProfileHandler,
@@ -96,6 +99,7 @@ func NewHandler(
 ) *Handler {
 
 	return &Handler{
+		logger:             appLogger,
 		listCourses:        listCourses,
 		getOverview:        getOverview,
 		getProfile:         getProfile,

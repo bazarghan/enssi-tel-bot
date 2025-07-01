@@ -4,6 +4,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
@@ -11,6 +12,7 @@ import (
 // RegisterRoutes sets up all command, text, and callback handlers for the bot.
 func RegisterRoutes(
 	b *telebot.Bot,
+	appLogger logger.Logger,
 	cmdHandler *command.Handler,
 	msgHandler *message.Handler,
 	cbHandler *callback.Handler,
@@ -18,7 +20,11 @@ func RegisterRoutes(
 	lockManager *UserLockManager,
 ) {
 	// Apply middleware in order: error handling, user activity, user lock.
-	b.Use(ErrorHandlerMiddleware, UserActivityMiddleware(registerUserHandler), UserLockMiddleware(lockManager))
+	b.Use(
+		ErrorHandlerMiddleware(appLogger), // <-- Pass logger
+		UserActivityMiddleware(registerUserHandler),
+		UserLockMiddleware(lockManager),
+	)
 
 	// --- Command Handlers ---
 	b.Handle("/start", cmdHandler.HandleStart)

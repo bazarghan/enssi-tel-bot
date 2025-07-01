@@ -15,6 +15,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
@@ -24,6 +25,7 @@ import (
 
 // Handler holds dependencies for command handlers.
 type Handler struct {
+	logger           logger.Logger
 	registerUser     registerCmd.RegisterUserHandler
 	getProfile       getProfileQry.GetProfileHandler
 	userRepo         user.Repository
@@ -34,6 +36,8 @@ type Handler struct {
 
 // NewHandler creates a new command handler.
 func NewHandler(
+
+	appLogger logger.Logger,
 	registerUser registerCmd.RegisterUserHandler,
 	getProfile getProfileQry.GetProfileHandler,
 	userRepo user.Repository,
@@ -42,6 +46,7 @@ func NewHandler(
 	hasPendingReview reviewQueries.Handler,
 ) *Handler {
 	return &Handler{
+		logger:           appLogger,
 		registerUser:     registerUser,
 		getProfile:       getProfile,
 		userRepo:         userRepo,
