@@ -6,7 +6,6 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	"log"
 	"time"
 )
 
@@ -70,7 +69,7 @@ func (h GetProfileHandler) Handle(ctx context.Context, q GetProfileQuery) (GetPr
 
 	userAchievements, err := h.achRepo.FindUserAchievements(ctx, q.UserID)
 	if err != nil {
-		log.Printf("Could not fetch achievements for user %d: %v", q.UserID, err)
+		h.logger.Warn("Could not fetch achievements for user", "userID", q.UserID, "error", err)
 		// Non-fatal error, we can still show the rest of the profile
 	}
 

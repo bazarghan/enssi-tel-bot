@@ -11,7 +11,6 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
-	"log"
 	"time"
 )
 
@@ -46,12 +45,12 @@ func NewTriggerDailyReviewsJob(
 
 // Run executes the job logic.
 func (j *TriggerDailyReviewsJob) Run() {
-	log.Println("Starting daily review check job...")
+	j.logger.Info("Starting daily review check job...")
 	ctx := context.Background()
 
 	userIDs, err := j.userRepo.FindAllIDs(ctx)
 	if err != nil {
-		log.Printf("ERROR: Could not fetch users for daily review job: %v", err)
+		j.logger.Error("Could not fetch users for daily review job", "error", err)
 		return
 	}
 
@@ -60,13 +59,13 @@ func (j *TriggerDailyReviewsJob) Run() {
 		j.processUserForReview(ctx, userID)
 	}
 
-	log.Println("Daily review check job finished.")
+	j.logger.Info("Daily review check job finished.")
 }
 
 func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userID uint) {
 	domainUser, err := j.userRepo.FindByID(ctx, userID)
 	if err != nil {
-		log.Printf("ERROR: Could not get user %d details: %v", userID, err)
+		j.logger.Error("Could not get user details", "userID", userID, "error", err)
 		return
 	}
 
@@ -83,7 +82,7 @@ func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userI
 	// 2. Check if there are any words due for review.
 	wordsDue, err := j.wordRepo.GetWordsDueForReview(ctx, userID, now)
 	if err != nil {
-		log.Printf("ERROR: Could not get words due for review for user %d: %v", userID, err)
+		j.logger.Error("Could not get words due for review for user", "userID", userID, "error", err)
 		return
 	}
 
@@ -95,11 +94,11 @@ func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userI
 	message := fmt.Sprintf("👋 سلام! %d کلمه برای مرور روزانه شما آماده است.", len(wordsDue))
 	if domainUser.LastMenu == "main" {
 		if err := j.notifier.NotifyWithMainMenu(userID, message); err != nil {
-			log.Printf("ERROR: Failed to send main menu notification to user %d: %v", userID, err)
+			j.logger.Error("Failed to send main menu notification to user", "userID", userID, "error", err)
 		}
 	} else {
 		if err := j.notifier.Notify(userID, message); err != nil {
-			log.Printf("ERROR: Failed to send simple review notification to user %d: %v", userID, err)
+			j.logger.Error("Failed to send simple review notification to user", "userID", userID, "error", err)
 		}
 	}
 }

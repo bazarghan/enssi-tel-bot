@@ -2,7 +2,6 @@ package review
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
@@ -48,7 +47,7 @@ func (h Handler) Handle(ctx context.Context, q HasPendingReviewQuery) (bool, err
 	// 2. If they haven't reviewed today, check if they have any words waiting.
 	wordsDue, err := h.wordRepo.GetWordsDueForReview(ctx, q.UserID, now)
 	if err != nil {
-		log.Printf("Could not check for due words for user %d: %v", q.UserID, err)
+		h.logger.Error("Could not check for due words for user", "userID", q.UserID, "error", err)
 		return false, err
 	}
 

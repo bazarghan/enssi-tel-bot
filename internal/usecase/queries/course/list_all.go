@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	"log"
 )
 
 // ListCoursesQuery defines the input for listing courses for a specific user.
@@ -44,7 +43,7 @@ func (h ListCoursesHandler) Handle(ctx context.Context, q ListCoursesQuery) ([]C
 		// Not finding progress for a course is not a fatal error for the whole list.
 		progress, err := h.courseRepo.GetUserProgress(ctx, q.UserID, c.ID)
 		if err != nil {
-			log.Printf("could not get user progress for course %d: %v\n", c.ID, err)
+			h.logger.Warn("Could not get user progress for course", "courseID", c.ID, "userID", q.UserID, "error", err)
 		}
 
 		summaries = append(summaries, CourseSummary{
