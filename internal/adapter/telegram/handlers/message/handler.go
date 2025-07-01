@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bits-and-blooms/bitset"
-	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -123,8 +122,9 @@ func NewHandler(
 func (h *Handler) Handle(c telebot.Context) error {
 
 	ctxUser, ok := c.Get("dbUser").(user.User)
+
 	if !ok {
-		log.Printf("[MessageHandler] Critical: User not found in context for telegram ID %d", c.Sender().ID)
+		h.logger.Error("Error registering or finding user", "error", ok, "telegram_id", c.Sender().ID)
 		return c.Send("خطا در پردازش اطلاعات کاربر.")
 	}
 
@@ -185,7 +185,7 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 		recipients, err := h.Broadcast.Handle(context.Background(), broadcastCmd) // Assuming dependency is `broadcast`
 		if err != nil {
-			log.Printf("Broadcast failed: %v", err)
+			h.logger.Error("Broadcast failed", "error", err)
 			return c.Send("ارسال پیام همگانی با خطا مواجه شد.")
 		}
 
@@ -214,7 +214,7 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 	}
 
-	log.Printf("[MessageHandler] Unhandled text from UserID %d in state '%s': '%s'", ctxUser.ID, ctxUser.LastMenu, userInput)
+	h.logger.Info("Unhandled text message", "user_id", ctxUser.ID, "state", ctxUser.LastMenu, "input", userInput)
 	return nil
 }
 
@@ -224,7 +224,7 @@ func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 	hasPendingReview, err := h.hasPendingReview.Handle(context.Background(), reviewQuery)
 	if err != nil {
 		// Log the error but proceed with a non-review menu as a safe default
-		log.Printf("Could not check for pending review for user %d: %v", u.ID, err)
+		h.logger.Error("Could not check for pending review", "user_id", u.ID, "error", err)
 		hasPendingReview = false
 	}
 
@@ -237,7 +237,7 @@ func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 	query := courseQueries.ListCoursesQuery{UserID: u.ID}
 	courses, err := h.listCourses.Handle(context.Background(), query)
 	if err != nil {
-		log.Printf("[handleStartLearning] Error listing courses for UserID %d: %v", u.ID, err)
+		h.logger.Error("Error listing courses", "user_id", u.ID, "error", err)
 		return c.Send("متاسفانه در دریافت لیست دوره‌ها مشکلی پیش آمد.")
 	}
 
@@ -255,7 +255,7 @@ func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 	kb := keyboards.CourseListKeyboard(courseDTOs)
 
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateCourseList); err != nil {
-		log.Printf("[handleStartLearning] Failed to update user state for UserID %d: %v", u.ID, err)
+		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
 
 	return c.Send(msg, kb, telebot.ModeMarkdownV2)
@@ -266,7 +266,7 @@ func (h *Handler) handleGetProfile(c telebot.Context, u user.User) error {
 	query := getProfileQry.GetProfileQuery{UserID: u.ID}
 	result, err := h.getProfile.Handle(context.Background(), query)
 	if err != nil {
-		log.Printf("[HandleProfile] Could not get user profile for user ID %d: %v", u.ID, err)
+		h.logger.Error("Could not get user profile", "user_id", u.ID, "error", err)
 		return c.Send("متاسفانه در دریافت اطلاعات پروفایل مشکلی پیش آمد.")
 	}
 
@@ -295,10 +295,10 @@ func (h *Handler) handleCourseSelection(c telebot.Context, u user.User, selectio
 	domainCourse, err := h.courseRepo.FindByPersianTitle(context.Background(), baseTitle)
 	if err != nil {
 		if errors.Is(err, course.ErrNotFound) {
-			log.Printf("[handleCourseSelection] User %d selected a course not found in DB: '%s'", u.ID, baseTitle)
+			h.logger.Warn("User selected a course not found in DB", "user_id", u.ID, "title", baseTitle)
 			return nil // Ignore invalid input
 		}
-		log.Printf("[handleCourseSelection] DB error finding course by title '%s' for UserID %d: %v", baseTitle, u.ID, err)
+		h.logger.Error("DB error finding course by title", "title", baseTitle, "user_id", u.ID, "error", err)
 		return c.Send("مشکلی در یافتن دوره پیش آمد.")
 	}
 
@@ -309,7 +309,7 @@ func (h *Handler) displayCourseOverview(c telebot.Context, u user.User, courseID
 	query := courseQueries.GetOverviewQuery{UserID: u.ID, CourseID: courseID}
 	overview, err := h.getOverview.Handle(context.Background(), query)
 	if err != nil {
-		log.Printf("[displayCourseOverview] Error getting overview for UserID %d, CourseID %d: %v", u.ID, courseID, err)
+		h.logger.Error("Error getting course overview", "user_id", u.ID, "course_id", courseID, "error", err)
 		return c.Send("مشکلی در نمایش اطلاعات دوره پیش آمد.")
 	}
 
@@ -329,7 +329,7 @@ func (h *Handler) displayCourseOverview(c telebot.Context, u user.User, courseID
 
 	newState := fmt.Sprintf("%s:%d", StateCourseDetailsBase, courseID)
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState); err != nil {
-		log.Printf("[displayCourseOverview] Failed to update user state for UserID %d: %v", u.ID, err)
+		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
 
 	return c.Send(msg, kb, telebot.ModeMarkdownV2)
@@ -346,10 +346,10 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 				// 2. Fetch the quiz attempt from the database to get the message ID.
 				attempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
 				if err != nil {
-					log.Printf("Could not get attempt %d to edit message: %v", attemptID, err)
+					h.logger.Error("Could not get quiz attempt to edit message", "attempt_id", attemptID, "error", err)
 				} else if attempt.CurrentQuestionMessageID != 0 {
 					// 3. Edit the original quiz message to show it's paused.
-					//    By not providing a new keyboard, the inline keyboard is automatically removed.
+					//	 By not providing a new keyboard, the inline keyboard is automatically removed.
 					pausedMsg := "آزمون متوقف شد. شما به منوی اصلی بازگشتید."
 
 					// We need to create a telebot.Message object to edit it.
@@ -361,7 +361,7 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 
 					if _, err := c.Bot().Edit(messageToEdit, pausedMsg); err != nil {
 						// This error is not critical, the user can still proceed.
-						log.Printf("Failed to edit old quiz message %d: %v", attempt.CurrentQuestionMessageID, err)
+						h.logger.Warn("Failed to edit old quiz message", "message_id", attempt.CurrentQuestionMessageID, "error", err)
 					}
 				}
 			}
@@ -373,13 +373,13 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 	hasPendingReview, err := h.hasPendingReview.Handle(context.Background(), query)
 	if err != nil {
 		// Log the error but proceed with a non-review menu as a safe default
-		log.Printf("Could not check for pending review for user %d: %v", u.ID, err)
+		h.logger.Error("Could not check for pending review", "user_id", u.ID, "error", err)
 		hasPendingReview = false
 	}
 	// --- END OF REFACTORED CODE ---
 
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateMain); err != nil {
-		log.Printf("[handleReturnToMainMenu] Failed to update user state for UserID %d: %v", u.ID, err)
+		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
 	return c.Send("به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin, hasPendingReview))
 }
@@ -398,7 +398,7 @@ func (h *Handler) handleCourseAction(c telebot.Context, u user.User, actionText,
 	cmd := startCmd.StartSessionCommand{UserID: u.ID, CourseID: uint(courseID)}
 	res, err := h.startSession.Handle(context.Background(), cmd)
 	if err != nil {
-		log.Printf("[handleCourseAction] Error starting session for UserID %d, CourseID %d: %v", u.ID, courseID, err)
+		h.logger.Error("Error starting session", "user_id", u.ID, "course_id", courseID, "error", err)
 		return c.Send("There was a problem starting the course.")
 	}
 	return h.sendLearningContext(c, res, uint(courseID), u.ID)
@@ -413,7 +413,7 @@ func (h *Handler) handleNextWord(c telebot.Context, u user.User, courseIDStr str
 	cmd := advanceCmd.AdvanceWordCommand{UserID: u.ID, CourseID: uint(courseID)}
 	res, err := h.advanceWord.Handle(context.Background(), cmd)
 	if err != nil {
-		log.Printf("[handleNextWord] Error advancing word for UserID %d, CourseID %d: %v", u.ID, courseID, err)
+		h.logger.Error("Error advancing word", "user_id", u.ID, "course_id", courseID, "error", err)
 		return c.Send("There was a problem getting the next word.")
 	}
 	return h.sendLearningContext(c, res, uint(courseID), u.ID)
@@ -439,7 +439,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 		kb := keyboards.InCourseNavigationKeyboard()
 
 		if err := c.Send(msg, kb, telebot.ModeMarkdownV2); err != nil {
-			log.Printf("Error sending word text message: %v", err)
+			h.logger.Error("Error sending word text message", "error", err)
 			return err
 		}
 
@@ -447,7 +447,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 		if wordData.TelegramImageID != "" {
 			photo := &telebot.Photo{File: telebot.File{FileID: wordData.TelegramImageID}}
 			if _, err := c.Bot().Send(c.Chat(), photo); err != nil {
-				log.Printf("Failed to send image by FileID %s, falling back to URL. Error: %v", wordData.TelegramImageID, err)
+				h.logger.Warn("Failed to send image by FileID, falling back to URL", "file_id", wordData.TelegramImageID, "error", err)
 				// Invalidate bad FileID here if needed
 				h.sendWordImageByUrlAndCache(c, wordData)
 			}
@@ -460,7 +460,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 			if pron.TelegramVoiceID != "" {
 				voice := &telebot.Voice{File: telebot.File{FileID: pron.TelegramVoiceID}, Caption: pron.Region}
 				if _, err := c.Bot().Send(c.Chat(), voice); err != nil {
-					log.Printf("Failed to send voice by FileID %s, falling back to URL. Error: %v", pron.TelegramVoiceID, err)
+					h.logger.Warn("Failed to send voice by FileID, falling back to URL", "file_id", pron.TelegramVoiceID, "error", err)
 					h.sendWordAudioByUrlAndCache(c, pron)
 				}
 			}
@@ -479,7 +479,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 			introMsg := "شما این بخش را به پایان رساندید! 🎉 حالا بیایید ببینیم چقدر یاد گرفته اید. یک آزمون کوتاه در پیش است."
 			err := c.Send(tgmarkdown.Escape(introMsg), keyboards.QuizKeyboard(), telebot.ModeMarkdownV2)
 			if err != nil {
-				log.Printf("something went wrong when sending the keyboard %w", err)
+				h.logger.Error("Something went wrong when sending the keyboard", "error", err)
 			}
 		}
 
@@ -491,7 +491,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 
 		sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
 		if err != nil {
-			log.Printf("Failed to send initial quiz question: %v", err)
+			h.logger.Error("Failed to send initial quiz question", "error", err)
 			return err
 		}
 		// Save message ID so the quiz can be edited later by the callback handler
@@ -508,7 +508,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 	}
 
 	if sendErr != nil {
-		log.Printf("Error sending learning context message: %v", sendErr)
+		h.logger.Error("Error sending learning context message", "error", sendErr)
 	}
 
 	h.userRepo.UpdateLastMenu(context.Background(), userID, newState)
@@ -519,7 +519,7 @@ func (h *Handler) handleViewMyAchievements(c telebot.Context, u user.User) error
 	// 1. Call the use case to get all defined achievements.
 	allAchievements, err := h.getAllAchievements.Handle(context.Background())
 	if err != nil {
-		log.Printf("Failed to get achievements for user %d: %v", u.ID, err)
+		h.logger.Error("Failed to get achievements", "user_id", u.ID, "error", err)
 		return c.Send("متاسفانه در دریافت لیست دستاوردها مشکلی پیش آمد.")
 	}
 
@@ -551,7 +551,7 @@ func (h *Handler) sendWordImageByUrlAndCache(c telebot.Context, wordData startCm
 	photo := &telebot.Photo{File: telebot.FromURL(wordData.ImageURL)}
 	sentMsg, err := c.Bot().Send(c.Chat(), photo)
 	if err != nil {
-		log.Printf("Failed to send image by URL %s: %v", wordData.ImageURL, err)
+		h.logger.Error("Failed to send image by URL", "url", wordData.ImageURL, "error", err)
 		return
 	}
 	if sentMsg.Photo != nil {
@@ -560,7 +560,7 @@ func (h *Handler) sendWordImageByUrlAndCache(c telebot.Context, wordData startCm
 			ImageFileID:  sentMsg.Photo.FileID,
 		}
 		if err := h.cacheMedia.HandleImage(context.Background(), cmd); err != nil {
-			log.Printf("Failed to cache new image FileID: %v", err)
+			h.logger.Error("Failed to cache new image FileID", "error", err)
 		}
 	}
 }
@@ -572,7 +572,7 @@ func (h *Handler) sendWordAudioByUrlAndCache(c telebot.Context, pronData startCm
 	voice := &telebot.Voice{File: telebot.FromURL(pronData.AudioURL), Caption: pronData.Region}
 	sentMsg, err := c.Bot().Send(c.Chat(), voice)
 	if err != nil {
-		log.Printf("Failed to send voice by URL %s: %v", pronData.AudioURL, err)
+		h.logger.Error("Failed to send voice by URL", "url", pronData.AudioURL, "error", err)
 		return
 	}
 	if sentMsg.Voice != nil {
@@ -581,7 +581,7 @@ func (h *Handler) sendWordAudioByUrlAndCache(c telebot.Context, pronData startCm
 			VoiceFileID:     sentMsg.Voice.FileID,
 		}
 		if err := h.cacheMedia.HandleVoice(context.Background(), cmd); err != nil {
-			log.Printf("Failed to cache new voice FileID: %v", err)
+			h.logger.Error("Failed to cache new voice FileID", "error", err)
 		}
 	}
 }
@@ -590,14 +590,14 @@ func (h *Handler) handleDailyReview(c telebot.Context, u user.User) error {
 
 	// 1. First, check for any old pending review and delete it to ensure a fresh start.
 	if oldAttempt, err := h.quizRepo.FindPendingReviewAttempt(context.Background(), u.ID); err == nil && oldAttempt.ID != 0 {
-		log.Printf("Found and deleting stale review attempt %d for user %d.", oldAttempt.ID, u.ID)
+		h.logger.Info("Found and deleting stale review attempt", "attempt_id", oldAttempt.ID, "user_id", u.ID)
 		h.quizRepo.DeleteAttempt(context.Background(), oldAttempt.ID)
 	}
 
 	// 2. Now, find ALL words that are currently due for review.
 	wordsToReview, err := h.wordRepo.GetWordsDueForReview(context.Background(), u.ID, time.Now())
 	if err != nil {
-		log.Printf("Failed to get words for review for user %d: %v", u.ID, err)
+		h.logger.Error("Failed to get words for review", "user_id", u.ID, "error", err)
 		return c.Send("خطا در آماده سازی آزمون مرور شما.")
 	}
 
@@ -609,7 +609,7 @@ func (h *Handler) handleDailyReview(c telebot.Context, u user.User) error {
 	reviewCmd := quizCmd.CreateReviewQuizCommand{UserID: u.ID, WordsToReview: wordsToReview}
 	newQuiz, err := h.createReviewQuiz.Handle(context.Background(), reviewCmd)
 	if err != nil {
-		log.Printf("Failed to create fresh review quiz for user %d: %v", u.ID, err)
+		h.logger.Error("Failed to create fresh review quiz", "user_id", u.ID, "error", err)
 		return c.Send("خطا در ساخت آزمون مرور شما.")
 	}
 
@@ -658,7 +658,7 @@ func (h *Handler) handleAdminPanel(c telebot.Context, u user.User) error {
 func (h *Handler) handleGetStats(c telebot.Context) error {
 	stats, err := h.getStats.Handle(context.Background())
 	if err != nil {
-		log.Printf("Failed to get admin stats: %v", err)
+		h.logger.Error("Failed to get admin stats", "error", err)
 		return c.Send("خطا در دریافت آمار.")
 	}
 
@@ -676,7 +676,7 @@ func (h *Handler) handleAchievementSelection(c telebot.Context, u user.User, use
 	// 2. Find the achievement by its title
 	ach, err := h.achRepo.FindByTitle(context.Background(), cleanTitle)
 	if err != nil {
-		log.Printf("Could not find achievement by title '%s': %v", cleanTitle, err)
+		h.logger.Error("Could not find achievement by title", "title", cleanTitle, "error", err)
 		return nil // Ignore if the title is not found
 	}
 
@@ -688,14 +688,14 @@ func (h *Handler) handleAchievementSelection(c telebot.Context, u user.User, use
 				UserID: u.ID, AchievementID: ach.ID, State: bitset.New(ach.TotalItems),
 			}
 		} else {
-			log.Printf("Could not get user achievement progress: %v", err)
+			h.logger.Error("Could not get user achievement progress", "error", err)
 			return c.Send("Could not retrieve achievement progress.")
 		}
 	}
 
 	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
 	if err != nil {
-		log.Printf("Failed to generate achievement image: %v", err)
+		h.logger.Error("Failed to generate achievement image", "error", err)
 		return c.Send("Could not create achievement image.")
 	}
 	defer os.Remove(generatedPath)
@@ -707,3 +707,4 @@ func (h *Handler) handleAchievementSelection(c telebot.Context, u user.User, use
 	return err
 
 }
+

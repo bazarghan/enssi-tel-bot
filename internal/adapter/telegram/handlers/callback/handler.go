@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/bits-and-blooms/bitset"
-	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -19,6 +17,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bits-and-blooms/bitset"
 
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
@@ -58,7 +57,7 @@ func NewHandler(
 	getOverview courseQueries.GetOverviewHandler,
 ) *Handler {
 	return &Handler{
-		logger:               appLogger,
+		logger:               appLogger.With("handler", "callback"),
 		submitAnswer:         submitAnswer,
 		handleQuizCompletion: handleQuizCompletion,
 		quizRepo:             quizRepo,
@@ -73,10 +72,12 @@ func NewHandler(
 func (h *Handler) Handle(c telebot.Context) error {
 	cb := c.Callback()
 	if cb == nil {
+		// This can happen in rare cases, not an error.
 		return nil
 	}
 
 	data := strings.TrimSpace(cb.Data)
+	h.logger.Info("Routing callback query", "data", data, "sender_id", c.Sender().ID)
 
 	if strings.HasPrefix(data, QuizAnswerCallbackPrefix) {
 		return h.handleQuizAnswer(c)
@@ -86,7 +87,7 @@ func (h *Handler) Handle(c telebot.Context) error {
 		return h.handleShowAchievement(c)
 	}
 
-	log.Printf("[CallbackHandler] Unhandled callback data: %s", cb.Data)
+	h.logger.Warn("Unhandled callback data", "data", cb.Data, "sender_id", c.Sender().ID)
 	return c.Respond()
 }
 
@@ -96,8 +97,11 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 
 	ctxUser, ok := c.Get("dbUser").(user.User)
 	if !ok {
+		h.logger.Error("Failed to identify user from context")
 		return c.Send("Error identifying user.")
 	}
+
+	logger := h.logger.With("user_id", ctxUser.ID, "telegram_id", c.Sender().ID)
 
 	// The telegram callbacks often have whitespace
 	data := strings.TrimSpace(c.Callback().Data)
@@ -105,12 +109,15 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	payload := strings.TrimPrefix(data, QuizAnswerCallbackPrefix)
 	parts := strings.Split(payload, ":")
 	if len(parts) != 2 {
-		log.Printf("Invalid quiz answer payload: %s", payload)
+		logger.Warn("Invalid quiz answer payload", "payload", payload)
 		return nil
 	}
 
 	attemptID, _ := strconv.ParseUint(parts[0], 10, 64)
 	optionID, _ := strconv.ParseUint(parts[1], 10, 64)
+
+	logger = logger.With("attempt_id", attemptID, "option_id", optionID)
+	logger.Info("Handling quiz answer")
 
 	cmd := submitCmd.SubmitAnswerCommand{
 		AttemptID: uint(attemptID),
@@ -121,47 +128,46 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	res, err := h.submitAnswer.Handle(context.Background(), cmd)
 	if err != nil {
 		if errors.Is(err, quiz.ErrQuestionAlreadyAnswered) {
-			log.Printf("Error %w, %d: %v", quiz.ErrQuestionAlreadyAnswered, attemptID, err)
+			logger.Info("Question already answered, ignoring duplicate submission", "error", err)
 			return nil // Silently ignore duplicate clicks
 		}
-		log.Printf("Error submitting quiz answer for attempt %d: %v", attemptID, err)
+		logger.Error("Error submitting quiz answer", "error", err)
 		_, errEdit := c.Bot().Edit(c.Callback().Message, "An error occurred while processing your answer.")
 		return errEdit
 	}
 
 	fullAttempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
 	if err != nil {
-		log.Printf("Could not fetch full attempt %d for formatting: %v", attemptID, err)
+		logger.Error("Could not fetch full attempt for formatting", "error", err)
 	}
 	if res.IsCompleted {
-
+		logger.Info("Quiz completed")
 		// --- NEW: Check if the completed quiz was a Daily Review ---
 		if fullAttempt.Type == quiz.Review {
 			// 1. Mark the user's daily review as completed for today.
 			if err := h.userRepo.UpdateLastReviewSession(context.Background(), ctxUser.ID); err != nil {
-				log.Printf("Failed to update last review session for user %d: %v", ctxUser.ID, err)
+				logger.Error("Failed to update last review session", "error", err)
 			}
 
 			// 2. Format and show the results, just like a normal quiz.
 			resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 			if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
-				log.Printf("Could not edit review quiz result message: %v", err)
+				logger.Error("Could not edit review quiz result message", "error", err)
 			}
 
 			// 3.Build the main menu, explicitly passing `false` for hasPendingReview.
-			//    We know the review is complete, so the button should be hidden.
 			mainMenuKeyboard := keyboards.NewMainMenu(ctxUser.IsAdmin, false)
 
 			// 4. Send the final confirmation message with the new, clean main menu.
 			if _, err := c.Bot().Send(c.Chat(), "آزمون مرور شما به پایان رسید!", mainMenuKeyboard); err != nil {
-				log.Printf("Failed to send final review completion message: %v", err)
+				logger.Error("Failed to send final review completion message", "error", err)
 			}
 
 			// 5.Update the user's state back to 'main' so they are no longer "in_quiz".
 			if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "main"); err != nil {
-				log.Printf("Failed to update user menu state after review quiz: %v", err)
+				logger.Error("Failed to update user menu state after review quiz", "error", err)
 			}
-
+			logger.Info("Daily review quiz finished successfully")
 			return nil
 		}
 		// --- END OF REVIEW QUIZ LOGIC ---
@@ -173,30 +179,24 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		}
 		completionResult, err := h.handleQuizCompletion.Handle(context.Background(), completionCmd)
 		if err != nil {
-			log.Printf("Error handling quiz completion for attempt %d: %v", attemptID, err)
+			logger.Error("Error handling quiz completion", "error", err, "course_id", fullAttempt.CourseID)
 			_, err = c.Bot().Edit(c.Callback().Message, "Error processing quiz result.")
 			return err
 		}
-		// --- NEW LOGIC: Format and show the quiz result ---
 
 		// 1. Format the result message using your existing formatter.
 		resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 
 		// 3. Edit the original quiz message to show the results.
-		//    By NOT providing a keyboard here, the old inline buttons are automatically removed.
 		if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
-			// If editing fails, log it but don't stop the flow. We can still send the next message.
-			log.Printf("Could not edit quiz result message: %v", err)
+			logger.Warn("Could not edit quiz result message, proceeding to next step", "error", err)
 		}
 
 		if completionResult.UpdatedAchievementID != 0 {
 			h.sendAchievementUpdate(c, ctxUser.ID, completionResult.UpdatedAchievementID)
 		}
 
-		// 4. Send a NEW message to show the reply keyboard for continuing.
 		promptMsg := "آزمون شما تمام شد برای ادامه رو کلمه بعدی بزنید\\."
-
-		// --- NEW LOGIC: SEND COURSE OVERVIEW INSTEAD OF SIMPLE PROMPT ---
 
 		// 4. Fetch the data needed for the course overview screen.
 		overview, err := h.getOverview.Handle(context.Background(), courseQueries.GetOverviewQuery{
@@ -204,7 +204,7 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			CourseID: fullAttempt.CourseID,
 		})
 		if err != nil {
-			log.Printf("Failed to get course overview after quiz: %v", err)
+			logger.Error("Failed to get course overview after quiz", "error", err, "course_id", fullAttempt.CourseID)
 			// Send a fallback message if we can't get the overview
 			_, errSend := c.Bot().Send(c.Chat(), "Quiz complete!", keyboards.BackToCourseListKeyboard())
 			return errSend
@@ -226,18 +226,19 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 
 		// 7. Send the overview as a new message.
 		if _, err := c.Bot().Send(c.Chat(), promptMsg, kb, telebot.ModeMarkdownV2); err != nil {
-			log.Printf("Could not send course overview prompt: %v", err)
+			logger.Error("Could not send course overview prompt", "error", err)
 			return err
 		}
 
 		// After the quiz is done, set the user's state back to the course details view
 		newState := fmt.Sprintf("course_details:%d", fullAttempt.CourseID)
 		if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, newState); err != nil {
-			log.Printf("Failed to update user menu state after quiz: %v", err)
+			logger.Error("Failed to update user menu state after quiz", "new_state", newState, "error", err)
 		}
+		logger.Info("Standard quiz finished successfully")
 
 	} else {
-
+		logger.Info("Advancing to next question")
 		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(len(res.NextQuestion.Options), func(i, j int) {
 			res.NextQuestion.Options[i], res.NextQuestion.Options[j] = res.NextQuestion.Options[j], res.NextQuestion.Options[i]
@@ -249,39 +250,39 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	}
 
 	if err != nil {
-		log.Printf("Failed to edit message for quiz attempt %d: %v", attemptID, err)
+		logger.Error("Failed to edit message for next quiz question", "error", err)
 	}
 	return nil
 }
 
 func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID uint) {
+	logger := h.logger.With("user_id", userID, "achievement_id", achievementID)
+	logger.Info("Sending achievement update")
+
 	ach, err := h.achRepo.FindByID(context.Background(), achievementID)
 	if err != nil {
-		log.Printf("Could not find achievement %d to send update: %v", achievementID, err)
+		logger.Error("Could not find achievement to send update", "error", err)
 		return
 	}
 
 	userAch, err := h.achRepo.GetUserAchievement(context.Background(), userID, achievementID)
 	if err != nil {
 		if errors.Is(err, achievement.ErrUserAchNotFound) {
-			// This is not an error. It means the user has 0% progress.
-			// We must create a new, empty achievement object with a non-nil bitset to represent this.
+			logger.Info("User has no prior progress for this achievement, creating new state")
 			userAch = achievement.UserAchievement{
 				UserID:        userID,
 				AchievementID: achievementID,
-				State:         bitset.New(ach.TotalItems), // Creates a new, empty bitset of the correct size
+				State:         bitset.New(ach.TotalItems),
 			}
 		} else {
-			// This is a real database error.
-			log.Printf("Could not get user achievement progress for user %d, ach %d: %v", userID, achievementID, err)
+			logger.Error("Could not get user achievement progress", "error", err)
 			return
 		}
 	}
 
-	// Now, userAch.State is GUARANTEED to be a valid, non-nil bitset.
 	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
 	if err != nil {
-		log.Printf("Failed to generate achievement image: %v", err)
+		logger.Error("Failed to generate achievement image", "error", err, "image_url", ach.ImageURL)
 		return
 	}
 	defer os.Remove(generatedPath)
@@ -293,7 +294,9 @@ func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID
 	}
 
 	if _, err := c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2); err != nil {
-		log.Printf("Failed to send achievement photo: %v", err)
+		logger.Error("Failed to send achievement photo", "error", err)
+	} else {
+		logger.Info("Successfully sent achievement photo")
 	}
 }
 
@@ -303,17 +306,21 @@ func (h *Handler) handleShowAchievement(c telebot.Context) error {
 
 	ctxUser, ok := c.Get("dbUser").(user.User)
 	if !ok {
+		h.logger.Error("Failed to identify user from context")
 		return c.Send("Error identifying user.")
 	}
+	logger := h.logger.With("user_id", ctxUser.ID, "telegram_id", c.Sender().ID)
 
 	data := strings.TrimSpace(c.Callback().Data)
 	payload := strings.TrimPrefix(data, ShowAchievementCallbackPrefix)
 	achievementID, err := strconv.ParseUint(payload, 10, 32)
 	if err != nil {
-		log.Printf("Invalid achievement ID in callback payload: %s", payload)
+		logger.Warn("Invalid achievement ID in callback payload", "payload", payload, "error", err)
 		return nil
 	}
+	logger.Info("Handling show achievement request", "achievement_id", achievementID)
 
 	h.sendAchievementUpdate(c, ctxUser.ID, uint(achievementID))
 	return nil
 }
+

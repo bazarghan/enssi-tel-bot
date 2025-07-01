@@ -1,7 +1,6 @@
 package telegram
 
 import (
-	"log"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
@@ -25,7 +24,7 @@ func InitializeBot(
 ) (*telebot.Bot, error) {
 
 	if token == "" {
-		log.Fatal("Telebot token is empty. Please check environment variables.")
+		appLogger.Error("Telebot token is empty. Please check environment variables.")
 	}
 
 	// --- REFACTORED: Use a closure to capture the logger ---
@@ -86,3 +85,4 @@ func logAndFormatError(err error, c telebot.Context, appLogger logger.Logger) {
 		"callback", callbackData,
 	)
 }
+
