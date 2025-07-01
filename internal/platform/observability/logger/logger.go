@@ -1,23 +1,13 @@
 package logger
 
 import (
-	"context"
-	"io"
-	"log/slog"
-	"os"
-)
-
-// Level defines log levels.
-type Level slog.Level
-
-const (
-	LevelDebug = Level(slog.LevelDebug)
-	LevelInfo  = Level(slog.LevelInfo)
-	LevelWarn  = Level(slog.LevelWarn)
-	LevelError = Level(slog.LevelError)
+	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Logger defines the interface for our structured logger.
+// This interface remains unchanged, so the rest of your app is unaffected.
 type Logger interface {
 	Debug(msg string, args ...any)
 	Info(msg string, args ...any)
@@ -26,58 +16,54 @@ type Logger interface {
 	With(args ...any) Logger // To add contextual fields
 }
 
-// SlogLogger is the concrete implementation using slog.
-type SlogLogger struct {
-	handler slog.Handler
+// zapLogger is the concrete implementation using zap.
+type zapLogger struct {
+	sugaredLogger *zap.SugaredLogger
 }
 
-// New creates a new logger instance based on the provided configuration.
-func New(level Level, output io.Writer) Logger {
-	if output == nil {
-		output = os.Stdout
+// New creates a new logger instance based on the provided log level string.
+func New(level string) (Logger, error) {
+	// Parse the log level string.
+	logLevel, err := zapcore.ParseLevel(level)
+	if err != nil {
+		return nil, fmt.Errorf("invalid log level: %w", err)
 	}
 
-	handler := slog.NewJSONHandler(output, &slog.HandlerOptions{
-		Level: slog.Level(level),
-	})
+	// Create a new zap configuration.
+	// We use the production config for efficient, structured JSON logging.
+	// You can switch to zap.NewDevelopmentConfig() for more human-readable logs during development.
+	config := zap.NewProductionConfig()
+	config.Level = zap.NewAtomicLevelAt(logLevel)
 
-	return &SlogLogger{handler: handler}
+	// Build the logger from the config.
+	logger, err := config.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build zap logger: %w", err)
+	}
+
+	// We use the SugaredLogger for its convenience with key-value pairs (args...).
+	return &zapLogger{sugaredLogger: logger.Sugar()}, nil
 }
 
 // --- Implementation of the Logger interface ---
 
-func (l *SlogLogger) log(level slog.Level, msg string, args ...any) {
-	slog.New(l.handler).Log(context.Background(), level, msg, args...)
+func (l *zapLogger) Debug(msg string, args ...any) {
+	l.sugaredLogger.Debugw(msg, args...)
 }
 
-func (l *SlogLogger) Debug(msg string, args ...any) {
-	l.log(slog.LevelDebug, msg, args...)
+func (l *zapLogger) Info(msg string, args ...any) {
+	l.sugaredLogger.Infow(msg, args...)
 }
 
-func (l *SlogLogger) Info(msg string, args ...any) {
-	l.log(slog.LevelInfo, msg, args...)
+func (l *zapLogger) Warn(msg string, args ...any) {
+	l.sugaredLogger.Warnw(msg, args...)
 }
 
-func (l *SlogLogger) Warn(msg string, args ...any) {
-	l.log(slog.LevelWarn, msg, args...)
-}
-
-func (l *SlogLogger) Error(msg string, args ...any) {
-	l.log(slog.LevelError, msg, args...)
+func (l *zapLogger) Error(msg string, args ...any) {
+	l.sugaredLogger.Errorw(msg, args...)
 }
 
 // With returns a new logger with the specified contextual fields.
-func (l *SlogLogger) With(args ...any) Logger {
-	return &SlogLogger{handler: l.handler.WithAttrs(argsToAttr(args))}
-}
-
-// Helper to convert a flat list of key-value pairs to slog.Attr.
-func argsToAttr(args []any) []slog.Attr {
-	var attrs []slog.Attr
-	for i := 0; i < len(args); i += 2 {
-		if i+1 < len(args) {
-			attrs = append(attrs, slog.Any(args[i].(string), args[i+1]))
-		}
-	}
-	return attrs
+func (l *zapLogger) With(args ...any) Logger {
+	return &zapLogger{sugaredLogger: l.sugaredLogger.With(args...)}
 }

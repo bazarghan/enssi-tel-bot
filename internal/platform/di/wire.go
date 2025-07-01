@@ -7,9 +7,6 @@
 package di
 
 import (
-	"os"
-	"strings"
-
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/imagegen"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/persistence/postgres"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
@@ -54,23 +51,7 @@ type WorkerApp struct {
 	TriggerDailyReviewsJob *jobs.TriggerDailyReviewsJob
 }
 
-// --- NEW: Explicit Logger Provider ---
-// This function clearly shows Wire how to create a logger from a config.
-func provideLogger(cfg *config.Config) logger.Logger {
-	level := logger.LevelInfo
-	switch strings.ToLower(cfg.Log.Level) {
-	case "debug":
-		level = logger.LevelDebug
-	case "warn":
-		level = logger.LevelWarn
-	case "error":
-		level = logger.LevelError
-	}
-	return logger.New(level, os.Stdout)
-}
-
 // --- Provider Sets ---
-// Note: We no longer need a separate loggerSet. The provideLogger function handles it.
 var userSet = wire.NewSet(
 	postgres.NewUserRepository,
 	wire.Bind(new(domainUser.Repository), new(*postgres.UserRepository)),
@@ -131,9 +112,8 @@ var wordCacheSet = wire.NewSet(wordCmd.NewCacheMediaHandler)
 // --- UPDATED Injectors ---
 
 // InitializeBotApp now gets the logger as an input.
-func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) (*BotApp, error) { // CHANGED
+func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) (*BotApp, error) {
 	wire.Build(
-		// REMOVED provideLogger, since it's now passed in
 		userSet,
 		courseSet,
 		wordSet,
@@ -152,9 +132,8 @@ func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) 
 }
 
 // InitializeWorkerApp now gets the logger as an input.
-func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (*WorkerApp, error) { // CHANGED
+func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (*WorkerApp, error) {
 	wire.Build(
-		// REMOVED provideLogger
 		userSet,
 		wordSet,
 		quizSet,
@@ -171,6 +150,5 @@ func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bo
 		notifierSet,
 		adminCmd.NewBroadcastHandler,
 	)
-	// Return the empty struct and nil for the error
-	return adminCmd.BroadcastHandler{}, nil // <-- This is the fix
+	return adminCmd.BroadcastHandler{}, nil
 }

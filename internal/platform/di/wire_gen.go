@@ -36,8 +36,6 @@ import (
 	"github.com/google/wire"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
-	"os"
-	"strings"
 )
 
 // Injectors from wire.go:
@@ -121,23 +119,7 @@ type WorkerApp struct {
 	TriggerDailyReviewsJob *jobs.TriggerDailyReviewsJob
 }
 
-// --- NEW: Explicit Logger Provider ---
-// This function clearly shows Wire how to create a logger from a config.
-func provideLogger(cfg *config.Config) logger.Logger {
-	level := logger.LevelInfo
-	switch strings.ToLower(cfg.Log.Level) {
-	case "debug":
-		level = logger.LevelDebug
-	case "warn":
-		level = logger.LevelWarn
-	case "error":
-		level = logger.LevelError
-	}
-	return logger.New(level, os.Stdout)
-}
-
 // --- Provider Sets ---
-// Note: We no longer need a separate loggerSet. The provideLogger function handles it.
 var userSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(user3.Repository), new(*postgres.UserRepository)), user.NewRegisterUserHandler, user2.NewGetProfileHandler)
 
 var courseSet = wire.NewSet(postgres.NewCourseRepository, wire.Bind(new(course3.Repository), new(*postgres.CourseRepository)), course.NewListCoursesHandler, course.NewGetOverviewHandler, course2.NewStartSessionHandler, course2.NewAdvanceWordHandler, course2.NewHandleQuizCompletionHandler)

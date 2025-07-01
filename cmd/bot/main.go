@@ -26,9 +26,9 @@ func main() {
 		log.Fatalf("FATAL: Could not initialize database connection: %v", err)
 	}
 	// 2.5 Initialize Logger
-	appLogger := logger.New(logger.LevelInfo, os.Stdout) // Create logger instance
-	if cfg.Log.Level == "debug" {
-		appLogger = logger.New(logger.LevelDebug, os.Stdout)
+	appLogger, err := logger.New(cfg.Log.Level)
+	if err != nil {
+		log.Fatalf("FATAL: Could not initialize logger: %v", err)
 	}
 
 	// --- DI happens here ---
