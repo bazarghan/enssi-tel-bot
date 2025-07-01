@@ -33,10 +33,12 @@ func New(level string) (Logger, error) {
 	// We use the production config for efficient, structured JSON logging.
 	// You can switch to zap.NewDevelopmentConfig() for more human-readable logs during development.
 	config := zap.NewProductionConfig()
+
 	config.Level = zap.NewAtomicLevelAt(logLevel)
 
 	// Build the logger from the config.
-	logger, err := config.Build()
+	logger, err := config.Build(zap.AddCallerSkip(1))
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build zap logger: %w", err)
 	}

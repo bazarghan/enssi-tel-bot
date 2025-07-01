@@ -19,11 +19,12 @@ func RegisterRoutes(
 	registerUserHandler registerCmd.RegisterUserHandler,
 	lockManager *UserLockManager,
 ) {
+
 	// Apply middleware in order: error handling, user activity, user lock.
 	b.Use(
-		ErrorHandlerMiddleware(appLogger), // <-- Pass logger
-		UserActivityMiddleware(registerUserHandler),
-		UserLockMiddleware(lockManager),
+		ErrorHandlerMiddleware(appLogger),
+		UserActivityMiddleware(appLogger, registerUserHandler),
+		UserLockMiddleware(appLogger, lockManager),
 	)
 
 	// --- Command Handlers ---

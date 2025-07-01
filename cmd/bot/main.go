@@ -38,7 +38,7 @@ func main() {
 		log.Fatalf("FATAL: Could not initialize bot dependencies: %v", err)
 	}
 
-	appLogger.Info("Logger and dependencies initialized by DI.", "level", cfg.Log.Level)
+	appLogger.Info("Logger and dependencies initialized by DI.")
 
 	// Validate essential config
 	if cfg.Telegram.Token == "" {
