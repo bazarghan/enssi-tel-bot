@@ -2,13 +2,16 @@ package config
 
 import (
 	"fmt"
-	"strings"
-
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
+	"strings"
 )
 
 // LoadConfig reads configuration from file and environment variables.
 func LoadConfig(path string) (*Config, error) {
+
+	godotenv.Load()
+
 	// Set defaults
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)

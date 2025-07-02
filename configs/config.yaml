@@ -1,0 +1,14 @@
+# Configuration for the Enssi Telegram Bot
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "password"   # set the password in .env file
+  name: "enssi_tel_bot_dev"
+  sslmode: "disable" 
+
+telegram:
+  token: "telgram_token"  #set the telegram token in .env file
+
+
