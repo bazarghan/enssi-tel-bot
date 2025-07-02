@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	"gorm.io/gorm"
 )
 
@@ -21,12 +21,13 @@ const (
 
 // QuizRepository is the GORM implementation of the quiz repository port.
 type QuizRepository struct {
-	db *gorm.DB
+	db     *gorm.DB
+	logger logger.Logger
 }
 
 // NewQuizRepository creates a new repository.
-func NewQuizRepository(db *gorm.DB) *QuizRepository {
-	return &QuizRepository{db: db}
+func NewQuizRepository(db *gorm.DB, appLogger logger.Logger) *QuizRepository {
+	return &QuizRepository{db: db, logger: appLogger}
 }
 
 func (r *QuizRepository) CreateQuiz(ctx context.Context, quizType quiz.QuizType, courseID, triggerProgress uint, wordIDs []uint) (uint, error) {
@@ -56,7 +57,7 @@ func (r *QuizRepository) CreateQuiz(ctx context.Context, quizType quiz.QuizType,
 	questionsCreatedSuccessfully := 0
 	for _, wordID := range wordIDs {
 		if err := r.createQuestionInternal(tx, newQuiz.ID, wordID, courseID, wordIDs); err != nil {
-			log.Printf("Error creating question for WordID %d (QuizID: %d): %v. Skipping.", wordID, newQuiz.ID, err)
+			r.logger.Error("Error creating question for word. Skipping.", "wordID", wordID, "quizID", newQuiz.ID, "error", err)
 		} else {
 			questionsCreatedSuccessfully++
 		}
@@ -114,7 +115,7 @@ func (r *QuizRepository) GetAttempt(ctx context.Context, attemptID uint) (quiz.A
 	var userAnswers []answerModel
 	if err := r.db.WithContext(ctx).Where("quiz_attempt_id = ?", attemptID).Find(&userAnswers).Error; err != nil {
 		// Non-fatal, we can still show the attempt without the answers
-		log.Printf("Could not fetch user answers for attempt %d: %v", attemptID, err)
+		r.logger.Warn("Could not fetch user answers for attempt", "attemptID", attemptID, "error", err)
 	}
 
 	var qm quizModel
@@ -248,7 +249,7 @@ func (r *QuizRepository) createQuestionInternal(tx *gorm.DB, quizID, wordID, cou
 
 	distractors, err := r.getDistractorMeanings(tx, correctMeaningText, wordID, courseID, distractorPoolIDs)
 	if err != nil {
-		log.Printf("Could not get distractors for word %d: %v", wordID, err)
+		r.logger.Warn("Could not get distractors for word", "wordID", wordID, "error", err)
 	}
 
 	for _, distractorText := range distractors {

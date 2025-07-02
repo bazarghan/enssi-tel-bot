@@ -2,22 +2,31 @@ package review
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // Handler processes the HasPendingReviewQuery.
 type Handler struct {
+	logger   logger.Logger
 	userRepo user.Repository
 	wordRepo word.Repository
 }
 
 // NewHandler creates a new handler.
-func NewHandler(userRepo user.Repository, wordRepo word.Repository) Handler {
-	return Handler{userRepo: userRepo, wordRepo: wordRepo}
+func NewHandler(
+	appLogger logger.Logger,
+	userRepo user.Repository,
+	wordRepo word.Repository,
+) Handler {
+	return Handler{
+		logger:   appLogger,
+		userRepo: userRepo,
+		wordRepo: wordRepo,
+	}
 }
 
 // Handle executes the query. It returns true if a user is eligible for a daily review.
@@ -38,7 +47,7 @@ func (h Handler) Handle(ctx context.Context, q HasPendingReviewQuery) (bool, err
 	// 2. If they haven't reviewed today, check if they have any words waiting.
 	wordsDue, err := h.wordRepo.GetWordsDueForReview(ctx, q.UserID, now)
 	if err != nil {
-		log.Printf("Could not check for due words for user %d: %v", q.UserID, err)
+		h.logger.Error("Could not check for due words for user", "userID", q.UserID, "error", err)
 		return false, err
 	}
 

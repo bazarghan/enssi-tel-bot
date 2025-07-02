@@ -1,3 +1,5 @@
+// File: internal/platform/di/wire.go
+
 //go:generate wire
 //go:build wireinject
 // +build wireinject
@@ -15,41 +17,41 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
-
 	domainUser "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-
+	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	adminCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	wordCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/word"
-
+	"github.com/2000ostd/enssi-tel-bot/internal/usecase/jobs"
 	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
 	adminQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/admin"
 	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
 	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
 	userQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
-
 	"github.com/google/wire"
 	"gopkg.in/telebot.v4"
 	"gorm.io/gorm"
 )
 
-// BotApp contains the dependencies for the Telegram bot entry point.
+// BotApp remains the same.
 type BotApp struct {
-	CommandHandler  *command.Handler
-	MessageHandler  *message.Handler
-	CallbackHandler *callback.Handler
+	CommandHandler      *command.Handler
+	MessageHandler      *message.Handler
+	CallbackHandler     *callback.Handler
+	RegisterUserHandler userCmd.RegisterUserHandler
 }
 
-// WorkerApp contains the dependencies for the background worker entry point.
+// WorkerApp remains the same.
 type WorkerApp struct {
 	TriggerDailyReviewsJob *jobs.TriggerDailyReviewsJob
 }
 
+// --- Provider Sets ---
 var userSet = wire.NewSet(
 	postgres.NewUserRepository,
 	wire.Bind(new(domainUser.Repository), new(*postgres.UserRepository)),
@@ -67,16 +69,17 @@ var courseSet = wire.NewSet(
 	courseCmd.NewHandleQuizCompletionHandler,
 )
 
-var reviewSet = wire.NewSet(
-	reviewQueries.NewHandler,
-)
+var reviewSet = wire.NewSet(reviewQueries.NewHandler)
 
 var wordSet = wire.NewSet(
 	postgres.NewWordRepository,
 	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
 )
 
-var adminStatsSet = wire.NewSet(adminQueries.NewGetStatsHandler)
+var adminSet = wire.NewSet(
+	adminQueries.NewGetStatsHandler,
+	adminCmd.NewBroadcastHandler,
+)
 
 var quizSet = wire.NewSet(
 	postgres.NewQuizRepository,
@@ -94,7 +97,7 @@ var achievementSet = wire.NewSet(
 )
 
 var imagegenSet = wire.NewSet(
-	wire.Value("assets/imgs/achievements_gen"), // Using a sub-directory for generated images
+	wire.Value("assets/imgs/achievements_gen"),
 	imagegen.NewGenerator,
 	wire.Bind(new(achievement.ImageGenerator), new(*imagegen.Generator)),
 )
@@ -104,12 +107,12 @@ var notifierSet = wire.NewSet(
 	wire.Bind(new(notification.Notifier), new(*telegram.Notifier)),
 )
 
-var wordCacheSet = wire.NewSet(
-	wordCmd.NewCacheMediaHandler,
-)
+var wordCacheSet = wire.NewSet(wordCmd.NewCacheMediaHandler)
 
-// InitializeBotApp creates the dependency graph for the bot application handlers.
-func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
+// --- UPDATED Injectors ---
+
+// InitializeBotApp now gets the logger as an input.
+func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) (*BotApp, error) {
 	wire.Build(
 		userSet,
 		courseSet,
@@ -117,7 +120,7 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 		wordCacheSet,
 		quizSet,
 		achievementSet,
-		adminStatsSet,
+		adminSet,
 		reviewSet,
 		imagegenSet,
 		command.NewHandler,
@@ -125,11 +128,11 @@ func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
 		callback.NewHandler,
 		wire.Struct(new(BotApp), "*"),
 	)
-	return nil, nil // This return is a placeholder for Wire
+	return nil, nil // Placeholder for Wire
 }
 
-// InitializeWorkerApp creates the dependency graph for the worker application.
-func InitializeWorkerApp(db *gorm.DB, bot *telebot.Bot) (*WorkerApp, error) {
+// InitializeWorkerApp now gets the logger as an input.
+func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (*WorkerApp, error) {
 	wire.Build(
 		userSet,
 		wordSet,
@@ -138,24 +141,13 @@ func InitializeWorkerApp(db *gorm.DB, bot *telebot.Bot) (*WorkerApp, error) {
 		jobs.NewTriggerDailyReviewsJob,
 		wire.Struct(new(WorkerApp), "*"),
 	)
-	return nil, nil // This return is a placeholder for Wire
+	return nil, nil // Placeholder for Wire
 }
 
-// InitializeRegisterUserHandler is a helper to get just the user registration use case.
-// This is a temporary solution to simplify wiring the middleware in main.go.
-func InitializeRegisterUserHandler(db *gorm.DB) userCmd.RegisterUserHandler {
+func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (adminCmd.BroadcastHandler, error) {
 	wire.Build(
 		userSet,
-	)
-	return userCmd.RegisterUserHandler{} // This return is a placeholder for Wire
-}
-
-// This injector's specific job is to build the BroadcastHandler,
-// because it's the only one that needs the live bot instance.
-func InitializeBroadcastHandler(db *gorm.DB, bot *telebot.Bot) (adminCmd.BroadcastHandler, error) {
-	wire.Build(
-		userSet,     // Needed for userRepo
-		notifierSet, // Needed for the Notifier
+		notifierSet,
 		adminCmd.NewBroadcastHandler,
 	)
 	return adminCmd.BroadcastHandler{}, nil

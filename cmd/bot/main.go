@@ -1,66 +1,77 @@
+// File: cmd/bot/main.go
+
 package main
 
 import (
-	"log"
-
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/database"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"log"
+	"os"
 )
 
 func main() {
 	// 1. Load centralized configuration
-	cfg, err := config.LoadConfig("./configs") // Point to the configs directory
+	cfg, err := config.LoadConfig("./configs")
 	if err != nil {
 		log.Fatalf("FATAL: Could not load configuration: %v", err)
 	}
 
-	// Validate essential config
-	if cfg.Telegram.Token == "" {
-		log.Fatal("FATAL: Telegram token (ENSSI_TELEGRAM_TOKEN) is not set.")
-	}
-
-	// 2. Initialize database connection using the config struct
+	// 2. Initialize database connection
 	dbConnection, err := database.ConnectDB(cfg.Database)
 	if err != nil {
+		// Use standard log before our logger is available
 		log.Fatalf("FATAL: Could not initialize database connection: %v", err)
 	}
-	log.Println("Database connection successful.")
+	// 2.5 Initialize Logger
+	appLogger, err := logger.New(cfg.Log.Level)
+	if err != nil {
+		log.Fatalf("FATAL: Could not initialize logger: %v", err)
+	}
 
-	// Initialize application dependencies using the DI container (wire)
-	// This creates all our handlers and use cases.
-	botApp, err := di.InitializeBotApp(dbConnection)
+	// --- DI happens here ---
+	// We now pass the logger into the dependency injector.
+	botApp, err := di.InitializeBotApp(cfg, dbConnection, appLogger) // Pass logger in
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize bot dependencies: %v", err)
 	}
-	log.Println("Application services and handlers initialized successfully.")
 
-	// We need the RegisterUserHandler specifically for the middleware
-	registerUserHandler := di.InitializeRegisterUserHandler(dbConnection)
+	appLogger.Info("Logger and dependencies initialized by DI.")
 
-	// 3. Initialize the bot instance, passing the token from our config struct
+	// Validate essential config
+	if cfg.Telegram.Token == "" {
+		appLogger.Error("FATAL: Telegram token (ENSSI_TELEGRAM_TOKEN) is not set.")
+		os.Exit(1)
+	}
+
+	appLogger.Info("Database connection successful.")
+
+	// 3. Initialize the bot instance
 	botInstance, err := telegram.InitializeBot(
-		cfg.Telegram.Token,
+		cfg,
+		appLogger,
+		cfg.Telegram.Token, // <-- ADD THIS ARGUMENT
 		botApp.CommandHandler,
 		botApp.MessageHandler,
 		botApp.CallbackHandler,
-		registerUserHandler,
+		botApp.RegisterUserHandler,
 	)
 	if err != nil {
-		log.Fatalf("FATAL: Could not initialize bot: %v", err)
+		appLogger.Error("FATAL: Could not initialize bot", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize the broadcast handler
-	broadcastHandler, err := di.InitializeBroadcastHandler(dbConnection, botInstance)
+	broadcastHandler, err := di.InitializeBroadcastHandler(cfg, dbConnection, botInstance, appLogger) // <-- FIX IS HERE
 	if err != nil {
-		log.Fatalf("FATAL: Could not initialize broadcast handler: %v", err)
+		appLogger.Error("FATAL: Could not initialize broadcast handler", "error", err)
+		os.Exit(1)
 	}
-
-	// Manually inject the broadcast handler into our message handler
 	botApp.MessageHandler.Broadcast = broadcastHandler
-	log.Println("Broadcast handler injected successfully.")
+	appLogger.Info("Broadcast handler injected successfully.")
 
-	log.Println("Bot starting...")
+	appLogger.Info("Bot starting...")
 	botInstance.Start()
 }

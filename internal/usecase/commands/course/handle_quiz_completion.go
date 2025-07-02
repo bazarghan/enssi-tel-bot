@@ -5,11 +5,11 @@ import (
 	"errors"
 	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
-	"log"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // HandleQuizCompletionCommand defines the input for processing a quiz result.
@@ -21,6 +21,7 @@ type HandleQuizCompletionCommand struct {
 
 // HandleQuizCompletionHandler processes the command.
 type HandleQuizCompletionHandler struct {
+	logger               logger.Logger
 	courseRepo           course.Repository
 	wordRepo             word.Repository
 	createCourseQuiz     quizCmd.CreateCourseQuizHandler
@@ -33,12 +34,14 @@ type HandleQuizCompletionResult = StartSessionResult
 
 // NewHandleQuizCompletionHandler creates a new handler.
 func NewHandleQuizCompletionHandler(
+	appLogger logger.Logger,
 	courseRepo course.Repository,
 	wordRepo word.Repository,
 	createCourseQuiz quizCmd.CreateCourseQuizHandler,
 	awardProgressHandler achCmd.AwardProgressHandler,
 ) HandleQuizCompletionHandler {
 	return HandleQuizCompletionHandler{
+		logger:               appLogger,
 		courseRepo:           courseRepo,
 		wordRepo:             wordRepo,
 		createCourseQuiz:     createCourseQuiz,
@@ -57,7 +60,7 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 		// 1. Award Achievement Progress
 		domainCourse, err := h.courseRepo.FindByID(ctx, cmd.CourseID)
 		if err != nil {
-			log.Printf("Cannot find course %d to award achievement: %v", cmd.CourseID, err)
+			h.logger.Error("Cannot find course to award achievement", "courseID", cmd.CourseID, "error", err)
 		} else if domainCourse.LinkedAchievementID != 0 {
 			achCmd := achCmd.AwardProgressCommand{
 				UserID:        cmd.UserID,
@@ -65,7 +68,7 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 				ItemsToReveal: 12, // Award 12 "pixels" per passed quiz
 			}
 			if err := h.awardProgressHandler.Handle(ctx, achCmd); err != nil {
-				log.Printf("Failed to award achievement progress: %v", err)
+				h.logger.Error("Failed to award achievement progress", "error", err)
 			} else {
 				// If awarding was successful, store the ID to be returned later.
 				updatedAchievementID = domainCourse.LinkedAchievementID
@@ -79,12 +82,12 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 		}
 		wordsInBlock, err := h.wordRepo.FindWordIDsByCourseBlock(ctx, cmd.CourseID, WordsPerQuizBlock, offset)
 		if err != nil {
-			log.Printf("Could not get words for block to mark as studied: %v", err)
+			h.logger.Error("Could not get words for block to mark as studied", "error", err)
 		} else {
 			for _, wordID := range wordsInBlock {
 				studiedWord, err := h.wordRepo.FindStudiedWord(ctx, cmd.UserID, wordID)
 				if err != nil && !errors.Is(err, word.ErrStudiedWordNotFound) {
-					log.Printf("error checking for studied word %d: %v", wordID, err)
+					h.logger.Error("Error checking for studied word", "wordID", wordID, "error", err)
 					continue
 				}
 				if errors.Is(err, word.ErrStudiedWordNotFound) {
@@ -100,16 +103,18 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 		if cmd.Result.ShouldResetProgress {
 			err := h.courseRepo.SetProgress(ctx, cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
 			if err != nil {
-				log.Printf("Failed to reset progress for user %d in course %d: %v", cmd.UserID, cmd.CourseID, err)
+				h.logger.Error("Failed to reset progress for user", "userID", cmd.UserID, "courseID", cmd.CourseID, "error", err)
 			} else {
-				log.Printf("Successfully reset progress for user %d in course %d to %d", cmd.UserID, cmd.CourseID, cmd.Result.SuggestedNewProgress)
+				h.logger.Info("Successfully reset progress for user", "userID", cmd.UserID, "courseID", cmd.CourseID, "newProgress", cmd.Result.SuggestedNewProgress)
 			}
 		}
 	}
 
 	// 3. After handling the quiz consequences, determine the next step in the course.
-	startSessionHandler := NewStartSessionHandler(h.courseRepo, h.wordRepo, h.createCourseQuiz)
+
+	startSessionHandler := NewStartSessionHandler(h.logger, h.courseRepo, h.wordRepo, h.createCourseQuiz)
 	result, err := startSessionHandler.Handle(ctx, StartSessionCommand{UserID: cmd.UserID, CourseID: cmd.CourseID})
+
 	if err != nil {
 		return HandleQuizCompletionResult{}, err
 	}

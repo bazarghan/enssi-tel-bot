@@ -1,32 +1,41 @@
 package telegram
 
 import (
-	"log"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
 
 // InitializeBot creates and configures the Telebot instance.
 func InitializeBot(
+	cfg *config.Config,
+	appLogger logger.Logger,
 	token string,
 	cmdHandler *command.Handler,
 	msgHandler *message.Handler,
 	cbHandler *callback.Handler,
 	registerUserHandler registerCmd.RegisterUserHandler,
 ) (*telebot.Bot, error) {
+
 	if token == "" {
-		log.Fatal("Telebot token is empty. Please check environment variables.")
+		appLogger.Error("Telebot token is empty. Please check environment variables.")
+	}
+
+	// --- REFACTORED: Use a closure to capture the logger ---
+	onError := func(err error, c telebot.Context) {
+		logAndFormatError(err, c, appLogger)
 	}
 
 	pref := telebot.Settings{
 		Token:   token,
 		Poller:  &telebot.LongPoller{Timeout: 10 * time.Second},
-		OnError: logAndFormatError,
+		OnError: onError,
 	}
 
 	b, err := telebot.NewBot(pref)
@@ -38,29 +47,42 @@ func InitializeBot(
 	lockManager := NewUserLockManager()
 
 	// Setup router and middleware.
-	RegisterRoutes(b, cmdHandler, msgHandler, cbHandler, registerUserHandler, lockManager)
+	RegisterRoutes(b, appLogger, cmdHandler, msgHandler, cbHandler, registerUserHandler, lockManager)
 
 	return b, nil
 }
 
 // logAndFormatError is a detailed error logger for the telebot settings.
-func logAndFormatError(err error, c telebot.Context) {
-	log.Printf("[Telebot ERROR] Error: %v", err)
+func logAndFormatError(err error, c telebot.Context, appLogger logger.Logger) {
+	baseLogger := appLogger.With("system", "telebot")
+
 	if c == nil {
+		baseLogger.Error(err.Error())
 		return
 	}
-	senderID := int64(0)
+
+	var senderID int64
 	if c.Sender() != nil {
 		senderID = c.Sender().ID
 	}
-	chatID := int64(0)
+
+	var chatID int64
 	if c.Chat() != nil {
 		chatID = c.Chat().ID
 	}
-	callbackData := "N/A"
+
+	var callbackData string
 	if c.Callback() != nil {
 		callbackData = c.Callback().Data
 	}
-	log.Printf("[Telebot ERROR] Context: User %d, Chat %d, Text: %s, Data: %s",
-		senderID, chatID, c.Text(), callbackData)
+
+	baseLogger.Error(
+		"Telebot context error",
+		"error", err,
+		"senderID", senderID,
+		"chatID", chatID,
+		"text", c.Text(),
+		"callback", callbackData,
+	)
 }
+

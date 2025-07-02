@@ -7,8 +7,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
-	"log"
 )
 
 type Step int
@@ -56,6 +56,7 @@ type StartSessionResult struct {
 
 // StartSessionHandler processes the command.
 type StartSessionHandler struct {
+	logger           logger.Logger
 	courseRepo       course.Repository
 	wordRepo         word.Repository
 	createCourseQuiz quizCmd.CreateCourseQuizHandler
@@ -63,11 +64,13 @@ type StartSessionHandler struct {
 
 // NewStartSessionHandler creates a new handler.
 func NewStartSessionHandler(
+	appLogger logger.Logger,
 	courseRepo course.Repository,
 	wordRepo word.Repository,
 	createCourseQuiz quizCmd.CreateCourseQuizHandler,
 ) StartSessionHandler {
 	return StartSessionHandler{
+		logger:           appLogger,
 		courseRepo:       courseRepo,
 		wordRepo:         wordRepo,
 		createCourseQuiz: createCourseQuiz,
@@ -98,7 +101,7 @@ func (h StartSessionHandler) Handle(ctx context.Context, cmd StartSessionCommand
 		quizResult, err := h.createCourseQuiz.Handle(ctx, quizCmd)
 
 		if err != nil && !errors.Is(err, quiz.ErrAttemptAlreadyCompleted) && !errors.Is(err, quiz.ErrQuizAlreadyPassed) {
-			log.Printf("Failed to create or find quiz for user %d, course %d: %v", cmd.UserID, cmd.CourseID, err)
+			h.logger.Error("Failed to create or find quiz", "userID", cmd.UserID, "courseID", cmd.CourseID, "error", err)
 		} else if quizResult.QuizAttempt.ID != 0 && !quizResult.QuizAttempt.IsCompleted {
 			return StartSessionResult{
 				NextStep:    ShowQuiz,

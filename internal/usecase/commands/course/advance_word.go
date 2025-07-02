@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
-	"log"
 )
 
 // AdvanceWordCommand defines the input for advancing to the next word.
@@ -22,6 +23,7 @@ type AdvanceWordResult = StartSessionResult
 
 // AdvanceWordHandler processes the command.
 type AdvanceWordHandler struct {
+	logger           logger.Logger
 	courseRepo       course.Repository
 	wordRepo         word.Repository
 	createCourseQuiz quizCmd.CreateCourseQuizHandler
@@ -29,11 +31,13 @@ type AdvanceWordHandler struct {
 
 // NewAdvanceWordHandler creates a new handler.
 func NewAdvanceWordHandler(
+	appLogger logger.Logger,
 	courseRepo course.Repository,
 	wordRepo word.Repository,
 	createCourseQuiz quizCmd.CreateCourseQuizHandler,
 ) AdvanceWordHandler {
 	return AdvanceWordHandler{
+		logger:           appLogger,
 		courseRepo:       courseRepo,
 		wordRepo:         wordRepo,
 		createCourseQuiz: createCourseQuiz,
@@ -59,18 +63,18 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 	if wordJustStudiedIndex > 0 {
 		wordToMark, err := h.wordRepo.FindByCourseIndex(ctx, cmd.CourseID, wordJustStudiedIndex)
 		if err != nil {
-			log.Printf("could not find word at index %d to mark as studied: %v", wordJustStudiedIndex, err)
+			h.logger.Error("Could not find word to mark as studied", "index", wordJustStudiedIndex, "error", err)
 		} else {
 			studiedWord, err := h.wordRepo.FindStudiedWord(ctx, cmd.UserID, wordToMark.ID)
 			if err != nil && !errors.Is(err, word.ErrStudiedWordNotFound) {
-				log.Printf("error checking for studied word %d: %v", wordToMark.ID, err)
+				h.logger.Error("Error checking for studied word", "wordID", wordToMark.ID, "error", err)
 			} else {
 				if errors.Is(err, word.ErrStudiedWordNotFound) {
 					studiedWord = word.StudiedWord{UserID: cmd.UserID, WordID: wordToMark.ID}
 				}
 				studiedWord.CalculateNextReview(true) // Assume correct recall as user is advancing.
 				if err := h.wordRepo.SaveStudiedWord(ctx, studiedWord); err != nil {
-					log.Printf("failed to save studied word record for word %d: %v", wordToMark.ID, err)
+					h.logger.Error("Failed to save studied word record", "wordID", wordToMark.ID, "error", err)
 				}
 			}
 		}
@@ -93,7 +97,7 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 		}
 		quizResult, err := h.createCourseQuiz.Handle(ctx, quizCmd)
 		if err != nil {
-			log.Printf("Failed to create quiz for user %d, course %d: %v", cmd.UserID, cmd.CourseID, err)
+			h.logger.Error("Failed to create quiz", "userID", cmd.UserID, "courseID", cmd.CourseID, "error", err)
 		} else {
 			return AdvanceWordResult{
 				NextStep:    ShowQuiz,
@@ -123,3 +127,4 @@ func (h AdvanceWordHandler) Handle(ctx context.Context, cmd AdvanceWordCommand) 
 		Word:     mapToWordDisplayData(displayableWord),
 	}, nil
 }
+

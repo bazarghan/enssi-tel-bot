@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	"log"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // SubmitAnswerCommand defines the input.
@@ -25,13 +25,22 @@ type SubmitAnswerResult struct {
 
 // SubmitAnswerHandler processes a user's quiz answer.
 type SubmitAnswerHandler struct {
+	logger   logger.Logger
 	quizRepo quiz.Repository
 	wordRepo word.Repository
 }
 
 // NewSubmitAnswerHandler creates a new handler.
-func NewSubmitAnswerHandler(quizRepo quiz.Repository, wordRepo word.Repository) SubmitAnswerHandler {
-	return SubmitAnswerHandler{quizRepo: quizRepo, wordRepo: wordRepo}
+func NewSubmitAnswerHandler(
+	appLogger logger.Logger,
+	quizRepo quiz.Repository,
+	wordRepo word.Repository,
+) SubmitAnswerHandler {
+	return SubmitAnswerHandler{
+		logger:   appLogger,
+		quizRepo: quizRepo,
+		wordRepo: wordRepo,
+	}
 }
 
 // Handle executes the command.
@@ -110,7 +119,7 @@ func (h *SubmitAnswerHandler) updateSRS(ctx context.Context, userID, wordID uint
 	}
 	studiedWord, err := h.wordRepo.FindStudiedWord(ctx, userID, wordID)
 	if err != nil {
-		log.Printf("could not find studied word %d for user %d to update SRS: %v", wordID, userID, err)
+		h.logger.Warn("Could not find studied word to update SRS", "wordID", wordID, "userID", userID, "error", err)
 		return
 	}
 	studiedWord.CalculateNextReview(wasCorrect)
@@ -144,3 +153,4 @@ func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalSc
 
 	return result
 }
+

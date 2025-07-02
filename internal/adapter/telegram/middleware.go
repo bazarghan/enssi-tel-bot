@@ -2,8 +2,8 @@ package telegram
 
 import (
 	"context"
-	"log"
 
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
@@ -13,7 +13,7 @@ const UserContextKey = "dbUser"
 
 // UserActivityMiddleware ensures a user entity exists and stores it in the context.
 // It uses the RegisterUserHandler use case, decoupling it from the persistence layer.
-func UserActivityMiddleware(registerUserHandler registerCmd.RegisterUserHandler) telebot.MiddlewareFunc {
+func UserActivityMiddleware(appLogger logger.Logger, registerUserHandler registerCmd.RegisterUserHandler) telebot.MiddlewareFunc {
 	return func(next telebot.HandlerFunc) telebot.HandlerFunc {
 		return func(c telebot.Context) error {
 			sender := c.Sender()
@@ -31,7 +31,7 @@ func UserActivityMiddleware(registerUserHandler registerCmd.RegisterUserHandler)
 			// Execute the use case to get or create the user.
 			result, err := registerUserHandler.Handle(context.Background(), cmd)
 			if err != nil {
-				log.Printf("[UserActivityMiddleware] FATAL: telegramID=%d: %v", sender.ID, err)
+				appLogger.Error("Failed to register or find user in middleware", "error", err, "telegramID", sender.ID)
 				_ = c.Send("I'm having trouble with your account right now. Please try again later.")
 				return nil // Stop processing
 			}
@@ -45,7 +45,7 @@ func UserActivityMiddleware(registerUserHandler registerCmd.RegisterUserHandler)
 }
 
 // UserLockMiddleware prevents concurrent request processing for the same user.
-func UserLockMiddleware(lockManager *UserLockManager) telebot.MiddlewareFunc {
+func UserLockMiddleware(appLogger logger.Logger, lockManager *UserLockManager) telebot.MiddlewareFunc {
 	return func(next telebot.HandlerFunc) telebot.HandlerFunc {
 		return func(c telebot.Context) error {
 			sender := c.Sender()
@@ -55,7 +55,7 @@ func UserLockMiddleware(lockManager *UserLockManager) telebot.MiddlewareFunc {
 			userID := sender.ID
 
 			if !lockManager.TryLock(userID) {
-				log.Printf("[UserLockMiddleware] Ignored concurrent request for UserID %d.", userID)
+				appLogger.Warn("Ignored concurrent request for user", "userID", userID)
 				if cb := c.Callback(); cb != nil {
 					c.Respond() // Acknowledge callback to stop loading animation
 				}
@@ -69,20 +69,25 @@ func UserLockMiddleware(lockManager *UserLockManager) telebot.MiddlewareFunc {
 }
 
 // ErrorHandlerMiddleware logs handler errors and notifies the user.
-func ErrorHandlerMiddleware(next telebot.HandlerFunc) telebot.HandlerFunc {
-	return func(c telebot.Context) error {
-		if err := next(c); err != nil {
-			log.Printf("[Handler ERROR] user=%d err=%v", c.Sender().ID, err)
-			// Simplified error response
-			if c.Callback() != nil {
-				_ = c.Respond(&telebot.CallbackResponse{
-					Text:      "An unexpected error occurred.",
-					ShowAlert: true,
-				})
-			} else {
-				_ = c.Send("An unexpected error occurred. Please try again.")
+func ErrorHandlerMiddleware(appLogger logger.Logger) telebot.MiddlewareFunc {
+	return func(next telebot.HandlerFunc) telebot.HandlerFunc {
+		return func(c telebot.Context) error {
+			if err := next(c); err != nil {
+				appLogger.Error(
+					"Handler error",
+					"error", err,
+					"senderID", c.Sender().ID,
+				)
+				if c.Callback() != nil {
+					_ = c.Respond(&telebot.CallbackResponse{
+						Text:      "An unexpected error occurred.",
+						ShowAlert: true,
+					})
+				} else {
+					_ = c.Send("An unexpected error occurred. Please try again.")
+				}
 			}
+			return nil // Error is handled
 		}
-		return nil // Error is handled
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
-	"log"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // GetOverviewQuery defines the input for getting a course overview.
@@ -27,12 +27,13 @@ type OverviewResult struct {
 
 // GetOverviewHandler processes the query to get a course overview.
 type GetOverviewHandler struct {
+	logger     logger.Logger
 	courseRepo course.Repository
 }
 
 // NewGetOverviewHandler creates a new handler.
-func NewGetOverviewHandler(courseRepo course.Repository) GetOverviewHandler {
-	return GetOverviewHandler{courseRepo: courseRepo}
+func NewGetOverviewHandler(appLogger logger.Logger, courseRepo course.Repository) GetOverviewHandler {
+	return GetOverviewHandler{logger: appLogger, courseRepo: courseRepo}
 }
 
 // Handle executes the query.
@@ -44,7 +45,7 @@ func (h GetOverviewHandler) Handle(ctx context.Context, q GetOverviewQuery) (Ove
 
 	progress, err := h.courseRepo.GetUserProgress(ctx, q.UserID, c.ID)
 	if err != nil {
-		log.Printf("could not get user progress for course overview %d: %v\n", c.ID, err)
+		h.logger.Warn("Could not get user progress for course overview", "courseID", c.ID, "userID", q.UserID, "error", err)
 	}
 
 	return OverviewResult{

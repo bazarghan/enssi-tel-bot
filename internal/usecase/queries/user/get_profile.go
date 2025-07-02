@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"log"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	"time"
 )
 
@@ -29,6 +29,7 @@ type GetProfileResult struct {
 
 // GetProfileHandler processes the query.
 type GetProfileHandler struct {
+	logger   logger.Logger
 	userRepo user.Repository
 	achRepo  achievement.Repository
 	// Dependencies on other repositories (WordStudied, UserCourse) will be added in later slices.
@@ -41,8 +42,16 @@ type AchievementResult struct {
 }
 
 // NewGetProfileHandler creates a new handler.
-func NewGetProfileHandler(userRepo user.Repository, achRepo achievement.Repository) GetProfileHandler {
-	return GetProfileHandler{userRepo: userRepo, achRepo: achRepo}
+func NewGetProfileHandler(
+	appLogger logger.Logger,
+	userRepo user.Repository,
+	achRepo achievement.Repository,
+) GetProfileHandler {
+	return GetProfileHandler{
+		logger:   appLogger,
+		userRepo: userRepo,
+		achRepo:  achRepo,
+	}
 }
 
 // Handle executes the query.
@@ -60,7 +69,7 @@ func (h GetProfileHandler) Handle(ctx context.Context, q GetProfileQuery) (GetPr
 
 	userAchievements, err := h.achRepo.FindUserAchievements(ctx, q.UserID)
 	if err != nil {
-		log.Printf("Could not fetch achievements for user %d: %v", q.UserID, err)
+		h.logger.Warn("Could not fetch achievements for user", "userID", q.UserID, "error", err)
 		// Non-fatal error, we can still show the rest of the profile
 	}
 

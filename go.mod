@@ -5,9 +5,9 @@ go 1.24.2
 require (
 	github.com/bits-and-blooms/bitset v1.22.0
 	github.com/google/wire v0.6.0
-	github.com/joho/godotenv v1.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/viper v1.13.0
+	go.uber.org/zap v1.27.0
 	gopkg.in/telebot.v4 v4.0.0-beta.4
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
@@ -31,6 +31,7 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect

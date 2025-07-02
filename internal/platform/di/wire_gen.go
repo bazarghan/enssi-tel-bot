@@ -19,6 +19,8 @@ import (
 	quiz2 "github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	user3 "github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	word2 "github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
+	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 	achievement2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	admin2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
 	course2 "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
@@ -38,40 +40,41 @@ import (
 
 // Injectors from wire.go:
 
-// InitializeBotApp creates the dependency graph for the bot application handlers.
-func InitializeBotApp(db *gorm.DB) (*BotApp, error) {
+// InitializeBotApp now gets the logger as an input.
+func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) (*BotApp, error) {
 	userRepository := postgres.NewUserRepository(db)
 	registerUserHandler := user.NewRegisterUserHandler(userRepository)
 	achievementRepository := postgres.NewAchievementRepository(db)
-	getProfileHandler := user2.NewGetProfileHandler(userRepository, achievementRepository)
-	quizRepository := postgres.NewQuizRepository(db)
+	getProfileHandler := user2.NewGetProfileHandler(appLogger, userRepository, achievementRepository)
+	quizRepository := postgres.NewQuizRepository(db, appLogger)
 	wordRepository := postgres.NewWordRepository(db)
-	handler := review.NewHandler(userRepository, wordRepository)
-	commandHandler := command.NewHandler(registerUserHandler, getProfileHandler, userRepository, quizRepository, wordRepository, handler)
+	handler := review.NewHandler(appLogger, userRepository, wordRepository)
+	commandHandler := command.NewHandler(appLogger, registerUserHandler, getProfileHandler, userRepository, quizRepository, wordRepository, handler)
 	courseRepository := postgres.NewCourseRepository(db)
-	listCoursesHandler := course.NewListCoursesHandler(courseRepository)
-	getOverviewHandler := course.NewGetOverviewHandler(courseRepository)
-	getStatsHandler := admin.NewGetStatsHandler(userRepository)
-	getAllHandler := achievement.NewGetAllHandler(achievementRepository)
+	listCoursesHandler := course.NewListCoursesHandler(appLogger, courseRepository)
+	getOverviewHandler := course.NewGetOverviewHandler(appLogger, courseRepository)
+	getStatsHandler := admin.NewGetStatsHandler(appLogger, userRepository)
+	getAllHandler := achievement.NewGetAllHandler(appLogger, achievementRepository)
 	string2 := _wireStringValue
 	generator, err := imagegen.NewGenerator(string2)
 	if err != nil {
 		return nil, err
 	}
 	createCourseQuizHandler := quiz.NewCreateCourseQuizHandler(quizRepository, wordRepository)
-	advanceWordHandler := course2.NewAdvanceWordHandler(courseRepository, wordRepository, createCourseQuizHandler)
-	startSessionHandler := course2.NewStartSessionHandler(courseRepository, wordRepository, createCourseQuizHandler)
+	advanceWordHandler := course2.NewAdvanceWordHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler)
+	startSessionHandler := course2.NewStartSessionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler)
 	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
 	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, handler)
-	submitAnswerHandler := quiz.NewSubmitAnswerHandler(quizRepository, wordRepository)
+	messageHandler := message.NewHandler(appLogger, listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, handler)
+	submitAnswerHandler := quiz.NewSubmitAnswerHandler(appLogger, quizRepository, wordRepository)
 	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
-	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
-	callbackHandler := callback.NewHandler(submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
+	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
+	callbackHandler := callback.NewHandler(appLogger, submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
 	botApp := &BotApp{
-		CommandHandler:  commandHandler,
-		MessageHandler:  messageHandler,
-		CallbackHandler: callbackHandler,
+		CommandHandler:      commandHandler,
+		MessageHandler:      messageHandler,
+		CallbackHandler:     callbackHandler,
+		RegisterUserHandler: registerUserHandler,
 	}
 	return botApp, nil
 }
@@ -80,51 +83,43 @@ var (
 	_wireStringValue = "assets/imgs/achievements_gen"
 )
 
-// InitializeWorkerApp creates the dependency graph for the worker application.
-func InitializeWorkerApp(db *gorm.DB, bot *telebot.Bot) (*WorkerApp, error) {
+// InitializeWorkerApp now gets the logger as an input.
+func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (*WorkerApp, error) {
 	userRepository := postgres.NewUserRepository(db)
 	wordRepository := postgres.NewWordRepository(db)
-	quizRepository := postgres.NewQuizRepository(db)
+	quizRepository := postgres.NewQuizRepository(db, appLogger)
 	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
 	notifier := telegram.NewNotifier(bot, userRepository)
-	triggerDailyReviewsJob := jobs.NewTriggerDailyReviewsJob(userRepository, wordRepository, quizRepository, createReviewQuizHandler, notifier)
+	triggerDailyReviewsJob := jobs.NewTriggerDailyReviewsJob(appLogger, userRepository, wordRepository, quizRepository, createReviewQuizHandler, notifier)
 	workerApp := &WorkerApp{
 		TriggerDailyReviewsJob: triggerDailyReviewsJob,
 	}
 	return workerApp, nil
 }
 
-// InitializeRegisterUserHandler is a helper to get just the user registration use case.
-// This is a temporary solution to simplify wiring the middleware in main.go.
-func InitializeRegisterUserHandler(db *gorm.DB) user.RegisterUserHandler {
-	userRepository := postgres.NewUserRepository(db)
-	registerUserHandler := user.NewRegisterUserHandler(userRepository)
-	return registerUserHandler
-}
-
-// This injector's specific job is to build the BroadcastHandler,
-// because it's the only one that needs the live bot instance.
-func InitializeBroadcastHandler(db *gorm.DB, bot *telebot.Bot) (admin2.BroadcastHandler, error) {
+func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (admin2.BroadcastHandler, error) {
 	userRepository := postgres.NewUserRepository(db)
 	notifier := telegram.NewNotifier(bot, userRepository)
-	broadcastHandler := admin2.NewBroadcastHandler(userRepository, notifier)
+	broadcastHandler := admin2.NewBroadcastHandler(appLogger, userRepository, notifier)
 	return broadcastHandler, nil
 }
 
 // wire.go:
 
-// BotApp contains the dependencies for the Telegram bot entry point.
+// BotApp remains the same.
 type BotApp struct {
-	CommandHandler  *command.Handler
-	MessageHandler  *message.Handler
-	CallbackHandler *callback.Handler
+	CommandHandler      *command.Handler
+	MessageHandler      *message.Handler
+	CallbackHandler     *callback.Handler
+	RegisterUserHandler user.RegisterUserHandler
 }
 
-// WorkerApp contains the dependencies for the background worker entry point.
+// WorkerApp remains the same.
 type WorkerApp struct {
 	TriggerDailyReviewsJob *jobs.TriggerDailyReviewsJob
 }
 
+// --- Provider Sets ---
 var userSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(user3.Repository), new(*postgres.UserRepository)), user.NewRegisterUserHandler, user2.NewGetProfileHandler)
 
 var courseSet = wire.NewSet(postgres.NewCourseRepository, wire.Bind(new(course3.Repository), new(*postgres.CourseRepository)), course.NewListCoursesHandler, course.NewGetOverviewHandler, course2.NewStartSessionHandler, course2.NewAdvanceWordHandler, course2.NewHandleQuizCompletionHandler)
@@ -133,7 +128,7 @@ var reviewSet = wire.NewSet(review.NewHandler)
 
 var wordSet = wire.NewSet(postgres.NewWordRepository, wire.Bind(new(word2.Repository), new(*postgres.WordRepository)))
 
-var adminStatsSet = wire.NewSet(admin.NewGetStatsHandler)
+var adminSet = wire.NewSet(admin.NewGetStatsHandler, admin2.NewBroadcastHandler)
 
 var quizSet = wire.NewSet(postgres.NewQuizRepository, wire.Bind(new(quiz2.Repository), new(*postgres.QuizRepository)), quiz.NewCreateCourseQuizHandler, quiz.NewCreateReviewQuizHandler, quiz.NewSubmitAnswerHandler)
 
