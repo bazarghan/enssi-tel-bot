@@ -14,7 +14,7 @@ func RegisterRoutes(
 	b *telebot.Bot,
 	appLogger logger.Logger,
 	cmdHandler *command.Handler,
-	msgHandler *message.Handler,
+	msgHandler *message.Router,
 	cbHandler *callback.Handler,
 	registerUserHandler registerCmd.RegisterUserHandler,
 	lockManager *UserLockManager,

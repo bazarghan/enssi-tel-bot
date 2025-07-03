@@ -52,7 +52,7 @@ func main() {
 	botInstance, err := telegram.InitializeBot(
 		cfg,
 		appLogger,
-		cfg.Telegram.Token, // <-- ADD THIS ARGUMENT
+		cfg.Telegram.Token,
 		botApp.CommandHandler,
 		botApp.MessageHandler,
 		botApp.CallbackHandler,
@@ -69,7 +69,7 @@ func main() {
 		appLogger.Error("FATAL: Could not initialize broadcast handler", "error", err)
 		os.Exit(1)
 	}
-	botApp.MessageHandler.Broadcast = broadcastHandler
+	botApp.MessageHandler.AdminHandler.Broadcast = broadcastHandler
 	appLogger.Info("Broadcast handler injected successfully.")
 
 	appLogger.Info("Bot starting...")

@@ -55,24 +55,24 @@ func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) 
 	getOverviewHandler := course.NewGetOverviewHandler(appLogger, courseRepository)
 	getStatsHandler := admin.NewGetStatsHandler(appLogger, userRepository)
 	getAllHandler := achievement.NewGetAllHandler(appLogger, achievementRepository)
-	string2 := _wireStringValue
-	generator, err := imagegen.NewGenerator(string2)
-	if err != nil {
-		return nil, err
-	}
 	createCourseQuizHandler := quiz.NewCreateCourseQuizHandler(quizRepository, wordRepository)
 	advanceWordHandler := course2.NewAdvanceWordHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler)
 	startSessionHandler := course2.NewStartSessionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler)
 	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
 	cacheMediaHandler := word.NewCacheMediaHandler(wordRepository)
-	messageHandler := message.NewHandler(appLogger, listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, achievementRepository, generator, advanceWordHandler, startSessionHandler, userRepository, courseRepository, quizRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, handler)
+	string2 := _wireStringValue
+	generator, err := imagegen.NewGenerator(string2)
+	if err != nil {
+		return nil, err
+	}
+	router := message.NewRouter(appLogger, listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, advanceWordHandler, startSessionHandler, userRepository, quizRepository, courseRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, achievementRepository, generator, handler)
 	submitAnswerHandler := quiz.NewSubmitAnswerHandler(appLogger, quizRepository, wordRepository)
 	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	callbackHandler := callback.NewHandler(appLogger, submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
 	botApp := &BotApp{
 		CommandHandler:      commandHandler,
-		MessageHandler:      messageHandler,
+		MessageHandler:      router,
 		CallbackHandler:     callbackHandler,
 		RegisterUserHandler: registerUserHandler,
 	}
@@ -109,7 +109,7 @@ func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bo
 // BotApp remains the same.
 type BotApp struct {
 	CommandHandler      *command.Handler
-	MessageHandler      *message.Handler
+	MessageHandler      *message.Router
 	CallbackHandler     *callback.Handler
 	RegisterUserHandler user.RegisterUserHandler
 }
@@ -128,7 +128,9 @@ var reviewSet = wire.NewSet(review.NewHandler)
 
 var wordSet = wire.NewSet(postgres.NewWordRepository, wire.Bind(new(word2.Repository), new(*postgres.WordRepository)))
 
-var adminSet = wire.NewSet(admin.NewGetStatsHandler, admin2.NewBroadcastHandler)
+var statsHandlerSet = wire.NewSet(admin.NewGetStatsHandler)
+
+var broadcastHandlerSet = wire.NewSet(admin2.NewBroadcastHandler)
 
 var quizSet = wire.NewSet(postgres.NewQuizRepository, wire.Bind(new(quiz2.Repository), new(*postgres.QuizRepository)), quiz.NewCreateCourseQuizHandler, quiz.NewCreateReviewQuizHandler, quiz.NewSubmitAnswerHandler)
 
@@ -139,3 +141,5 @@ var imagegenSet = wire.NewSet(wire.Value("assets/imgs/achievements_gen"), imageg
 var notifierSet = wire.NewSet(telegram.NewNotifier, wire.Bind(new(notification.Notifier), new(*telegram.Notifier)))
 
 var wordCacheSet = wire.NewSet(word.NewCacheMediaHandler)
+
+var messageHandlerSet = wire.NewSet(message.NewAdminHandler, message.NewCourseHandler, message.NewProfileHandler, message.NewMainMenuHandler, message.NewRouter)

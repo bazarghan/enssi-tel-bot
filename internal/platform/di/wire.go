@@ -41,7 +41,7 @@ import (
 // BotApp remains the same.
 type BotApp struct {
 	CommandHandler      *command.Handler
-	MessageHandler      *message.Handler
+	MessageHandler      *message.Router
 	CallbackHandler     *callback.Handler
 	RegisterUserHandler userCmd.RegisterUserHandler
 }
@@ -76,10 +76,8 @@ var wordSet = wire.NewSet(
 	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
 )
 
-var adminSet = wire.NewSet(
-	adminQueries.NewGetStatsHandler,
-	adminCmd.NewBroadcastHandler,
-)
+var statsHandlerSet = wire.NewSet(adminQueries.NewGetStatsHandler)
+var broadcastHandlerSet = wire.NewSet(adminCmd.NewBroadcastHandler)
 
 var quizSet = wire.NewSet(
 	postgres.NewQuizRepository,
@@ -109,6 +107,14 @@ var notifierSet = wire.NewSet(
 
 var wordCacheSet = wire.NewSet(wordCmd.NewCacheMediaHandler)
 
+var messageHandlerSet = wire.NewSet(
+	message.NewAdminHandler,
+	message.NewCourseHandler,
+	message.NewProfileHandler,
+	message.NewMainMenuHandler,
+	message.NewRouter,
+)
+
 // --- UPDATED Injectors ---
 
 // InitializeBotApp now gets the logger as an input.
@@ -120,11 +126,14 @@ func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) 
 		wordCacheSet,
 		quizSet,
 		achievementSet,
-		adminSet,
+
+		statsHandlerSet,
+
 		reviewSet,
 		imagegenSet,
+
 		command.NewHandler,
-		message.NewHandler,
+		messageHandlerSet,
 		callback.NewHandler,
 		wire.Struct(new(BotApp), "*"),
 	)
@@ -148,7 +157,7 @@ func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bo
 	wire.Build(
 		userSet,
 		notifierSet,
-		adminCmd.NewBroadcastHandler,
+		broadcastHandlerSet,
 	)
 	return adminCmd.BroadcastHandler{}, nil
 }

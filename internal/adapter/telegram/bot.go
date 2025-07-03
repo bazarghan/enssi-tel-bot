@@ -18,7 +18,7 @@ func InitializeBot(
 	appLogger logger.Logger,
 	token string,
 	cmdHandler *command.Handler,
-	msgHandler *message.Handler,
+	msgHandler *message.Router,
 	cbHandler *callback.Handler,
 	registerUserHandler registerCmd.RegisterUserHandler,
 ) (*telebot.Bot, error) {
@@ -85,4 +85,3 @@ func logAndFormatError(err error, c telebot.Context, appLogger logger.Logger) {
 		"callback", callbackData,
 	)
 }
-
