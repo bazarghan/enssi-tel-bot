@@ -143,7 +143,7 @@ The `Makefile` provides several commands to streamline the development process.
 
 The project's structure is organized according to Clean Architecture principles:
 
-
+```
 .
 ├── cmd/                # Main application entrypoints (bot, worker)
 ├── configs/            # Configuration files (config.yaml)
@@ -159,6 +159,7 @@ The project's structure is organized according to Clean Architecture principles:
 ├── docker-compose.yml  # Docker Compose configuration for all services
 └── Makefile            # Helper commands for development
 
+```
 
 ---
 
