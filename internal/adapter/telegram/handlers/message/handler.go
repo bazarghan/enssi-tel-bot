@@ -24,6 +24,8 @@ import (
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 
+	sc "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/stateconstants"
+	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
 	adminCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
 	advanceCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	startCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
@@ -36,21 +38,6 @@ import (
 	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
 
 	"gopkg.in/telebot.v4"
-)
-
-const (
-	BtnStartLearning       = "شروع یادگیری"
-	BtnDailyReview         = "📝 مرور روزانه"
-	BtnMyProfile           = "پروفایل"
-	BtnReturnToProfile     = "بازگشت به پروفایل"
-	BtnAdminPanel          = "پنل ادمین"
-	StateMain              = "main"
-	StateCourseList        = "course_list"
-	StateAchievementList   = "achievements_list"
-	StateCourseDetailsBase = "course_details"
-	StateProfileMenu       = "profile_menu"
-	StateInCourseBase      = "in_course"
-	StateAdminPanel        = "admin_panel"
 )
 
 // Handler holds dependencies for message handlers.
@@ -133,82 +120,68 @@ func (h *Handler) Handle(c telebot.Context) error {
 	stateBase, stateID, _ := strings.Cut(ctxUser.LastMenu, ":")
 
 	// Global commands
-	if userInput == keyboards.BtnReturnToMainMenu {
+	if userInput == ui.BtnReturnToMainMenuText {
 		return h.handleReturnToMainMenu(c, ctxUser)
 	}
 
 	// State-based routing
 	switch {
-	case ctxUser.LastMenu == StateMain:
+	case ctxUser.LastMenu == sc.StateMain:
 
-		if userInput == BtnStartLearning {
+		if userInput == ui.BtnStartLearningText {
 			return h.handleStartLearning(c, ctxUser)
 		}
 
-		if userInput == BtnMyProfile {
+		if userInput == ui.BtnMyProfileText {
 			return h.handleGetProfile(c, ctxUser)
 		}
 
-		if userInput == BtnDailyReview {
+		if userInput == ui.BtnDailyReviewText {
 			return h.handleDailyReview(c, ctxUser)
 		}
 
-		if userInput == BtnAdminPanel {
+		if userInput == ui.BtnAdminPanelText {
 			return h.handleAdminPanel(c, ctxUser)
 		}
 
-	case ctxUser.LastMenu == StateCourseList:
+	case ctxUser.LastMenu == sc.StateCourseList:
 
 		return h.handleCourseSelection(c, ctxUser, userInput)
 
-	case ctxUser.LastMenu == StateAchievementList:
+	case ctxUser.LastMenu == sc.StateAchievementList:
 
-		if userInput == BtnReturnToProfile {
+		if userInput == ui.BtnReturnToProfileText {
 			return h.handleReturnToProfile(c, ctxUser)
 		} else {
 			return h.handleAchievementSelection(c, ctxUser, userInput)
 		}
 
-	case ctxUser.LastMenu == StateAdminPanel:
+	case ctxUser.LastMenu == sc.StateAdminPanel:
 
-		if userInput == keyboards.BtnAdminStats {
+		if userInput == ui.BtnAdminStatsText {
 			return h.handleGetStats(c)
 		}
-		if userInput == keyboards.BtnAdminBroadcast {
-			h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "admin_broadcast_pending")
-			return c.Send("لطفا پیامی که میخواهید برای همه کاربران ارسال شود را وارد کنید:")
+		if userInput == ui.BtnAdminBroadcastText {
+			return h.handleInitiateAdminBroadcast(c, ctxUser)
 		}
 
-	case ctxUser.LastMenu == "admin_broadcast_pending":
-		// Any text received in this state is the message to be broadcast
-		broadcastCmd := adminCmd.BroadcastCommand{Message: userInput} // Assuming adminCmd alias
+	case ctxUser.LastMenu == sc.StateAdminBroadcast:
 
-		recipients, err := h.Broadcast.Handle(context.Background(), broadcastCmd) // Assuming dependency is `broadcast`
-		if err != nil {
-			h.logger.Error("Broadcast failed", "error", err)
-			return c.Send("ارسال پیام همگانی با خطا مواجه شد.")
-		}
+		return h.handleAdminBroadcast(c, ctxUser, userInput)
 
-		// Send confirmation to the admin and return them to the admin panel
-		confirmationMsg := fmt.Sprintf("✅ پیام شما برای %d کاربر ارسال شد.", recipients)
-		c.Send(confirmationMsg)
-
-		h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "admin_panel")
-		return c.Send("به پنل ادمین بازگشتید.", keyboards.AdminPanelKeyboard())
-
-	case stateBase == StateCourseDetailsBase && stateID != "":
+	case stateBase == sc.StateCourseDetails && stateID != "":
 
 		return h.handleCourseAction(c, ctxUser, userInput, stateID)
 
-	case stateBase == StateInCourseBase && stateID != "":
+	case stateBase == sc.StateInCourse && stateID != "":
 
 		if userInput == keyboards.NextWordButtonText {
 			return h.handleNextWord(c, ctxUser, stateID)
 		}
 
-	case stateBase == StateProfileMenu:
+	case stateBase == sc.StateProfileMenu:
 
-		if userInput == keyboards.BtnViewAchievements.Text {
+		if userInput == ui.BtnViewAchievementsText {
 			return h.handleViewMyAchievements(c, ctxUser)
 		}
 
@@ -254,7 +227,7 @@ func (h *Handler) handleStartLearning(c telebot.Context, u user.User) error {
 	msg := formatters.FormatCourseListMessage(courseDTOs)
 	kb := keyboards.CourseListKeyboard(courseDTOs)
 
-	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateCourseList); err != nil {
+	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateCourseList); err != nil {
 		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
 
@@ -282,7 +255,7 @@ func (h *Handler) handleGetProfile(c telebot.Context, u user.User) error {
 
 	formattedProfile := formatters.FormatUserProfile(profileDTO)
 
-	h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateProfileMenu)
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateProfileMenu)
 
 	// We send the profile message and the profile menu keyboard
 	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
@@ -327,7 +300,7 @@ func (h *Handler) displayCourseOverview(c telebot.Context, u user.User, courseID
 	msg := formatters.FormatCourseOverview(dto)
 	kb := keyboards.CourseDetailsKeyboard(dto)
 
-	newState := fmt.Sprintf("%s:%d", StateCourseDetailsBase, courseID)
+	newState := fmt.Sprintf("%s:%d", sc.StateCourseDetails, courseID)
 	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState); err != nil {
 		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
@@ -378,7 +351,7 @@ func (h *Handler) handleReturnToMainMenu(c telebot.Context, u user.User) error {
 	}
 	// --- END OF REFACTORED CODE ---
 
-	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateMain); err != nil {
+	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateMain); err != nil {
 		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
 	return c.Send("به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin, hasPendingReview))
@@ -391,7 +364,7 @@ func (h *Handler) handleCourseAction(c telebot.Context, u user.User, actionText,
 	}
 
 	baseActionText := strings.Split(actionText, " (")[0]
-	if baseActionText != keyboards.StartCourseButtonText && baseActionText != keyboards.ContinueCourseButtonText {
+	if baseActionText != ui.BtnStartCourseText && baseActionText != ui.BtnContinueCourseText {
 		return nil // Not a start/continue action
 	}
 
@@ -429,7 +402,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 	switch res.NextStep {
 	case startCmd.ShowWord:
 		wordData := res.Word
-		newState = fmt.Sprintf("%s:%d", StateInCourseBase, courseID)
+		newState = fmt.Sprintf("%s:%d", sc.StateInCourse, courseID)
 
 		// Format word text using the domain entity within the DTO
 		// This assumes the DTO can be easily converted or contains the necessary domain object.
@@ -468,7 +441,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 
 	case startCmd.CourseEnded:
 
-		newState = StateCourseList
+		newState = sc.StateCourseList
 		msg = tgmarkdown.Escape(res.MessageToUser)
 		kb = keyboards.BackToCourseListKeyboard()
 		sendErr = c.Send(msg, kb, telebot.ModeMarkdownV2)
@@ -501,7 +474,7 @@ func (h *Handler) sendLearningContext(c telebot.Context, res startCmd.StartSessi
 
 	default:
 		// Fallback for unhandled steps
-		newState = StateMain
+		newState = sc.StateMain
 		msg = "An unknown error occurred. Returning to main menu."
 		kb = keyboards.NewMainMenu(false, false)
 		sendErr = c.Send(msg)
@@ -639,7 +612,7 @@ func (h *Handler) handleReturnToProfile(c telebot.Context, u user.User) error {
 	}
 	profileDTO := dto.UserProfile{ /* ... map fields ... */ }
 	formattedProfile := formatters.FormatUserProfile(profileDTO)
-	h.userRepo.UpdateLastMenu(context.Background(), u.ID, StateProfileMenu)
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateProfileMenu)
 	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
 }
 
@@ -665,6 +638,33 @@ func (h *Handler) handleGetStats(c telebot.Context) error {
 	// Format the message and send it back to the admin
 	statsMsg := fmt.Sprintf("📊 *آمار ربات*\n\nتعداد کل کاربران: *%d*", stats.TotalUsers)
 	return c.Send(statsMsg, telebot.ModeMarkdownV2)
+
+}
+
+func (h *Handler) handleInitiateAdminBroadcast(c telebot.Context, u user.User) error {
+
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateAdminBroadcast)
+	return c.Send("لطفا پیامی که میخواهید برای همه کاربران ارسال شود را وارد کنید:")
+
+}
+
+func (h *Handler) handleAdminBroadcast(c telebot.Context, u user.User, userInput string) error {
+
+	// Any text received in this state is the message to be broadcast
+	broadcastCmd := adminCmd.BroadcastCommand{Message: userInput} // Assuming adminCmd alias
+
+	recipients, err := h.Broadcast.Handle(context.Background(), broadcastCmd) // Assuming dependency is `broadcast`
+	if err != nil {
+		h.logger.Error("Broadcast failed", "error", err)
+		return c.Send("ارسال پیام همگانی با خطا مواجه شد.")
+	}
+
+	// Send confirmation to the admin and return them to the admin panel
+	confirmationMsg := fmt.Sprintf("✅ پیام شما برای %d کاربر ارسال شد.", recipients)
+	c.Send(confirmationMsg)
+
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, "admin_panel")
+	return c.Send("به پنل ادمین بازگشتید.", keyboards.AdminPanelKeyboard())
 
 }
 
@@ -705,6 +705,4 @@ func (h *Handler) handleAchievementSelection(c telebot.Context, u user.User, use
 
 	_, err = c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2)
 	return err
-
 }
-

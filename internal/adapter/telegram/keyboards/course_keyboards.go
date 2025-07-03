@@ -3,14 +3,8 @@ package keyboards
 import (
 	"fmt"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
+	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
 	"gopkg.in/telebot.v4"
-)
-
-const (
-	StartCourseButtonText    = "شروع دوره"
-	ContinueCourseButtonText = "ادامه دوره"
-	ReviewCourseButtonText   = "مرور دوره"
-	BtnReturnToMainMenu      = "بازگشت به منوی اصلی"
 )
 
 // CourseListKeyboard generates a reply keyboard listing available courses.
@@ -27,7 +21,7 @@ func CourseListKeyboard(courses []dto.CourseSummary) *telebot.ReplyMarkup {
 		}
 		rows = append(rows, menu.Row(menu.Text(btnText)))
 	}
-	rows = append(rows, menu.Row(menu.Text(BtnReturnToMainMenu)))
+	rows = append(rows, menu.Row(menu.Text(ui.BtnReturnToMainMenuText)))
 	menu.Reply(rows...)
 	return menu
 }
@@ -38,17 +32,16 @@ func CourseDetailsKeyboard(co dto.CourseOverview) *telebot.ReplyMarkup {
 
 	var actionButtonText string
 	if co.IsCompleted {
-		actionButtonText = ReviewCourseButtonText
+		actionButtonText = ui.BtnReviewCourseText
 	} else if co.IsStarted {
-		actionButtonText = fmt.Sprintf("%s (%d%%)", ContinueCourseButtonText, co.ProgressPercentage)
+		actionButtonText = fmt.Sprintf("%s (%d%%)", ui.BtnContinueCourseText, co.ProgressPercentage)
 	} else {
-		actionButtonText = StartCourseButtonText
+		actionButtonText = ui.BtnStartCourseText
 	}
 
 	menu.Reply(
 		menu.Row(menu.Text(actionButtonText)),
-		menu.Row(menu.Text(BtnReturnToMainMenu)),
+		menu.Row(menu.Text(ui.BtnReturnToMainMenuText)),
 	)
 	return menu
 }
-
