@@ -86,7 +86,7 @@ func (h *AdminHandler) handleAdminBroadcast(c telebot.Context, u user.User, user
 	confirmationMsg := fmt.Sprintf("✅ پیام شما برای %d کاربر ارسال شد.", recipients)
 	c.Send(confirmationMsg)
 
-	h.userRepo.UpdateLastMenu(context.Background(), u.ID, "admin_panel")
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateAdminPanel)
 	return c.Send("به پنل ادمین بازگشتید.", keyboards.AdminPanelKeyboard())
 
 }

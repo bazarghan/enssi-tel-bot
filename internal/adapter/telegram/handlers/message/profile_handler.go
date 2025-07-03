@@ -122,7 +122,7 @@ func (h *ProfileHandler) handleViewMyAchievements(c telebot.Context, u user.User
 	kb := keyboards.AchievementsListKeyboard(achDTOs)
 
 	// 4. Update the user's state so the bot knows they are in the achievements menu.
-	h.userRepo.UpdateLastMenu(context.Background(), u.ID, "achievements_list")
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateAchievementList)
 
 	// 5. Send the message with the inline keyboard.
 	return c.Send("می توانید با کلیک بر روی هر دستاورد، پیشرفت خود را مشاهده کنید:", kb)
@@ -170,11 +170,20 @@ func (h *ProfileHandler) handleAchievementSelection(c telebot.Context, u user.Us
 func (h *ProfileHandler) handleReturnToProfile(c telebot.Context, u user.User) error {
 	// This is the same logic from your /myprofile command
 	query := getProfileQry.GetProfileQuery{UserID: u.ID}
-	_, err := h.getProfile.Handle(context.Background(), query)
+	result, err := h.getProfile.Handle(context.Background(), query)
 	if err != nil {
 		return c.Send("Could not get profile.")
 	}
-	profileDTO := dto.UserProfile{ /* ... map fields ... */ }
+
+	profileDTO := dto.UserProfile{
+		FirstName:     result.FirstName,
+		Username:      result.Username,
+		LastName:      result.LastName,
+		Score:         result.Score,
+		WordsStudied:  result.WordsStudied,
+		CoursesActive: result.CoursesActive,
+	}
+
 	formattedProfile := formatters.FormatUserProfile(profileDTO)
 	h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateProfileMenu)
 	return c.Send(formattedProfile, keyboards.ProfileMenuKeyboard(), telebot.ModeMarkdownV2)
