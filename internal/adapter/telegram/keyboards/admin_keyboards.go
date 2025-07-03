@@ -23,7 +23,7 @@ func QuizKeyboard() *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 
 	menu.Reply(
-		menu.Row(menu.Text(BtnReturnToMainMenu)),
+		menu.Row(menu.Text(ui.BtnReturnToMainMenuText)),
 	)
 	return menu
 

@@ -175,7 +175,7 @@ func (h *Handler) Handle(c telebot.Context) error {
 
 	case stateBase == sc.StateInCourse && stateID != "":
 
-		if userInput == keyboards.NextWordButtonText {
+		if userInput == ui.BtnNextWordText {
 			return h.handleNextWord(c, ctxUser, stateID)
 		}
 

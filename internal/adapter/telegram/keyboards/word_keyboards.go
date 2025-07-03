@@ -1,17 +1,16 @@
 package keyboards
 
-import "gopkg.in/telebot.v4"
-
-const (
-	NextWordButtonText = "کلمه بعدی"
+import (
+	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	"gopkg.in/telebot.v4"
 )
 
 // InCourseNavigationKeyboard provides navigation within a course.
 func InCourseNavigationKeyboard() *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 	menu.Reply(
-		menu.Row(menu.Text(NextWordButtonText)),
-		menu.Row(menu.Text(BtnReturnToMainMenu)),
+		menu.Row(menu.Text(ui.BtnNextWordText)),
+		menu.Row(menu.Text(ui.BtnReturnToMainMenuText)),
 	)
 	return menu
 }
@@ -21,7 +20,7 @@ func BackToCourseListKeyboard() *telebot.ReplyMarkup {
 	menu := &telebot.ReplyMarkup{ResizeKeyboard: true}
 	// In a future slice, this might have a "Review Course" button too.
 	menu.Reply(
-		menu.Row(menu.Text(BtnReturnToMainMenu)),
+		menu.Row(menu.Text(ui.BtnReturnToMainMenuText)),
 	)
 	return menu
 }
