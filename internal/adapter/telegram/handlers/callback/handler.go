@@ -236,7 +236,7 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		})
 
 		questionMsg := formatters.FormatQuizQuestion(res.NextQuestion, fullAttempt.CurrentQuestionIndex, len(fullAttempt.Questions))
-		kb := keyboards.QuizQuestionOptionsKeyboard(res.NextQuestion.Options, uint(attemptID))
+		kb := keyboards.QuizQuestionOptionsKeyboard(res.NextQuestion.Options, uint(attemptID), ctxUser.IsAdmin)
 		_, err = c.Bot().Edit(c.Callback().Message, questionMsg, kb, telebot.ModeMarkdownV2)
 	}
 

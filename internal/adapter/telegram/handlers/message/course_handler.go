@@ -144,7 +144,7 @@ func (h *CourseHandler) handleCourseAction(c telebot.Context, u user.User, actio
 		h.logger.Error("Error starting session", "user_id", u.ID, "course_id", courseID, "error", err)
 		return c.Send("There was a problem starting the course.")
 	}
-	return h.sendLearningContext(c, res, uint(courseID), u.ID)
+	return h.sendLearningContext(c, res, uint(courseID), u)
 }
 
 func (h *CourseHandler) handleNextWord(c telebot.Context, u user.User, courseIDStr string) error {
@@ -159,11 +159,11 @@ func (h *CourseHandler) handleNextWord(c telebot.Context, u user.User, courseIDS
 		h.logger.Error("Error advancing word", "user_id", u.ID, "course_id", courseID, "error", err)
 		return c.Send("There was a problem getting the next word.")
 	}
-	return h.sendLearningContext(c, res, uint(courseID), u.ID)
+	return h.sendLearningContext(c, res, uint(courseID), u)
 }
 
 // sendLearningContext processes the result from a course use case and sends the appropriate message.
-func (h *CourseHandler) sendLearningContext(c telebot.Context, res startCmd.StartSessionResult, courseID, userID uint) error {
+func (h *CourseHandler) sendLearningContext(c telebot.Context, res startCmd.StartSessionResult, courseID uint, u user.User) error {
 	var newState string
 	var kb *telebot.ReplyMarkup = &telebot.ReplyMarkup{RemoveKeyboard: true}
 	var msg string
@@ -230,7 +230,7 @@ func (h *CourseHandler) sendLearningContext(c telebot.Context, res startCmd.Star
 		question := attempt.Questions[attempt.CurrentQuestionIndex]
 		newState = fmt.Sprintf("in_quiz:%d:%d", courseID, attempt.ID) // A more specific state
 		msg = formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
-		kb = keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID)
+		kb = keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID, u.IsAdmin)
 
 		sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
 		if err != nil {
@@ -239,7 +239,7 @@ func (h *CourseHandler) sendLearningContext(c telebot.Context, res startCmd.Star
 		}
 		// Save message ID so the quiz can be edited later by the callback handler
 		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
-		h.userRepo.UpdateLastMenu(context.Background(), userID, newState)
+		h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
 		return nil // Return early as the message is already sent and state is updated
 
 	default:
@@ -254,7 +254,7 @@ func (h *CourseHandler) sendLearningContext(c telebot.Context, res startCmd.Star
 		h.logger.Error("Error sending learning context message", "error", sendErr)
 	}
 
-	h.userRepo.UpdateLastMenu(context.Background(), userID, newState)
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
 	return sendErr
 }
 

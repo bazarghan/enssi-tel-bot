@@ -158,7 +158,7 @@ func (h *MainMenuHandler) handleDailyReview(c telebot.Context, u user.User) erro
 		question.Options[i], question.Options[j] = question.Options[j], question.Options[i]
 	})
 	msg := formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
-	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID)
+	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID, u.IsAdmin)
 	sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
 	if err == nil {
 		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
