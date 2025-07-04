@@ -159,3 +159,11 @@ func (r *WordRepository) CacheImageFileIDs(ctx context.Context, courseWordID uin
 func (r *WordRepository) CacheVoiceFileID(ctx context.Context, pronunciationID uint, voiceFileID string) error {
 	return r.db.WithContext(ctx).Model(&pronunciationModel{}).Where("id = ?", pronunciationID).Update("telgram_voice_id", voiceFileID).Error
 }
+
+func (r *WordRepository) CountMasteredWords(ctx context.Context, userID uint) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&studiedWordModel{}).
+		Where("user_id = ? AND review_interval_days >= ?", userID, 8).
+		Count(&count).Error
+	return int(count), err
+}

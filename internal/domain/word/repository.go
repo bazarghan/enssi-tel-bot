@@ -30,4 +30,7 @@ type Repository interface {
 
 	// CacheVoiceFileID updates a Pronunciation entry with a Telegram File ID for a voice message.
 	CacheVoiceFileID(ctx context.Context, pronunciationID uint, voiceFileID string) error
+
+	// Count the Mastered Words
+	CountMasteredWords(ctx context.Context, userID uint) (int, error)
 }

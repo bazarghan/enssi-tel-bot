@@ -6,6 +6,7 @@ import (
 	"github.com/bits-and-blooms/bitset"
 	"gorm.io/gorm"
 	"strings"
+	"time"
 )
 
 // GormBitSet now includes TotalLength to ensure correct serialization.
@@ -103,6 +104,7 @@ type userAchievementModel struct {
 	AchievementID uint
 	State         GormBitSet       // Custom type for bitset storage
 	Achievement   achievementModel `gorm:"foreignKey:AchievementID"`
+	CompletedAt   *time.Time       `gorm:"null"`
 }
 
 func (userAchievementModel) TableName() string { return "profile_achievements" }

@@ -24,6 +24,7 @@ func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement
 		AchievementID: m.AchievementID,
 		EarnedAt:      m.CreatedAt,
 		State:         &m.State.BitSet,
+		CompletedAt:   m.CompletedAt,
 	}
 }
 
@@ -33,6 +34,7 @@ func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint)
 
 		ProfileID:     profileID, // Use the found profileID
 		AchievementID: d.AchievementID,
+		CompletedAt:   d.CompletedAt,
 	}
 	if d.ID != 0 {
 		model.ID = d.ID // Set ID for updates

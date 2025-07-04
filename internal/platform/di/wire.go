@@ -92,6 +92,7 @@ var achievementSet = wire.NewSet(
 	wire.Bind(new(achievement.Repository), new(*postgres.AchievementRepository)),
 	achCmd.NewAwardProgressHandler,
 	achQueries.NewGetAllHandler,
+	achCmd.NewHandleWordMasteryHandler,
 )
 
 var imagegenSet = wire.NewSet(

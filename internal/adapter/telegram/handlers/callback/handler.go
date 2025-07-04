@@ -17,8 +17,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	"github.com/bits-and-blooms/bitset"
 
+	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
 	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
 
@@ -72,7 +72,6 @@ func NewHandler(
 func (h *Handler) Handle(c telebot.Context) error {
 	cb := c.Callback()
 	if cb == nil {
-		// This can happen in rare cases, not an error.
 		return nil
 	}
 
@@ -103,7 +102,6 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 
 	logger := h.logger.With("user_id", ctxUser.ID, "telegram_id", c.Sender().ID)
 
-	// The telegram callbacks often have whitespace
 	data := strings.TrimSpace(c.Callback().Data)
 
 	payload := strings.TrimPrefix(data, QuizAnswerCallbackPrefix)
@@ -136,42 +134,39 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		return errEdit
 	}
 
+	// --- START of Change ---
+	// This new block processes any achievement notifications that resulted from the answer.
+	if len(res.MasteryNotifications) > 0 {
+		for _, notification := range res.MasteryNotifications {
+			h.sendMasteryNotification(c, ctxUser.ID, notification)
+		}
+	}
+	// --- END of Change ---
+
 	fullAttempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
 	if err != nil {
 		logger.Error("Could not fetch full attempt for formatting", "error", err)
 	}
 	if res.IsCompleted {
 		logger.Info("Quiz completed")
-		// --- NEW: Check if the completed quiz was a Daily Review ---
 		if fullAttempt.Type == quiz.Review {
-			// 1. Mark the user's daily review as completed for today.
 			if err := h.userRepo.UpdateLastReviewSession(context.Background(), ctxUser.ID); err != nil {
 				logger.Error("Failed to update last review session", "error", err)
 			}
-
-			// 2. Format and show the results, just like a normal quiz.
 			resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 			if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
 				logger.Error("Could not edit review quiz result message", "error", err)
 			}
-
-			// 3.Build the main menu, explicitly passing `false` for hasPendingReview.
 			mainMenuKeyboard := keyboards.NewMainMenu(ctxUser.IsAdmin, false)
-
-			// 4. Send the final confirmation message with the new, clean main menu.
 			if _, err := c.Bot().Send(c.Chat(), "آزمون مرور شما به پایان رسید!", mainMenuKeyboard); err != nil {
 				logger.Error("Failed to send final review completion message", "error", err)
 			}
-
-			// 5.Update the user's state back to 'main' so they are no longer "in_quiz".
 			if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, "main"); err != nil {
 				logger.Error("Failed to update user menu state after review quiz", "error", err)
 			}
 			logger.Info("Daily review quiz finished successfully")
 			return nil
 		}
-		// --- END OF REVIEW QUIZ LOGIC ---
-
 		completionCmd := courseCmd.HandleQuizCompletionCommand{
 			UserID:   ctxUser.ID,
 			CourseID: fullAttempt.CourseID,
@@ -184,33 +179,31 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			return err
 		}
 
-		// 1. Format the result message using your existing formatter.
 		resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 
-		// 3. Edit the original quiz message to show the results.
 		if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
 			logger.Warn("Could not edit quiz result message, proceeding to next step", "error", err)
 		}
 
 		if completionResult.UpdatedAchievementID != 0 {
-			h.sendAchievementUpdate(c, ctxUser.ID, completionResult.UpdatedAchievementID)
+			// This handles the COURSE achievements, not the daily review ones.
+			ach, _ := h.achRepo.FindByID(context.Background(), completionResult.UpdatedAchievementID)
+			dummyNotification := achCmd.MasteryNotification{Type: achCmd.NotifyProgress, Achievement: ach}
+			h.sendMasteryNotification(c, ctxUser.ID, dummyNotification)
 		}
 
 		promptMsg := "آزمون شما تمام شد برای ادامه رو کلمه بعدی بزنید\\."
 
-		// 4. Fetch the data needed for the course overview screen.
 		overview, err := h.getOverview.Handle(context.Background(), courseQueries.GetOverviewQuery{
 			UserID:   ctxUser.ID,
 			CourseID: fullAttempt.CourseID,
 		})
 		if err != nil {
 			logger.Error("Failed to get course overview after quiz", "error", err, "course_id", fullAttempt.CourseID)
-			// Send a fallback message if we can't get the overview
 			_, errSend := c.Bot().Send(c.Chat(), "Quiz complete!", keyboards.BackToCourseListKeyboard())
 			return errSend
 		}
 
-		// 5. Map the result to the presentation DTO
 		overviewDTO := dto.CourseOverview{
 			ID:                     overview.ID,
 			Title:                  overview.Title,
@@ -224,13 +217,11 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 
 		kb := keyboards.CourseDetailsKeyboard(overviewDTO)
 
-		// 7. Send the overview as a new message.
 		if _, err := c.Bot().Send(c.Chat(), promptMsg, kb, telebot.ModeMarkdownV2); err != nil {
 			logger.Error("Could not send course overview prompt", "error", err)
 			return err
 		}
 
-		// After the quiz is done, set the user's state back to the course details view
 		newState := fmt.Sprintf("course_details:%d", fullAttempt.CourseID)
 		if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, newState); err != nil {
 			logger.Error("Failed to update user menu state after quiz", "new_state", newState, "error", err)
@@ -255,29 +246,17 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	return nil
 }
 
-func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID uint) {
-	logger := h.logger.With("user_id", userID, "achievement_id", achievementID)
-	logger.Info("Sending achievement update")
+// --- START of Change ---
+// This function replaces the old `sendAchievementUpdate`
+func (h *Handler) sendMasteryNotification(c telebot.Context, userID uint, notification achCmd.MasteryNotification) {
+	ach := notification.Achievement
+	logger := h.logger.With("user_id", userID, "achievement_id", ach.ID)
+	logger.Info("Sending mastery notification", "type", notification.Type)
 
-	ach, err := h.achRepo.FindByID(context.Background(), achievementID)
+	userAch, err := h.achRepo.GetUserAchievement(context.Background(), userID, ach.ID)
 	if err != nil {
-		logger.Error("Could not find achievement to send update", "error", err)
+		logger.Error("Could not get user achievement progress for notification", "error", err)
 		return
-	}
-
-	userAch, err := h.achRepo.GetUserAchievement(context.Background(), userID, achievementID)
-	if err != nil {
-		if errors.Is(err, achievement.ErrUserAchNotFound) {
-			logger.Info("User has no prior progress for this achievement, creating new state")
-			userAch = achievement.UserAchievement{
-				UserID:        userID,
-				AchievementID: achievementID,
-				State:         bitset.New(ach.TotalItems),
-			}
-		} else {
-			logger.Error("Could not get user achievement progress", "error", err)
-			return
-		}
 	}
 
 	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
@@ -287,7 +266,14 @@ func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID
 	}
 	defer os.Remove(generatedPath)
 
-	caption := fmt.Sprintf("🏆 *%s*\n\n`%s`", tgmarkdown.Escape(ach.Title), tgmarkdown.Escape(ach.Description))
+	var caption string
+	// Create a different message for a full unlock vs. just progress.
+	if notification.Type == achCmd.NotifyUnlock {
+		caption = fmt.Sprintf("🏆 *Achievement Unlocked!* 🏆\n\n*%s*\n\nYou have mastered *%d* words!", tgmarkdown.Escape(ach.Title), ach.MinWordRequired)
+	} else {
+		caption = fmt.Sprintf("🏅 *Achievement Progress*\n\n*%s*", tgmarkdown.Escape(ach.Title))
+	}
+
 	photo := &telebot.Photo{
 		File:    telebot.FromDisk(generatedPath),
 		Caption: caption,
@@ -295,10 +281,10 @@ func (h *Handler) sendAchievementUpdate(c telebot.Context, userID, achievementID
 
 	if _, err := c.Bot().Send(c.Chat(), photo, telebot.ModeMarkdownV2); err != nil {
 		logger.Error("Failed to send achievement photo", "error", err)
-	} else {
-		logger.Info("Successfully sent achievement photo")
 	}
 }
+
+// --- END of Change ---
 
 // handleShowAchievement generates and sends a progressive achievement image.
 func (h *Handler) handleShowAchievement(c telebot.Context) error {
@@ -320,7 +306,17 @@ func (h *Handler) handleShowAchievement(c telebot.Context) error {
 	}
 	logger.Info("Handling show achievement request", "achievement_id", achievementID)
 
-	h.sendAchievementUpdate(c, ctxUser.ID, uint(achievementID))
+	// --- START of Change ---
+	// We reuse the new notification sender to show progress.
+	ach, err := h.achRepo.FindByID(context.Background(), uint(achievementID))
+	if err != nil {
+		logger.Error("Could not find achievement for handleShowAchievement", "error", err)
+		return nil
+	}
+
+	dummyNotification := achCmd.MasteryNotification{Type: achCmd.NotifyProgress, Achievement: ach}
+	h.sendMasteryNotification(c, ctxUser.ID, dummyNotification)
+	// --- END of Change ---
+
 	return nil
 }
-

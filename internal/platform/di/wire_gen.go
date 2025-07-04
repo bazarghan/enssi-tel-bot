@@ -66,7 +66,8 @@ func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) 
 		return nil, err
 	}
 	router := message.NewRouter(appLogger, listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, advanceWordHandler, startSessionHandler, userRepository, quizRepository, courseRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, achievementRepository, generator, handler)
-	submitAnswerHandler := quiz.NewSubmitAnswerHandler(appLogger, quizRepository, wordRepository)
+	handleWordMasteryHandler := achievement2.NewHandleWordMasteryHandler(appLogger, wordRepository, achievementRepository)
+	submitAnswerHandler := quiz.NewSubmitAnswerHandler(appLogger, quizRepository, wordRepository, handleWordMasteryHandler)
 	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	callbackHandler := callback.NewHandler(appLogger, submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
@@ -134,7 +135,7 @@ var broadcastHandlerSet = wire.NewSet(admin2.NewBroadcastHandler)
 
 var quizSet = wire.NewSet(postgres.NewQuizRepository, wire.Bind(new(quiz2.Repository), new(*postgres.QuizRepository)), quiz.NewCreateCourseQuizHandler, quiz.NewCreateReviewQuizHandler, quiz.NewSubmitAnswerHandler)
 
-var achievementSet = wire.NewSet(postgres.NewAchievementRepository, wire.Bind(new(achievement3.Repository), new(*postgres.AchievementRepository)), achievement2.NewAwardProgressHandler, achievement.NewGetAllHandler)
+var achievementSet = wire.NewSet(postgres.NewAchievementRepository, wire.Bind(new(achievement3.Repository), new(*postgres.AchievementRepository)), achievement2.NewAwardProgressHandler, achievement.NewGetAllHandler, achievement2.NewHandleWordMasteryHandler)
 
 var imagegenSet = wire.NewSet(wire.Value("assets/imgs/achievements_gen"), imagegen.NewGenerator, wire.Bind(new(achievement3.ImageGenerator), new(*imagegen.Generator)))
 

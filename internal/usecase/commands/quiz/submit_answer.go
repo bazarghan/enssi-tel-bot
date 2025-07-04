@@ -7,6 +7,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+
+	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
 )
 
 // SubmitAnswerCommand defines the input.
@@ -21,6 +23,8 @@ type SubmitAnswerResult struct {
 	IsCompleted  bool
 	NextQuestion quiz.Question
 	FinalResult  quiz.Result
+
+	MasteryNotifications []achCmd.MasteryNotification
 }
 
 // SubmitAnswerHandler processes a user's quiz answer.
@@ -28,6 +32,8 @@ type SubmitAnswerHandler struct {
 	logger   logger.Logger
 	quizRepo quiz.Repository
 	wordRepo word.Repository
+
+	masteryHandler achCmd.HandleWordMasteryHandler
 }
 
 // NewSubmitAnswerHandler creates a new handler.
@@ -35,16 +41,20 @@ func NewSubmitAnswerHandler(
 	appLogger logger.Logger,
 	quizRepo quiz.Repository,
 	wordRepo word.Repository,
+	masteryHandler achCmd.HandleWordMasteryHandler,
+
 ) SubmitAnswerHandler {
 	return SubmitAnswerHandler{
-		logger:   appLogger,
-		quizRepo: quizRepo,
-		wordRepo: wordRepo,
+		logger:         appLogger,
+		quizRepo:       quizRepo,
+		wordRepo:       wordRepo,
+		masteryHandler: masteryHandler,
 	}
 }
 
 // Handle executes the command.
 func (h SubmitAnswerHandler) Handle(ctx context.Context, cmd SubmitAnswerCommand) (SubmitAnswerResult, error) {
+
 	attempt, err := h.quizRepo.GetAttempt(ctx, cmd.AttemptID)
 	if err != nil {
 		return SubmitAnswerResult{}, err
@@ -67,8 +77,17 @@ func (h SubmitAnswerHandler) Handle(ctx context.Context, cmd SubmitAnswerCommand
 		return SubmitAnswerResult{}, fmt.Errorf("failed to save answer: %w", err)
 	}
 
+	// We create a variable to hold the notifications.
+	var masteryNotifications []achCmd.MasteryNotification
+	// We now process the SRS for both correct and incorrect answers in a review quiz.
 	if attempt.Type == quiz.Review {
-		h.updateSRS(ctx, cmd.UserID, currentQuestion.WordID, chosenOption.IsCorrect)
+		// We call our helper function and pass `chosenOption.IsCorrect`
+		notifications, err := h.updateSRSAndCheckMastery(ctx, cmd.UserID, currentQuestion.WordID, chosenOption.IsCorrect)
+		if err != nil {
+			// Log the error but don't block the quiz flow
+			h.logger.Error("failed to update SRS or check mastery", "error", err)
+		}
+		masteryNotifications = notifications
 	}
 
 	if err := h.quizRepo.IncrementQuestionIndex(ctx, attempt.ID); err != nil {
@@ -83,12 +102,20 @@ func (h SubmitAnswerHandler) Handle(ctx context.Context, cmd SubmitAnswerCommand
 		}
 
 		finalResult := h.calculateFinalResult(attempt, finalScore)
-		return SubmitAnswerResult{IsCompleted: true, FinalResult: finalResult}, nil
+		return SubmitAnswerResult{
+			IsCompleted:          true,
+			FinalResult:          finalResult,
+			MasteryNotifications: masteryNotifications,
+		}, nil
 	}
 
 	// Quiz continues, return the next question.
 	nextQuestion := attempt.Questions[attempt.CurrentQuestionIndex+1]
-	return SubmitAnswerResult{IsCompleted: false, NextQuestion: nextQuestion}, nil
+	return SubmitAnswerResult{
+		IsCompleted:          false,
+		NextQuestion:         nextQuestion,
+		MasteryNotifications: masteryNotifications,
+	}, nil
 }
 
 func (h *SubmitAnswerHandler) validateAttempt(attempt quiz.Attempt, userID uint) error {
@@ -113,19 +140,38 @@ func (h *SubmitAnswerHandler) validateOption(question quiz.Question, optionID ui
 	return quiz.Option{}, quiz.ErrInvalidOption
 }
 
-func (h *SubmitAnswerHandler) updateSRS(ctx context.Context, userID, wordID uint, wasCorrect bool) {
+// REPLACE the previous helper method with this corrected version
+func (h *SubmitAnswerHandler) updateSRSAndCheckMastery(ctx context.Context, userID, wordID uint, wasCorrect bool) ([]achCmd.MasteryNotification, error) {
 	if wordID == 0 {
-		return
+		return nil, nil
 	}
+
 	studiedWord, err := h.wordRepo.FindStudiedWord(ctx, userID, wordID)
 	if err != nil {
-		h.logger.Warn("Could not find studied word to update SRS", "wordID", wordID, "userID", userID, "error", err)
-		return
+		return nil, fmt.Errorf("could not find studied word to update SRS: %w", err)
 	}
-	studiedWord.CalculateNextReview(wasCorrect)
-	h.wordRepo.SaveStudiedWord(ctx, studiedWord)
-}
 
+	// --- START of Corrected Logic ---
+	previousInterval := studiedWord.ReviewIntervalDays
+	// This now correctly handles BOTH true and false answers, resetting the interval on wrong answers.
+	studiedWord.CalculateNextReview(wasCorrect)
+
+	if err := h.wordRepo.SaveStudiedWord(ctx, studiedWord); err != nil {
+		return nil, fmt.Errorf("failed to save studied word: %w", err)
+	}
+
+	// We ONLY check for mastery achievements if the answer was correct.
+	if wasCorrect {
+		// If the interval just crossed the mastery threshold, call the mastery handler.
+		if studiedWord.ReviewIntervalDays >= 8 && previousInterval < 8 {
+			masteryCmd := achCmd.HandleWordMasteryCommand{UserID: userID}
+			return h.masteryHandler.Handle(ctx, masteryCmd)
+		}
+	}
+	// --- END of Corrected Logic ---
+
+	return nil, nil
+}
 func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalScore int) quiz.Result {
 	result := quiz.Result{
 		Score:           finalScore,
@@ -153,4 +199,3 @@ func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalSc
 
 	return result
 }
-

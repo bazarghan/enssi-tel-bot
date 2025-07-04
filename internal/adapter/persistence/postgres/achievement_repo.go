@@ -118,3 +118,21 @@ func (r *AchievementRepository) FindByTitle(ctx context.Context, title string) (
 	}
 	return toDomainAchievement(model), nil
 }
+
+func (r *AchievementRepository) FindAllProgressiveDaily(ctx context.Context) ([]achievement.Achievement, error) {
+
+	var models []achievementModel
+	err := r.db.WithContext(ctx).
+		Where("type = ?", "DAILY_PROGRESSIVE_IMAGE").
+		Order("min_word_required asc").
+		Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+
+	achievements := make([]achievement.Achievement, len(models))
+	for i, m := range models {
+		achievements[i] = toDomainAchievement(m)
+	}
+	return achievements, nil
+}
