@@ -66,11 +66,11 @@ func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) 
 		return nil, err
 	}
 	router := message.NewRouter(appLogger, listCoursesHandler, getOverviewHandler, getProfileHandler, getStatsHandler, getAllHandler, advanceWordHandler, startSessionHandler, userRepository, quizRepository, courseRepository, wordRepository, createReviewQuizHandler, cacheMediaHandler, achievementRepository, generator, handler)
-	handleWordMasteryHandler := achievement2.NewHandleWordMasteryHandler(appLogger, wordRepository, achievementRepository)
-	submitAnswerHandler := quiz.NewSubmitAnswerHandler(appLogger, quizRepository, wordRepository, handleWordMasteryHandler)
+	submitAnswerHandler := quiz.NewSubmitAnswerHandler(appLogger, quizRepository, wordRepository)
 	awardProgressHandler := achievement2.NewAwardProgressHandler(achievementRepository)
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
-	callbackHandler := callback.NewHandler(appLogger, submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler)
+	handleWordMasteryHandler := achievement2.NewHandleWordMasteryHandler(appLogger, wordRepository, achievementRepository)
+	callbackHandler := callback.NewHandler(appLogger, submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler, handleWordMasteryHandler)
 	botApp := &BotApp{
 		CommandHandler:      commandHandler,
 		MessageHandler:      router,

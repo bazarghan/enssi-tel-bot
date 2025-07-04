@@ -43,6 +43,7 @@ type Handler struct {
 	imgSvc               achievement.ImageGenerator
 	userRepo             user.Repository
 	getOverview          courseQueries.GetOverviewHandler
+	masteryHandler       achCmd.HandleWordMasteryHandler
 }
 
 // NewHandler creates a new callback handler with all its dependencies.
@@ -55,6 +56,7 @@ func NewHandler(
 	imgSvc achievement.ImageGenerator,
 	userRepo user.Repository,
 	getOverview courseQueries.GetOverviewHandler,
+	masteryHandler achCmd.HandleWordMasteryHandler,
 ) *Handler {
 	return &Handler{
 		logger:               appLogger.With("handler", "callback"),
@@ -65,6 +67,7 @@ func NewHandler(
 		imgSvc:               imgSvc,
 		userRepo:             userRepo,
 		getOverview:          getOverview,
+		masteryHandler:       masteryHandler,
 	}
 }
 
@@ -103,7 +106,6 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 	logger := h.logger.With("user_id", ctxUser.ID, "telegram_id", c.Sender().ID)
 
 	data := strings.TrimSpace(c.Callback().Data)
-
 	payload := strings.TrimPrefix(data, QuizAnswerCallbackPrefix)
 	parts := strings.Split(payload, ":")
 	if len(parts) != 2 {
@@ -123,6 +125,7 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		UserID:    ctxUser.ID,
 	}
 
+	// 1. The use case handles the answer submission and SRS update.
 	res, err := h.submitAnswer.Handle(context.Background(), cmd)
 	if err != nil {
 		if errors.Is(err, quiz.ErrQuestionAlreadyAnswered) {
@@ -134,25 +137,38 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		return errEdit
 	}
 
-	// --- START of Change ---
-	// This new block processes any achievement notifications that resulted from the answer.
-	if len(res.MasteryNotifications) > 0 {
-		for _, notification := range res.MasteryNotifications {
-			h.sendMasteryNotification(c, ctxUser.ID, notification)
-		}
-	}
-	// --- END of Change ---
-
+	// We need the full attempt details for formatting the results later.
 	fullAttempt, err := h.quizRepo.GetAttempt(context.Background(), uint(attemptID))
 	if err != nil {
 		logger.Error("Could not fetch full attempt for formatting", "error", err)
 	}
+
+	// 2. Check if the quiz is completed.
 	if res.IsCompleted {
 		logger.Info("Quiz completed")
+
+		// A. If the completed quiz was a Daily Review...
 		if fullAttempt.Type == quiz.Review {
+			// Mark the user's daily review session as complete for today.
 			if err := h.userRepo.UpdateLastReviewSession(context.Background(), ctxUser.ID); err != nil {
 				logger.Error("Failed to update last review session", "error", err)
 			}
+
+			// NOW, check for any new mastery achievements.
+			masteryCmd := achCmd.HandleWordMasteryCommand{UserID: ctxUser.ID}
+			notifications, err := h.masteryHandler.Handle(context.Background(), masteryCmd)
+			if err != nil {
+				logger.Error("Failed to check for mastery achievements", "error", err)
+			}
+
+			// Send notifications for any unlocked/progressed achievements.
+			if len(notifications) > 0 {
+				for _, notification := range notifications {
+					h.sendMasteryNotification(c, ctxUser.ID, notification)
+				}
+			}
+
+			// Finally, show the quiz results and return the user to the main menu.
 			resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
 			if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
 				logger.Error("Could not edit review quiz result message", "error", err)
@@ -167,6 +183,8 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			logger.Info("Daily review quiz finished successfully")
 			return nil
 		}
+
+		// B. If the completed quiz was a normal Course quiz...
 		completionCmd := courseCmd.HandleQuizCompletionCommand{
 			UserID:   ctxUser.ID,
 			CourseID: fullAttempt.CourseID,
@@ -180,20 +198,17 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		}
 
 		resultMsg := formatters.FormatQuizResult(res.FinalResult, fullAttempt)
-
 		if _, err := c.Bot().Edit(c.Callback().Message, resultMsg, telebot.ModeMarkdownV2); err != nil {
 			logger.Warn("Could not edit quiz result message, proceeding to next step", "error", err)
 		}
 
 		if completionResult.UpdatedAchievementID != 0 {
-			// This handles the COURSE achievements, not the daily review ones.
 			ach, _ := h.achRepo.FindByID(context.Background(), completionResult.UpdatedAchievementID)
 			dummyNotification := achCmd.MasteryNotification{Type: achCmd.NotifyProgress, Achievement: ach}
 			h.sendMasteryNotification(c, ctxUser.ID, dummyNotification)
 		}
 
 		promptMsg := "آزمون شما تمام شد برای ادامه رو کلمه بعدی بزنید\\."
-
 		overview, err := h.getOverview.Handle(context.Background(), courseQueries.GetOverviewQuery{
 			UserID:   ctxUser.ID,
 			CourseID: fullAttempt.CourseID,
@@ -214,14 +229,11 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 			IsCompleted:            overview.IsCompleted,
 			IsStarted:              overview.IsStarted,
 		}
-
 		kb := keyboards.CourseDetailsKeyboard(overviewDTO)
-
 		if _, err := c.Bot().Send(c.Chat(), promptMsg, kb, telebot.ModeMarkdownV2); err != nil {
 			logger.Error("Could not send course overview prompt", "error", err)
 			return err
 		}
-
 		newState := fmt.Sprintf("course_details:%d", fullAttempt.CourseID)
 		if err := h.userRepo.UpdateLastMenu(context.Background(), ctxUser.ID, newState); err != nil {
 			logger.Error("Failed to update user menu state after quiz", "new_state", newState, "error", err)
@@ -229,6 +241,7 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		logger.Info("Standard quiz finished successfully")
 
 	} else {
+		// 3. If the quiz is not complete, show the next question.
 		logger.Info("Advancing to next question")
 		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(len(res.NextQuestion.Options), func(i, j int) {
