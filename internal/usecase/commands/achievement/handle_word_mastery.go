@@ -83,7 +83,18 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 
 	// 4. Iterate through each achievement tier to check the user's status.
 	for _, ach := range allDailyAchievements {
+
 		userAch, progressExists := progressMap[ach.ID]
+
+		// --- START OF CHANGE ---
+		// Defensively calculate the total grid size from width and height
+		// instead of relying on the `total_items` field from the database.
+		totalGridItems := ach.GridWidth * ach.GridHeight
+		if totalGridItems == 0 {
+			// As a fallback, use the DB value if grid dimensions aren't set.
+			totalGridItems = ach.TotalItems
+		}
+		// --- END OF CHANGE ---
 
 		// If user has enough words to unlock this tier...
 		if masteredCount >= int(ach.MinWordRequired) {
@@ -97,7 +108,7 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 				userAch.State = bitset.New(ach.TotalItems).SetAll() // Fill the image completely.
 				userAch.CompletedAt = &now
 
-				if err := h.achRepo.SaveUserAchievement(ctx, userAch); err != nil {
+				if err := h.achRepo.SaveUserAchievement(ctx, userAch, totalGridItems); err != nil {
 					h.logger.Error("failed to save unlocked achievement", "error", err)
 					continue // Move to next achievement
 				}
@@ -127,7 +138,7 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 					userAch.State.Set(i)
 				}
 
-				if err := h.achRepo.SaveUserAchievement(ctx, userAch); err != nil {
+				if err := h.achRepo.SaveUserAchievement(ctx, userAch, totalGridItems); err != nil {
 					h.logger.Error("failed to save achievement progress", "error", err)
 				} else {
 					// Add a "Progress" notification only if we actually updated something.

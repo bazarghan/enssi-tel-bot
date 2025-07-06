@@ -60,11 +60,16 @@ func (r *AchievementRepository) GetUserAchievement(ctx context.Context, userID, 
 		}
 		return achievement.UserAchievement{}, err
 	}
-	return toDomainUserAchievement(model), nil
+
+	domainUA := toDomainUserAchievement(model)
+	// The UserID from the function input needs to be manually set on the result.
+	domainUA.UserID = userID
+	return domainUA, nil
+
 }
 
 // SaveUserAchievement creates or updates a user's achievement progress.
-func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achievement.UserAchievement) error {
+func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achievement.UserAchievement, totalItems uint) error {
 	// 1. Find the profile_id for the given user_id
 	var profileID uint
 	err := r.db.WithContext(ctx).Model(&profileModel{}).Select("id").Where("user_id = ?", ua.UserID).Row().Scan(&profileID)
@@ -78,7 +83,7 @@ func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achi
 		return fmt.Errorf("found zero value for profile_id for user_id %d", ua.UserID)
 	}
 
-	model := toPersistenceUserAchievement(ua, profileID)
+	model := toPersistenceUserAchievement(ua, profileID, totalItems)
 	// GORM's Save method handles both INSERT (if ID is 0) and UPDATE.
 	if err := r.db.WithContext(ctx).Save(&model).Error; err != nil {
 		return achievement.ErrSaveFailed
@@ -103,6 +108,8 @@ func (r *AchievementRepository) FindUserAchievements(ctx context.Context, userID
 	userAchievements := make([]achievement.UserAchievement, len(models))
 	for i, m := range models {
 		userAchievements[i] = toDomainUserAchievement(m)
+		// The UserID also needs to be set here.
+		userAchievements[i].UserID = userID
 		userAchievements[i].Details = toDomainAchievement(m.Achievement) // Manually map the preloaded details
 	}
 	return userAchievements, nil

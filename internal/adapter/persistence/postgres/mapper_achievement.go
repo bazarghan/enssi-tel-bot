@@ -29,7 +29,7 @@ func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement
 }
 
 // toPersistenceUserAchievement maps the domain entity to the gorm model for saving.
-func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint) userAchievementModel {
+func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint, totalItems uint) userAchievementModel {
 	model := userAchievementModel{
 
 		ProfileID:     profileID, // Use the found profileID
@@ -40,7 +40,10 @@ func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint)
 		model.ID = d.ID // Set ID for updates
 	}
 	if d.State != nil {
-		model.State = GormBitSet{BitSet: *d.State}
+		model.State = GormBitSet{
+			BitSet:      *d.State,
+			TotalLength: totalItems,
+		}
 	}
 	return model
 }

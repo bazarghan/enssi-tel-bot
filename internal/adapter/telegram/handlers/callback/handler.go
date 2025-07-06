@@ -282,7 +282,7 @@ func (h *Handler) sendMasteryNotification(c telebot.Context, userID uint, notifi
 	var caption string
 	// Create a different message for a full unlock vs. just progress.
 	if notification.Type == achCmd.NotifyUnlock {
-		caption = fmt.Sprintf("🏆 *Achievement Unlocked!* 🏆\n\n*%s*\n\nYou have mastered *%d* words!", tgmarkdown.Escape(ach.Title), ach.MinWordRequired)
+		caption = fmt.Sprintf("🏆 *Achievement Unlocked\\!* 🏆\n\n*%s*\n\nYou have mastered *%d* words\\!", tgmarkdown.Escape(ach.Title), ach.MinWordRequired)
 	} else {
 		caption = fmt.Sprintf("🏅 *Achievement Progress*\n\n*%s*", tgmarkdown.Escape(ach.Title))
 	}

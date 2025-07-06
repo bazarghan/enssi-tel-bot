@@ -14,5 +14,5 @@ type Repository interface {
 
 	// --------- Get and save operation -----------
 	GetUserAchievement(ctx context.Context, userID, achievementID uint) (UserAchievement, error)
-	SaveUserAchievement(ctx context.Context, ua UserAchievement) error
+	SaveUserAchievement(ctx context.Context, ua UserAchievement, totalItems uint) error
 }

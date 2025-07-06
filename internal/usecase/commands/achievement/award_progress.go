@@ -74,5 +74,5 @@ func (h AwardProgressHandler) Handle(ctx context.Context, cmd AwardProgressComma
 		}
 	}
 
-	return h.repo.SaveUserAchievement(ctx, userAch)
+	return h.repo.SaveUserAchievement(ctx, userAch, ach.TotalItems)
 }

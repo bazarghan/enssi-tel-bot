@@ -17,17 +17,17 @@ type GormBitSet struct {
 
 // Value implements the driver.Valuer interface for GormBitSet.
 func (b GormBitSet) Value() (driver.Value, error) {
-	// --- THIS IS THE FIX ---
-	// Use the explicit TotalLength instead of b.Len() to serialize the full bitmask.
-	// If TotalLength is not set (e.g., for older records), fall back to b.Len()
-	// to avoid saving a zero-length string for existing data.
+	// --- START OF FIX ---
+	// This is the corrected implementation.
+
 	length := b.TotalLength
-	if length == 0 && b.Len() > 0 {
-		length = b.Len()
+	if length == 0 && b.BitSet.Len() > 0 {
+		length = b.BitSet.Len()
 	}
 
 	if length == 0 {
-		return "B''", nil
+		// Return an empty string. The database driver will handle it correctly.
+		return "", nil
 	}
 
 	var sb strings.Builder
@@ -38,19 +38,24 @@ func (b GormBitSet) Value() (driver.Value, error) {
 			sb.WriteString("0")
 		}
 	}
-	return fmt.Sprintf("B'%s'", sb.String()), nil
+
+	// We now return the RAW bit string (e.g., "111000") without any "B'" prefix.
+	// The database driver is responsible for formatting this correctly.
+	return sb.String(), nil
 	// --- END OF FIX ---
 }
 
 // Scan method is unchanged and correct as it infers length from the input string.
+// In internal/adapter/persistence/postgres/models_achievement.go
+
+// Scan implements the sql.Scanner interface for GormBitSet.
 func (b *GormBitSet) Scan(value interface{}) error {
-	// ... (existing Scan logic is correct) ...
-	// When scanning, we also need to set the TotalLength.
 	if value == nil {
 		b.BitSet = *bitset.New(0)
 		b.TotalLength = 0
 		return nil
 	}
+
 	var byteSlice []byte
 	switch v := value.(type) {
 	case []byte:
@@ -60,12 +65,26 @@ func (b *GormBitSet) Scan(value interface{}) error {
 	default:
 		return fmt.Errorf("failed to scan BitSet: unsupported type %T", value)
 	}
+
 	strVal := string(byteSlice)
-	if strVal == "" || strVal == "B''" {
+	if strVal == "" {
 		b.BitSet = *bitset.New(0)
 		b.TotalLength = 0
 		return nil
 	}
+
+	// --- START OF FIX ---
+	// This is the critical change. We must trim the "B'" prefix and the final "'"
+	// that PostgreSQL adds to the BIT VARYING type.
+	if len(strVal) > 3 && strings.HasPrefix(strVal, "B'") && strings.HasSuffix(strVal, "'") {
+		strVal = strVal[2 : len(strVal)-1]
+	} else if len(strVal) > 2 && strVal[0] == 'B' { // Handle cases like B'101'
+		strVal = strVal[1:]
+	}
+	// This handles the case where the database just returns the bits, e.g., "10101".
+	// After this block, strVal will be ONLY "1"s and "0"s.
+	// --- END OF FIX ---
+
 	newBitSet := bitset.New(uint(len(strVal)))
 	for i, r := range strVal {
 		if r == '1' {
@@ -73,7 +92,7 @@ func (b *GormBitSet) Scan(value interface{}) error {
 		}
 	}
 	b.BitSet = *newBitSet
-	b.TotalLength = uint(len(strVal)) // Set TotalLength based on what was read from DB
+	b.TotalLength = uint(len(strVal))
 	return nil
 }
 
