@@ -163,7 +163,7 @@ func (r *WordRepository) CacheVoiceFileID(ctx context.Context, pronunciationID u
 func (r *WordRepository) CountMasteredWords(ctx context.Context, userID uint) (int, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&studiedWordModel{}).
-		Where("user_id = ? AND review_interval_days >= ?", userID, 8).
+		Where("user_id = ? AND is_mastered = ?", userID, true).
 		Count(&count).Error
 	return int(count), err
 }

@@ -43,6 +43,7 @@ type StudiedWord struct {
 	LastReviewedAt     time.Time
 	NextReviewAt       time.Time
 	ReviewIntervalDays uint
+	IsMastered         bool
 }
 
 // DisplayablePronunciation contains both domain data and adapter-specific IDs.

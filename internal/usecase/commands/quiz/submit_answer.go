@@ -9,6 +9,8 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
 )
 
+const MasteryIntervalDays = 2
+
 // SubmitAnswerCommand defines the input.
 type SubmitAnswerCommand struct {
 	AttemptID uint
@@ -123,7 +125,18 @@ func (h *SubmitAnswerHandler) updateSRS(ctx context.Context, userID, wordID uint
 		return
 	}
 	studiedWord.CalculateNextReview(wasCorrect)
-	h.wordRepo.SaveStudiedWord(ctx, studiedWord)
+
+	// If the answer was correct, the word isn't already mastered, and the interval
+	// has reached the threshold, we mark the word as permanently mastered.
+	if wasCorrect && !studiedWord.IsMastered && studiedWord.ReviewIntervalDays >= MasteryIntervalDays {
+		studiedWord.IsMastered = true
+		h.logger.Info("Word has been mastered by user", "wordID", wordID, "userID", userID)
+	}
+
+	// Save the updated SRS data and mastery status.
+	if err := h.wordRepo.SaveStudiedWord(ctx, studiedWord); err != nil {
+		h.logger.Error("Failed to save updated studied word", "wordID", wordID, "userID", userID, "error", err)
+	}
 }
 
 func (h *SubmitAnswerHandler) calculateFinalResult(attempt quiz.Attempt, finalScore int) quiz.Result {

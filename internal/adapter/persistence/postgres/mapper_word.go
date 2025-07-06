@@ -52,6 +52,7 @@ func toDomainStudiedWord(m studiedWordModel) word.StudiedWord {
 		LastReviewedAt:     m.LastReviewedAt,
 		NextReviewAt:       m.NextReviewAt,
 		ReviewIntervalDays: m.ReviewIntervalDays,
+		IsMastered:         m.IsMastered,
 	}
 }
 
@@ -71,5 +72,6 @@ func toPersistenceStudiedWord(d word.StudiedWord) studiedWordModel {
 		LastReviewedAt:     d.LastReviewedAt,
 		NextReviewAt:       d.NextReviewAt,
 		ReviewIntervalDays: d.ReviewIntervalDays,
+		IsMastered:         d.IsMastered,
 	}
 }

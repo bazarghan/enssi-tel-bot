@@ -80,6 +80,7 @@ type studiedWordModel struct {
 	LastReviewedAt     time.Time
 	NextReviewAt       time.Time `gorm:"index"`
 	ReviewIntervalDays uint      `gorm:"default:1"`
+	IsMastered         bool      `gorm:"default:false;not null"`
 }
 
 func (studiedWordModel) TableName() string { return "word_studieds" }
