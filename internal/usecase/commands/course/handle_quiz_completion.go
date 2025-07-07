@@ -10,6 +10,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bits-and-blooms/bitset"
 )
 
 // HandleQuizCompletionCommand defines the input for processing a quiz result.
@@ -51,8 +52,10 @@ func NewHandleQuizCompletionHandler(
 
 // Handle executes the command.
 func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizCompletionCommand) (HandleQuizCompletionResult, error) {
+
 	// This variable will hold the ID of the achievement if it's updated.
 	var updatedAchievementID uint
+	var recentlyRevealed *bitset.BitSet
 
 	if cmd.Result.Passed {
 		// --- LOGIC FOR A PASSED QUIZ ---
@@ -67,12 +70,16 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 				AchievementID: domainCourse.LinkedAchievementID,
 				ItemsToReveal: 12, // Award 12 "pixels" per passed quiz
 			}
-			if err := h.awardProgressHandler.Handle(ctx, achCmd); err != nil {
-				h.logger.Error("Failed to award achievement progress", "error", err)
+			// Capture the newly revealed bitset from the handler
+			newlyRevealed, awardErr := h.awardProgressHandler.Handle(ctx, achCmd)
+			if awardErr != nil {
+				h.logger.Error("Failed to award achievement progress", "error", awardErr)
 			} else {
-				// If awarding was successful, store the ID to be returned later.
+				// If awarding was successful, store the ID and the bitset.
 				updatedAchievementID = domainCourse.LinkedAchievementID
+				recentlyRevealed = newlyRevealed
 			}
+
 		}
 
 		// 2. Mark words from the passed block as "studied" in the SRS
@@ -121,6 +128,7 @@ func (h HandleQuizCompletionHandler) Handle(ctx context.Context, cmd HandleQuizC
 
 	// 4. IMPORTANT: Add the achievement ID to the final result before returning.
 	result.UpdatedAchievementID = updatedAchievementID
+	result.RecentlyRevealed = recentlyRevealed
 
 	return result, nil
 }

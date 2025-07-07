@@ -24,8 +24,9 @@ const (
 // MasteryNotification is the result for a single achievement tier update.
 // The presentation layer will use this to generate the correct message for the user.
 type MasteryNotification struct {
-	Type        NotificationType
-	Achievement achievement.Achievement
+	Type             NotificationType
+	Achievement      achievement.Achievement
+	RecentlyRevealed *bitset.BitSet
 }
 
 // HandleWordMasteryCommand is the input for our new use case.
@@ -85,16 +86,17 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 	for _, ach := range allDailyAchievements {
 
 		userAch, progressExists := progressMap[ach.ID]
+		var oldState *bitset.BitSet
+		if progressExists && userAch.State != nil {
+			oldState = userAch.State.Clone()
+		} else {
+			oldState = bitset.New(ach.TotalItems)
+		}
 
 		// --- START OF CHANGE ---
 		// Defensively calculate the total grid size from width and height
 		// instead of relying on the `total_items` field from the database.
-		totalGridItems := ach.GridWidth * ach.GridHeight
-		if totalGridItems == 0 {
-			// As a fallback, use the DB value if grid dimensions aren't set.
-			totalGridItems = ach.TotalItems
-		}
-		// --- END OF CHANGE ---
+		totalGridItems := ach.TotalItems
 
 		// If user has enough words to unlock this tier...
 		if masteredCount >= int(ach.MinWordRequired) {
@@ -112,7 +114,8 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 					h.logger.Error("failed to save unlocked achievement", "error", err)
 					continue // Move to next achievement
 				}
-				notifications = append(notifications, MasteryNotification{Type: NotifyUnlock, Achievement: ach})
+				recentlyRevealed := oldState.SymmetricDifference(userAch.State)
+				notifications = append(notifications, MasteryNotification{Type: NotifyUnlock, Achievement: ach, RecentlyRevealed: recentlyRevealed})
 			}
 		} else { // If user does NOT have enough words for this tier...
 			// This is their current "active" tier. We update their progress here.
@@ -142,7 +145,8 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 					h.logger.Error("failed to save achievement progress", "error", err)
 				} else {
 					// Add a "Progress" notification only if we actually updated something.
-					notifications = append(notifications, MasteryNotification{Type: NotifyProgress, Achievement: ach})
+					recentlyRevealed := oldState.SymmetricDifference(userAch.State)
+					notifications = append(notifications, MasteryNotification{Type: NotifyProgress, Achievement: ach, RecentlyRevealed: recentlyRevealed})
 				}
 			}
 

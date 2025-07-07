@@ -24,7 +24,7 @@ func NewGenerator(outputDir string) (*Generator, error) {
 }
 
 // Generate creates a progressive image and saves it to a temporary file.
-func (g *Generator) Generate(baseImagePath string, revealed *bitset.BitSet, gridWidth, gridHeight uint) (string, error) {
+func (g *Generator) Generate(baseImagePath string, revealed *bitset.BitSet, recentlyRevealed *bitset.BitSet, gridWidth, gridHeight uint) (string, error) {
 	baseFile, err := os.Open(baseImagePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open base image '%s': %w", baseImagePath, err)
@@ -37,7 +37,7 @@ func (g *Generator) Generate(baseImagePath string, revealed *bitset.BitSet, grid
 	}
 
 	// Call the pure image processing function from the pkg.
-	generatedImage := imagekit.GenerateMosaic(srcImage, revealed, gridWidth, gridHeight)
+	generatedImage := imagekit.GenerateMosaic(srcImage, revealed, recentlyRevealed, int(gridWidth), int(gridHeight))
 
 	// Create a temporary file for the output.
 	tempFile, err := os.CreateTemp(g.OutputDir, "achievement_*.png")
@@ -54,3 +54,4 @@ func (g *Generator) Generate(baseImagePath string, revealed *bitset.BitSet, grid
 
 	return tempFile.Name(), nil
 }
+

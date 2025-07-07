@@ -203,9 +203,16 @@ func (h *Handler) handleQuizAnswer(c telebot.Context) error {
 		}
 
 		if completionResult.UpdatedAchievementID != 0 {
+
 			ach, _ := h.achRepo.FindByID(context.Background(), completionResult.UpdatedAchievementID)
-			dummyNotification := achCmd.MasteryNotification{Type: achCmd.NotifyProgress, Achievement: ach}
-			h.sendMasteryNotification(c, ctxUser.ID, dummyNotification)
+
+			notification := achCmd.MasteryNotification{
+				Type:             achCmd.NotifyProgress,
+				Achievement:      ach,
+				RecentlyRevealed: completionResult.RecentlyRevealed,
+			}
+			h.sendMasteryNotification(c, ctxUser.ID, notification)
+
 		}
 
 		promptMsg := "آزمون شما تمام شد برای ادامه رو کلمه بعدی بزنید\\."
@@ -272,7 +279,7 @@ func (h *Handler) sendMasteryNotification(c telebot.Context, userID uint, notifi
 		return
 	}
 
-	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
+	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, notification.RecentlyRevealed, ach.GridWidth, ach.GridHeight)
 	if err != nil {
 		logger.Error("Failed to generate achievement image", "error", err, "image_url", ach.ImageURL)
 		return
@@ -327,7 +334,11 @@ func (h *Handler) handleShowAchievement(c telebot.Context) error {
 		return nil
 	}
 
-	dummyNotification := achCmd.MasteryNotification{Type: achCmd.NotifyProgress, Achievement: ach}
+	dummyNotification := achCmd.MasteryNotification{
+		Type:             achCmd.NotifyProgress,
+		Achievement:      ach,
+		RecentlyRevealed: nil,
+	}
 	h.sendMasteryNotification(c, ctxUser.ID, dummyNotification)
 	// --- END of Change ---
 

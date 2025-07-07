@@ -28,10 +28,10 @@ func NewAwardProgressHandler(repo achievement.Repository) AwardProgressHandler {
 }
 
 // Handle executes the command.
-func (h AwardProgressHandler) Handle(ctx context.Context, cmd AwardProgressCommand) error {
+func (h AwardProgressHandler) Handle(ctx context.Context, cmd AwardProgressCommand) (*bitset.BitSet, error) {
 	ach, err := h.repo.FindByID(ctx, cmd.AchievementID)
 	if err != nil {
-		return fmt.Errorf("could not find achievement to award progress: %w", err)
+		return nil, fmt.Errorf("could not find achievement to award progress: %w", err)
 	}
 
 	userAch, err := h.repo.GetUserAchievement(ctx, cmd.UserID, cmd.AchievementID)
@@ -44,9 +44,12 @@ func (h AwardProgressHandler) Handle(ctx context.Context, cmd AwardProgressComma
 				State:         bitset.New(ach.TotalItems),
 			}
 		} else {
-			return fmt.Errorf("could not get user achievement progress: %w", err)
+			return nil, fmt.Errorf("could not get user achievement progress: %w", err)
 		}
 	}
+
+	// This will store the pixels we are about to reveal.
+	recentlyRevealed := bitset.New(ach.TotalItems)
 
 	// Find all available (unset) indices.
 	var availableIndices []uint
@@ -70,9 +73,15 @@ func (h AwardProgressHandler) Handle(ctx context.Context, cmd AwardProgressComma
 				break
 			}
 			userAch.State.Set(idx)
+			recentlyRevealed.Set(idx) // Also track it in our new bitset.
 			revealedCount++
 		}
 	}
 
-	return h.repo.SaveUserAchievement(ctx, userAch, ach.TotalItems)
+	err = h.repo.SaveUserAchievement(ctx, userAch, ach.TotalItems)
+	if err != nil {
+		return nil, err
+	}
+
+	return recentlyRevealed, nil
 }

@@ -153,7 +153,7 @@ func (h *ProfileHandler) handleAchievementSelection(c telebot.Context, u user.Us
 		}
 	}
 
-	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, ach.GridWidth, ach.GridHeight)
+	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, nil, ach.GridWidth, ach.GridHeight)
 	if err != nil {
 		h.logger.Error("Failed to generate achievement image", "error", err)
 		return c.Send("Could not create achievement image.")
