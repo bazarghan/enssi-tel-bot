@@ -157,6 +157,7 @@ func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appL
 func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (adminCmd.BroadcastHandler, error) {
 	wire.Build(
 		userSet,
+		quizSet,
 		notifierSet,
 		broadcastHandlerSet,
 	)

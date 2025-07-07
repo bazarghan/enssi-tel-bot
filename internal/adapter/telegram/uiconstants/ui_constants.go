@@ -11,6 +11,9 @@ const (
 	BtnViewAchievementsText = "🏆 دستاوردها"
 	BtnReturnToProfileText  = "بازگشت به پروفایل"
 
+	// --- Daily Review Quiz Menu ---
+	BtnStartReviewQuizText = "شروع آزمون مرور"
+
 	// --- Course Menu ---
 	BtnStartCourseText    = "شروع دوره"
 	BtnContinueCourseText = "ادامه دوره"

@@ -122,7 +122,9 @@ func (r *Router) Handle(c telebot.Context) error {
 
 	// State-based routing to sub-handlers
 	switch {
-	case ctxUser.LastMenu == sc.StateMain:
+	case ctxUser.LastMenu == sc.StateMain,
+		ctxUser.LastMenu == sc.StateDailyReviewMenu:
+
 		return r.mainMenuHandler.Handle(c, ctxUser, userInput)
 
 	case ctxUser.LastMenu == sc.StateCourseList,

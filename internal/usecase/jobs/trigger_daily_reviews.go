@@ -90,15 +90,10 @@ func (j *TriggerDailyReviewsJob) processUserForReview(ctx context.Context, userI
 		return // No words to review, so do nothing.
 	}
 
-	// 3. If words are due, notify the user and show the main menu with the review button.
+	// 4. Notify the user with a message and the main menu keyboard.
+	// This forces the main menu to appear on their device.
 	message := fmt.Sprintf("👋 سلام! %d کلمه برای مرور روزانه شما آماده است.", len(wordsDue))
-	if domainUser.LastMenu == "main" {
-		if err := j.notifier.NotifyWithMainMenu(userID, message); err != nil {
-			j.logger.Error("Failed to send main menu notification to user", "userID", userID, "error", err)
-		}
-	} else {
-		if err := j.notifier.Notify(userID, message); err != nil {
-			j.logger.Error("Failed to send simple review notification to user", "userID", userID, "error", err)
-		}
+	if err := j.notifier.NotifyWithMainMenu(userID, message); err != nil {
+		j.logger.Error("Failed to send main menu notification to user", "userID", userID, "error", err)
 	}
 }

@@ -90,7 +90,7 @@ func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appL
 	wordRepository := postgres.NewWordRepository(db)
 	quizRepository := postgres.NewQuizRepository(db, appLogger)
 	createReviewQuizHandler := quiz.NewCreateReviewQuizHandler(quizRepository)
-	notifier := telegram.NewNotifier(bot, userRepository)
+	notifier := telegram.NewNotifier(appLogger, bot, userRepository, quizRepository)
 	triggerDailyReviewsJob := jobs.NewTriggerDailyReviewsJob(appLogger, userRepository, wordRepository, quizRepository, createReviewQuizHandler, notifier)
 	workerApp := &WorkerApp{
 		TriggerDailyReviewsJob: triggerDailyReviewsJob,
@@ -100,7 +100,8 @@ func InitializeWorkerApp(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appL
 
 func InitializeBroadcastHandler(cfg *config.Config, db *gorm.DB, bot *telebot.Bot, appLogger logger.Logger) (admin2.BroadcastHandler, error) {
 	userRepository := postgres.NewUserRepository(db)
-	notifier := telegram.NewNotifier(bot, userRepository)
+	quizRepository := postgres.NewQuizRepository(db, appLogger)
+	notifier := telegram.NewNotifier(appLogger, bot, userRepository, quizRepository)
 	broadcastHandler := admin2.NewBroadcastHandler(appLogger, userRepository, notifier)
 	return broadcastHandler, nil
 }

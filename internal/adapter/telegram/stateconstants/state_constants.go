@@ -8,6 +8,7 @@ const (
 	StateProfileMenu     = "profile_menu"
 	StateAdminPanel      = "admin_panel"
 	StateAdminBroadcast  = "admin_broadcast_pending"
+	StateDailyReviewMenu = "daily_review_menu"
 
 	// --- State Prefixes for Dynamic States ---
 	StateCourseDetails = "course_details"

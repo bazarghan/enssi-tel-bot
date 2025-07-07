@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
@@ -74,6 +76,12 @@ func (h *MainMenuHandler) Handle(c telebot.Context, u user.User, userInput strin
 			return h.handleAdminPanel(c, u)
 		}
 	}
+	if u.LastMenu == sc.StateDailyReviewMenu {
+		if userInput == ui.BtnStartReviewQuizText {
+			return h.handleStartReviewQuiz(c, u)
+		}
+	}
+
 	return nil // Should not happen if routed correctly
 }
 
@@ -128,42 +136,26 @@ func (h *MainMenuHandler) handleDailyReview(c telebot.Context, u user.User) erro
 		h.quizRepo.DeleteAttempt(context.Background(), oldAttempt.ID)
 	}
 
-	// 2. Now, find ALL words that are currently due for review.
+	// 2. Find words that are currently due for review.
 	wordsToReview, err := h.wordRepo.GetWordsDueForReview(context.Background(), u.ID, time.Now())
 	if err != nil {
 		h.logger.Error("Failed to get words for review", "user_id", u.ID, "error", err)
-		return c.Send("خطا در آماده سازی آزمون مرور شما.")
+		return c.Send("خطا در آماده سازی مرور شما.")
 	}
 
 	if len(wordsToReview) == 0 {
 		return c.Send("شما در حال حاضر هیچ کلمه ای برای مرور ندارید. آفرین!")
 	}
 
-	// 3. Create a brand new, fresh quiz with these words.
-	reviewCmd := quizCmd.CreateReviewQuizCommand{UserID: u.ID, WordsToReview: wordsToReview}
-	newQuiz, err := h.createReviewQuiz.Handle(context.Background(), reviewCmd)
-	if err != nil {
-		h.logger.Error("Failed to create fresh review quiz", "user_id", u.ID, "error", err)
-		return c.Send("خطا در ساخت آزمون مرور شما.")
+	// 3. Set the user's state to our new review menu.
+	if err := h.userRepo.UpdateLastMenu(context.Background(), u.ID, sc.StateDailyReviewMenu); err != nil {
+		h.logger.Error("Failed to update user state to daily review menu", "user_id", u.ID, "error", err)
+		return c.Send("خطایی رخ داد، لطفا دوباره تلاش کنید.")
 	}
 
-	// 4. Start the new quiz by sending the first question.
-	attempt := newQuiz.QuizAttempt
-	question := attempt.Questions[attempt.CurrentQuestionIndex]
-
-	newState := fmt.Sprintf("in_quiz:0:%d", attempt.ID)
-	h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
-
-	rand.Shuffle(len(question.Options), func(i, j int) {
-		question.Options[i], question.Options[j] = question.Options[j], question.Options[i]
-	})
-	msg := formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
-	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID, u.IsAdmin)
-	sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
-	if err == nil {
-		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
-	}
-	return err
+	// 4. Send the confirmation message with the new keyboard.
+	msg := fmt.Sprintf("شما *%d* کلمه برای مرور آماده دارید. برای شروع روی دکمه زیر کلیک کنید.", len(wordsToReview))
+	return c.Send(tgmarkdown.Escape(msg), keyboards.DailyReviewMenuKeyboard(), telebot.ModeMarkdownV2)
 }
 
 func (h *MainMenuHandler) handleAdminPanel(c telebot.Context, u user.User) error {
@@ -184,6 +176,7 @@ func (h *MainMenuHandler) handleReturnToMainMenu(c telebot.Context, u user.User)
 	if strings.HasPrefix(u.LastMenu, "in_quiz:") {
 		parts := strings.Split(u.LastMenu, ":")
 		if len(parts) == 3 {
+			quizType := parts[1]
 			attemptID, err := strconv.ParseUint(parts[2], 10, 64)
 			if err == nil {
 				// 2. Fetch the quiz attempt from the database to get the message ID.
@@ -191,18 +184,24 @@ func (h *MainMenuHandler) handleReturnToMainMenu(c telebot.Context, u user.User)
 				if err != nil {
 					h.logger.Error("Could not get quiz attempt to edit message", "attempt_id", attemptID, "error", err)
 				} else if attempt.CurrentQuestionMessageID != 0 {
-					// 3. Edit the original quiz message to show it's paused.
-					//	 By not providing a new keyboard, the inline keyboard is automatically removed.
-					pausedMsg := "آزمون متوقف شد. شما به منوی اصلی بازگشتید."
 
-					// We need to create a telebot.Message object to edit it.
-					// The Chat ID is important.
+					var msgText string
+
+					if quizType == "review" {
+						// If it's a review quiz, delete the attempt.
+						h.quizRepo.DeleteAttempt(context.Background(), uint(attemptID))
+						msgText = "آزمون مرور لغو شد. به منوی اصلی بازگشتید."
+					} else {
+						// For other quizzes (like course quizzes), just pause them.
+						msgText = "آزمون متوقف شد. شما به منوی اصلی بازگشتید."
+					}
+
 					messageToEdit := &telebot.Message{
 						ID:   attempt.CurrentQuestionMessageID,
 						Chat: c.Chat(),
 					}
 
-					if _, err := c.Bot().Edit(messageToEdit, pausedMsg); err != nil {
+					if _, err := c.Bot().Edit(messageToEdit, msgText); err != nil {
 						// This error is not critical, the user can still proceed.
 						h.logger.Warn("Failed to edit old quiz message", "message_id", attempt.CurrentQuestionMessageID, "error", err)
 					}
@@ -225,4 +224,41 @@ func (h *MainMenuHandler) handleReturnToMainMenu(c telebot.Context, u user.User)
 		h.logger.Error("Failed to update user state", "user_id", u.ID, "error", err)
 	}
 	return c.Send("به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin, hasPendingReview))
+}
+
+func (h *MainMenuHandler) handleStartReviewQuiz(c telebot.Context, u user.User) error {
+	// This logic is moved from the old `handleDailyReview` function.
+	wordsToReview, err := h.wordRepo.GetWordsDueForReview(context.Background(), u.ID, time.Now())
+	if err != nil {
+		h.logger.Error("Failed to get words for review quiz start", "user_id", u.ID, "error", err)
+		return c.Send("خطا در آماده سازی آزمون مرور شما.")
+	}
+	if len(wordsToReview) == 0 {
+		return c.Send("کلمه‌ای برای مرور وجود ندارد. به منوی اصلی بازگشتید.", keyboards.NewMainMenu(u.IsAdmin, false))
+	}
+
+	reviewCmd := quizCmd.CreateReviewQuizCommand{UserID: u.ID, WordsToReview: wordsToReview}
+	newQuiz, err := h.createReviewQuiz.Handle(context.Background(), reviewCmd)
+	if err != nil {
+		h.logger.Error("Failed to create fresh review quiz", "user_id", u.ID, "error", err)
+		return c.Send("خطا در ساخت آزمون مرور شما.")
+	}
+
+	attempt := newQuiz.QuizAttempt
+	question := attempt.Questions[attempt.CurrentQuestionIndex]
+
+	// Set a new, more specific state to identify this as a review quiz.
+	newState := fmt.Sprintf("in_quiz:review:%d", attempt.ID)
+	h.userRepo.UpdateLastMenu(context.Background(), u.ID, newState)
+
+	rand.Shuffle(len(question.Options), func(i, j int) {
+		question.Options[i], question.Options[j] = question.Options[j], question.Options[i]
+	})
+	msg := formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
+	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID, u.IsAdmin)
+	sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
+	if err == nil {
+		h.quizRepo.UpdateMessageID(context.Background(), attempt.ID, sentMsg.ID)
+	}
+	return err
 }
