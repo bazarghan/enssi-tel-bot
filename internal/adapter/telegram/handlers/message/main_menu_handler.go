@@ -254,6 +254,13 @@ func (h *MainMenuHandler) handleStartReviewQuiz(c telebot.Context, u user.User) 
 	rand.Shuffle(len(question.Options), func(i, j int) {
 		question.Options[i], question.Options[j] = question.Options[j], question.Options[i]
 	})
+
+	quizAlert := "آزمون مرور شما به زودی شروع می شود..."
+	_, err = c.Bot().Send(c.Chat(), quizAlert, keyboards.QuizKeyboard())
+	if err != nil {
+		h.logger.Error("failed to remove starting daily quiz keyboard as well sending quiz alert", "user_id", u.ID, "error", err)
+	}
+
 	msg := formatters.FormatQuizQuestion(question, attempt.CurrentQuestionIndex, len(attempt.Questions))
 	kb := keyboards.QuizQuestionOptionsKeyboard(question.Options, attempt.ID, u.IsAdmin)
 	sentMsg, err := c.Bot().Send(c.Chat(), msg, kb, telebot.ModeMarkdownV2)
