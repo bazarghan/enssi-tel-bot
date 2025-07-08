@@ -84,65 +84,67 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 	var notifications []MasteryNotification
 	rand.Seed(time.Now().UnixNano())
 
-	// 4. Iterate through each achievement tier to check the user's status.
-	for _, ach := range allDailyAchievements {
+	// This flag tells the loop when to stop SENDING notifications, but not when to stop UPDATING.
+	var stopNotifying = false
 
+	// 4. Loop through every achievement tier without breaking.
+	for _, ach := range allDailyAchievements {
 		userAch, progressExists := progressMap[ach.ID]
 
-		totalGridItems := ach.TotalItems
+		// If the achievement was already fully completed in a previous session, do nothing.
+		if progressExists && userAch.CompletedAt != nil {
+			continue
+		}
 
-		// If user has enough words to unlock this tier...
+		// --- A: Logic for UNLOCKING a tier ---
 		if masteredCount >= int(ach.MinWordRequired) {
-			// ...and they haven't already completed it...
-			if !progressExists || userAch.CompletedAt == nil {
-				oldState := bitset.New(totalGridItems)
-				if progressExists && userAch.State != nil {
-					oldState = userAch.State.Clone()
-				}
-
-				now := time.Now()
-				if !progressExists {
-					userAch = achievement.UserAchievement{UserID: cmd.UserID, AchievementID: ach.ID}
-				}
-				userAch.State = bitset.New(totalGridItems).SetAll()
-				userAch.CompletedAt = &now
-
-				if err := h.achRepo.SaveUserAchievement(ctx, userAch, totalGridItems); err != nil {
-					h.logger.Error("failed to save unlocked achievement", "error", err)
-					continue
-				}
-				recentlyRevealed := oldState.SymmetricDifference(userAch.State)
-				notifications = append(notifications, MasteryNotification{Type: NotifyUnlock, Achievement: ach, RecentlyRevealed: recentlyRevealed})
+			now := time.Now()
+			if !progressExists {
+				userAch = achievement.UserAchievement{UserID: cmd.UserID, AchievementID: ach.ID}
 			}
-		} else { // This is the user's current "active" tier.
-			currentRevealedCount := 0
+			userAch.State = bitset.New(ach.TotalItems).SetAll()
+			userAch.CompletedAt = &now
+
+			if err := h.achRepo.SaveUserAchievement(ctx, userAch, ach.TotalItems); err != nil {
+				h.logger.Error("failed to save unlocked achievement", "error", err)
+				continue
+			}
+
+			// If the notification switch is still off, send the unlock message.
+			if !stopNotifying {
+				notifications = append(notifications, MasteryNotification{Type: NotifyUnlock, Achievement: ach, RecentlyRevealed: nil})
+			}
+
+			// --- B: Logic for PROGRESS and SILENT UPDATES ---
+		} else {
+			oldState := bitset.New(ach.TotalItems)
 			if progressExists && userAch.State != nil {
-				currentRevealedCount = int(userAch.State.Count())
+				oldState = userAch.State.Clone()
 			}
 
-			// If their mastered word count is higher than what's currently shown, update the progress.
+			currentRevealedCount := int(oldState.Count())
+
 			if masteredCount > currentRevealedCount {
+				// This block runs for ANY achievement that needs a progress update,
+				// both the first one and all subsequent silent ones.
 				if !progressExists {
 					userAch = achievement.UserAchievement{
 						UserID:        cmd.UserID,
 						AchievementID: ach.ID,
-						State:         bitset.New(totalGridItems),
+						State:         bitset.New(ach.TotalItems),
 					}
 				}
 
 				itemsToReveal := masteredCount - currentRevealedCount
-				recentlyRevealed := bitset.New(totalGridItems)
+				newlyRevealed := bitset.New(ach.TotalItems)
 
 				var availableIndices []uint
-				for i := uint(0); i < totalGridItems; i++ {
+				for i := uint(0); i < ach.TotalItems; i++ {
 					if !userAch.State.Test(i) {
 						availableIndices = append(availableIndices, i)
 					}
 				}
-
-				rand.Shuffle(len(availableIndices), func(i, j int) {
-					availableIndices[i], availableIndices[j] = availableIndices[j], availableIndices[i]
-				})
+				rand.Shuffle(len(availableIndices), func(i, j int) { availableIndices[i], availableIndices[j] = availableIndices[j], availableIndices[i] })
 
 				revealedCount := 0
 				for _, idx := range availableIndices {
@@ -150,18 +152,22 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 						break
 					}
 					userAch.State.Set(idx)
-					recentlyRevealed.Set(idx)
+					newlyRevealed.Set(idx)
 					revealedCount++
 				}
 
-				if err := h.achRepo.SaveUserAchievement(ctx, userAch, totalGridItems); err != nil {
+				if err := h.achRepo.SaveUserAchievement(ctx, userAch, ach.TotalItems); err != nil {
 					h.logger.Error("failed to save achievement progress", "error", err)
-				} else {
-					notifications = append(notifications, MasteryNotification{Type: NotifyProgress, Achievement: ach, RecentlyRevealed: recentlyRevealed})
+					continue
+				}
+
+				// If the notification switch is off, this is the FIRST progress update.
+				// Send the notification AND turn the switch on.
+				if !stopNotifying {
+					notifications = append(notifications, MasteryNotification{Type: NotifyProgress, Achievement: ach, RecentlyRevealed: newlyRevealed})
+					stopNotifying = true
 				}
 			}
-			// Since we found the user's active tier, we don't need to check higher tiers.
-			break
 		}
 	}
 
