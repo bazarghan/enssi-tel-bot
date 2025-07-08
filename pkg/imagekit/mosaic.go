@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 	"strconv"
 	"strings"
 
@@ -13,17 +14,19 @@ import (
 
 // --- Default Configuration Constants ---
 const (
-	// Visual properties for the generated mosaic
-	defaultGridSpacing = 2 // The space between each cell.
-	defaultBorderSize  = 2 // The border thickness, drawn inside the cell.
+	// Visual properties for the generated mosaic.
+	// Can be defined in pixels ("2px") or as a percentage of cell width ("10%").
+	defaultGridSpacing = "10%" // The space between each cell.
+	defaultBorderSize  = "5%"  // The border thickness, drawn inside the cell.
+	defaultCellRadius  = "0px" // The corner radius for each cell.
 
 	// Dimming effect for "unrevealed" cells
-	dimmedOpacity = 0.2 // Value between 0.0 (fully transparent) and 1.0 (fully opaque)
+	dimmedOpacity = 0.1 // Value between 0.0 (fully transparent) and 1.0 (fully opaque)
 
 	// Colors in Hex format (RRGGBBAA). Use "00" for alpha for full transparency.
 	defaultBackgroundColorHex      = "#333333FF" // Dark grey
 	defaultBorderColorHex          = "#000000FF" // Black
-	recentlyRevealedBorderColorHex = "#00FF00FF" // Bright Green
+	recentlyRevealedBorderColorHex = "#4CAF50FF" // Bright Green
 )
 
 // parseHexColor converts a hex string like "#RRGGBBAA" to a color.RGBA object.
@@ -53,16 +56,108 @@ func parseHexColor(s string) (color.RGBA, error) {
 	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a)}, nil
 }
 
+// parseDimension parses a string that can be a pixel value (e.g., "2px") or a
+// percentage (e.g., "10%") relative to a base value.
+func parseDimension(dimStr string, base int) (int, error) {
+	if strings.HasSuffix(dimStr, "%") {
+		percentStr := strings.TrimSuffix(dimStr, "%")
+		percent, err := strconv.ParseFloat(percentStr, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid percentage format: %s", dimStr)
+		}
+		// Calculate value and convert to integer pixels
+		return int((percent / 100.0) * float64(base)), nil
+	}
+
+	if strings.HasSuffix(dimStr, "px") {
+		pixelStr := strings.TrimSuffix(dimStr, "px")
+		pixels, err := strconv.Atoi(pixelStr)
+		if err != nil {
+			return 0, fmt.Errorf("invalid pixel format: %s", dimStr)
+		}
+		return pixels, nil
+	}
+
+	return 0, fmt.Errorf("invalid dimension format: must end with 'px' or '%%'")
+}
+
+// createRoundedRectMask creates an alpha mask for a rounded rectangle.
+func createRoundedRectMask(r image.Rectangle, radius int) *image.Alpha {
+	mask := image.NewAlpha(r)
+	if radius <= 0 { // If no radius, just fill the rectangle (much faster)
+		draw.Draw(mask, r, image.Opaque, image.Point{}, draw.Src)
+		return mask
+	}
+
+	// Clamp radius to half of the smallest dimension
+	maxRadius := r.Dx() / 2
+	if r.Dy()/2 < maxRadius {
+		maxRadius = r.Dy() / 2
+	}
+	if radius > maxRadius {
+		radius = maxRadius
+	}
+
+	// Corner centers
+	c1 := image.Point{r.Min.X + radius, r.Min.Y + radius}         // Top-left
+	c2 := image.Point{r.Max.X - radius - 1, r.Min.Y + radius}     // Top-right
+	c3 := image.Point{r.Min.X + radius, r.Max.Y - radius - 1}     // Bottom-left
+	c4 := image.Point{r.Max.X - radius - 1, r.Max.Y - radius - 1} // Bottom-right
+	radiusSq := float64(radius * radius)
+
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			// In a straight section
+			if (x >= c1.X && x <= c2.X) || (y >= c1.Y && y <= c3.Y) {
+				mask.SetAlpha(x, y, color.Alpha{A: 255})
+				continue
+			}
+
+			var distSq float64
+			// Top-left corner
+			if x < c1.X && y < c1.Y {
+				distSq = math.Pow(float64(c1.X-x), 2) + math.Pow(float64(c1.Y-y), 2)
+			} else if x > c2.X && y < c2.Y { // Top-right corner
+				distSq = math.Pow(float64(x-c2.X), 2) + math.Pow(float64(c2.Y-y), 2)
+			} else if x < c3.X && y > c3.Y { // Bottom-left corner
+				distSq = math.Pow(float64(c3.X-x), 2) + math.Pow(float64(y-c3.Y), 2)
+			} else if x > c4.X && y > c4.Y { // Bottom-right corner
+				distSq = math.Pow(float64(x-c4.X), 2) + math.Pow(float64(y-c4.Y), 2)
+			}
+
+			if distSq <= radiusSq {
+				mask.SetAlpha(x, y, color.Alpha{A: 255})
+			}
+		}
+	}
+	return mask
+}
+
 // GenerateMosaic creates a mosaic image. It derives the grid layout from the source image's
 // dimensions and uses the provided cellWidth and cellHeight for the output cell size.
 func GenerateMosaic(src image.Image, revealedPixels, recentlyRevealedPixels *bitset.BitSet, cellWidth, cellHeight int) image.Image {
-	// --- 1. Derive Grid Dimensions and Parse Colors ---
+	// --- 1. Derive Grid Dimensions and Parse Colors/Dimensions ---
 	bounds := src.Bounds()
 	gridWidth := uint(bounds.Dx())
 	gridHeight := uint(bounds.Dy())
 
 	if gridWidth == 0 || gridHeight == 0 {
 		return image.NewRGBA(image.Rect(0, 0, 1, 1))
+	}
+
+	// Parse string-based dimensions into concrete integer values.
+	// A malformed constant is a fatal error.
+	gridSpacing, err := parseDimension(defaultGridSpacing, cellWidth)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse defaultGridSpacing: %v", err))
+	}
+	borderSize, err := parseDimension(defaultBorderSize, cellWidth)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse defaultBorderSize: %v", err))
+	}
+	cellRadius, err := parseDimension(defaultCellRadius, cellWidth)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse defaultCellRadius: %v", err))
 	}
 
 	// Calculate the total number of cells in the grid.
@@ -82,8 +177,8 @@ func GenerateMosaic(src image.Image, revealedPixels, recentlyRevealedPixels *bit
 	}
 
 	// Calculate the total dimensions for the new image using the provided cell dimensions.
-	outputWidth := (int(gridWidth) * cellWidth) + ((int(gridWidth) + 1) * defaultGridSpacing)
-	outputHeight := (int(gridHeight) * cellHeight) + ((int(gridHeight) + 1) * defaultGridSpacing)
+	outputWidth := (int(gridWidth) * cellWidth) + ((int(gridWidth) + 1) * gridSpacing)
+	outputHeight := (int(gridHeight) * cellHeight) + ((int(gridHeight) + 1) * gridSpacing)
 
 	finalImage := image.NewRGBA(image.Rect(0, 0, outputWidth, outputHeight))
 	draw.Draw(finalImage, finalImage.Bounds(), image.NewUniform(bgColor), image.Point{}, draw.Src)
@@ -93,9 +188,9 @@ func GenerateMosaic(src image.Image, revealedPixels, recentlyRevealedPixels *bit
 	for r := uint(0); r < gridHeight; r++ {
 		for c := uint(0); c < gridWidth; c++ {
 			cellColor := cellColors[r][c]
-			cellX0 := defaultGridSpacing + int(c)*(cellWidth+defaultGridSpacing)
-			cellY0 := defaultGridSpacing + int(r)*(cellHeight+defaultGridSpacing)
-			drawCell(dimmedGrid, cellX0, cellY0, cellWidth, cellHeight, cellColor, defaultBorderColor, dimmedOpacity)
+			cellX0 := gridSpacing + int(c)*(cellWidth+gridSpacing)
+			cellY0 := gridSpacing + int(r)*(cellHeight+gridSpacing)
+			drawCell(dimmedGrid, cellX0, cellY0, cellWidth, cellHeight, borderSize, cellRadius, cellColor, defaultBorderColor, dimmedOpacity)
 		}
 	}
 	draw.Draw(finalImage, finalImage.Bounds(), dimmedGrid, image.Point{}, draw.Over)
@@ -113,15 +208,15 @@ func GenerateMosaic(src image.Image, revealedPixels, recentlyRevealedPixels *bit
 			col := i % gridWidth
 
 			cellColor := cellColors[row][col]
-			cellX0 := defaultGridSpacing + int(col)*(cellWidth+defaultGridSpacing)
-			cellY0 := defaultGridSpacing + int(row)*(cellHeight+defaultGridSpacing)
+			cellX0 := gridSpacing + int(col)*(cellWidth+gridSpacing)
+			cellY0 := gridSpacing + int(row)*(cellHeight+gridSpacing)
 
 			borderColor := defaultBorderColor
 			if recentlyRevealedPixels != nil && recentlyRevealedPixels.Test(i) {
 				borderColor = recentBorderColor
 			}
 
-			drawCell(finalImage, cellX0, cellY0, cellWidth, cellHeight, cellColor, borderColor, 1.0)
+			drawCell(finalImage, cellX0, cellY0, cellWidth, cellHeight, borderSize, cellRadius, cellColor, borderColor, 1.0)
 		}
 	}
 
@@ -129,22 +224,34 @@ func GenerateMosaic(src image.Image, revealedPixels, recentlyRevealedPixels *bit
 }
 
 // drawCell is a helper to draw a single cell with a border onto a destination image.
-func drawCell(dst draw.Image, x, y, cellWidth, cellHeight int, cellColor, borderColor color.Color, opacity float64) {
+func drawCell(dst draw.Image, x, y, cellWidth, cellHeight, borderSize, cellRadius int, cellColor, borderColor color.Color, opacity float64) {
 	opaqBorder := applyOpacity(borderColor, opacity)
 	opaqCell := applyOpacity(cellColor, opacity)
 
-	borderRect := image.Rect(x, y, x+cellWidth, y+cellHeight)
-	draw.Draw(dst, borderRect, image.NewUniform(opaqBorder), image.Point{}, draw.Over)
+	// Draw the outer border shape
+	outerRect := image.Rect(x, y, x+cellWidth, y+cellHeight)
+	if outerRect.Empty() {
+		return
+	}
+	outerMask := createRoundedRectMask(outerRect, cellRadius)
+	draw.DrawMask(dst, outerRect, image.NewUniform(opaqBorder), image.Point{}, outerMask, outerRect.Min, draw.Over)
 
+	// Calculate the inner rectangle for the cell fill
 	innerRect := image.Rect(
-		x+defaultBorderSize,
-		y+defaultBorderSize,
-		x+cellWidth-defaultBorderSize,
-		y+cellHeight-defaultBorderSize,
+		x+borderSize,
+		y+borderSize,
+		x+cellWidth-borderSize,
+		y+cellHeight-borderSize,
 	)
 
-	if innerRect.Min.X < innerRect.Max.X && innerRect.Min.Y < innerRect.Max.Y {
-		draw.Draw(dst, innerRect, image.NewUniform(opaqCell), image.Point{}, draw.Over)
+	// Draw the inner cell shape if it's a valid rectangle
+	if !innerRect.Empty() && innerRect.Min.X < innerRect.Max.X && innerRect.Min.Y < innerRect.Max.Y {
+		innerRadius := cellRadius - borderSize
+		if innerRadius < 0 {
+			innerRadius = 0
+		}
+		innerMask := createRoundedRectMask(innerRect, innerRadius)
+		draw.DrawMask(dst, innerRect, image.NewUniform(opaqCell), image.Point{}, innerMask, innerRect.Min, draw.Over)
 	}
 }
 

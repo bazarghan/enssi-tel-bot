@@ -3,6 +3,7 @@ package achievement
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
@@ -81,75 +82,84 @@ func (h HandleWordMasteryHandler) Handle(ctx context.Context, cmd HandleWordMast
 	}
 
 	var notifications []MasteryNotification
+	rand.Seed(time.Now().UnixNano())
 
 	// 4. Iterate through each achievement tier to check the user's status.
 	for _, ach := range allDailyAchievements {
 
 		userAch, progressExists := progressMap[ach.ID]
-		var oldState *bitset.BitSet
-		if progressExists && userAch.State != nil {
-			oldState = userAch.State.Clone()
-		} else {
-			oldState = bitset.New(ach.TotalItems)
-		}
 
-		// --- START OF CHANGE ---
-		// Defensively calculate the total grid size from width and height
-		// instead of relying on the `total_items` field from the database.
 		totalGridItems := ach.TotalItems
 
 		// If user has enough words to unlock this tier...
 		if masteredCount >= int(ach.MinWordRequired) {
 			// ...and they haven't already completed it...
 			if !progressExists || userAch.CompletedAt == nil {
-				// Mark as complete and create an "Unlock" notification.
+				oldState := bitset.New(totalGridItems)
+				if progressExists && userAch.State != nil {
+					oldState = userAch.State.Clone()
+				}
+
 				now := time.Now()
 				if !progressExists {
 					userAch = achievement.UserAchievement{UserID: cmd.UserID, AchievementID: ach.ID}
 				}
-				userAch.State = bitset.New(ach.TotalItems).SetAll() // Fill the image completely.
+				userAch.State = bitset.New(totalGridItems).SetAll()
 				userAch.CompletedAt = &now
 
 				if err := h.achRepo.SaveUserAchievement(ctx, userAch, totalGridItems); err != nil {
 					h.logger.Error("failed to save unlocked achievement", "error", err)
-					continue // Move to next achievement
+					continue
 				}
 				recentlyRevealed := oldState.SymmetricDifference(userAch.State)
 				notifications = append(notifications, MasteryNotification{Type: NotifyUnlock, Achievement: ach, RecentlyRevealed: recentlyRevealed})
 			}
-		} else { // If user does NOT have enough words for this tier...
-			// This is their current "active" tier. We update their progress here.
-
-			// Calculate how many "pixels" (revealed items) they should have.
-			currentRevealed := 0
+		} else { // This is the user's current "active" tier.
+			currentRevealedCount := 0
 			if progressExists && userAch.State != nil {
-				currentRevealed = int(userAch.State.Count())
+				currentRevealedCount = int(userAch.State.Count())
 			}
 
-			// If their mastered word count is higher than what's shown, update it.
-			if masteredCount > currentRevealed {
+			// If their mastered word count is higher than what's currently shown, update the progress.
+			if masteredCount > currentRevealedCount {
 				if !progressExists {
 					userAch = achievement.UserAchievement{
 						UserID:        cmd.UserID,
 						AchievementID: ach.ID,
-						State:         bitset.New(ach.TotalItems),
+						State:         bitset.New(totalGridItems),
 					}
 				}
 
-				// Reveal pixels up to the mastered word count.
-				for i := uint(0); i < uint(masteredCount); i++ {
-					userAch.State.Set(i)
+				itemsToReveal := masteredCount - currentRevealedCount
+				recentlyRevealed := bitset.New(totalGridItems)
+
+				var availableIndices []uint
+				for i := uint(0); i < totalGridItems; i++ {
+					if !userAch.State.Test(i) {
+						availableIndices = append(availableIndices, i)
+					}
+				}
+
+				rand.Shuffle(len(availableIndices), func(i, j int) {
+					availableIndices[i], availableIndices[j] = availableIndices[j], availableIndices[i]
+				})
+
+				revealedCount := 0
+				for _, idx := range availableIndices {
+					if revealedCount >= itemsToReveal {
+						break
+					}
+					userAch.State.Set(idx)
+					recentlyRevealed.Set(idx)
+					revealedCount++
 				}
 
 				if err := h.achRepo.SaveUserAchievement(ctx, userAch, totalGridItems); err != nil {
 					h.logger.Error("failed to save achievement progress", "error", err)
 				} else {
-					// Add a "Progress" notification only if we actually updated something.
-					recentlyRevealed := oldState.SymmetricDifference(userAch.State)
 					notifications = append(notifications, MasteryNotification{Type: NotifyProgress, Achievement: ach, RecentlyRevealed: recentlyRevealed})
 				}
 			}
-
 			// Since we found the user's active tier, we don't need to check higher tiers.
 			break
 		}
