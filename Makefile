@@ -19,6 +19,7 @@ help:
 	@echo "  clean           Remove build artifacts and test cache"
 	@echo ""
 	@echo "  --- Database ---"
+	@echo "  db-reset        ⚠️  Resets the dev database (drops tables, migrates, and seeds)"
 	@echo "  seed            Populate the database with initial data (courses, words, etc.)"
 	@echo "  migrate-up      Apply all available 'up' database migrations"
 	@echo "  migrate-down    Revert the last 'down' database migration"
@@ -101,4 +102,22 @@ migrate-down:
 seed:
 	@echo "Running database seeder..."
 	@go run ./cmd/seeder/main.go
+
+
+# --- Full Database Reset (DEVELOPMENT ONLY) ---
+
+## WARNING: Destructive! Drops all tables, re-migrates, and re-seeds the database.
+## Do NOT run this on a production database.
+db-reset:
+	@echo "⚠️  WARNING: This will drop all tables, re-migrate, and re-seed the database."
+	@read -p "Are you sure you want to continue? (y/n) " -r response; \
+	if [ "$$response" = "y" ] || [ "$$response" = "Y" ]; then \
+		echo "\nProceeding with database reset..."; \
+		$(MAKE) migrate-down; \
+		$(MAKE) migrate-up; \
+		$(MAKE) seed; \
+		echo "✅  Database reset complete."; \
+	else \
+		echo "\nDatabase reset aborted."; \
+	fi
 
