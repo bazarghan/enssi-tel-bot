@@ -1,0 +1,88 @@
+# Configuration for the database seeder
+achievements:
+  - title: "Startist"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/startist.png"
+    min_word_required: 10
+    total_items: 16
+    cell_width: 400
+    cell_height: 400
+  - title: "Wanderer"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/wanderer.png"
+    min_word_required: 25
+    total_items: 25
+    cell_width: 200
+    cell_height: 200
+  - title: "Novice"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/novice.png"
+    min_word_required: 50
+    total_items: 64
+    cell_width: 200
+    cell_height: 200
+  - title: "Tenacious"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/tenacious.png"
+    min_word_required: 100
+    total_items: 100
+    cell_width: 200
+    cell_height: 200
+  - title: "Tourist"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/tourist.png"
+    min_word_required: 250
+    total_items: 256
+    cell_width: 100
+    cell_height: 100
+  - title: "Wordium"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/wordium.png"
+    min_word_required: 500
+    total_items: 529
+    cell_width: 80
+    cell_height: 80
+  - title: "Wordunter"
+    description: ""
+    type: "DAILY_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/worunter.png"
+    min_word_required: 1000
+    total_items: 1024
+    cell_width: 80
+    cell_height: 80
+  - title: "504 Progress"
+    description: ""
+    type: "COURSE_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/504.png"
+    min_word_required: 504
+    total_items: 529
+    cell_width: 80
+    cell_height: 80
+  - title: "1100 Progress"
+    description: ""
+    type: "COURSE_PROGRESSIVE_IMAGE"
+    image_url: "assets/imgs/achievements/1100.png"
+    min_word_required: 1100
+    total_items: 1156
+    cell_width: 80
+    cell_height: 80
+
+courses:
+  - title: "504 Absolutely Essential Words"
+    persian_title: "504 واژه ضروری"
+    description: "A classic vocabulary builder featuring 504 high-frequency words, each with clear definitions and example sentences to help you master the essentials."
+    persian_description: "مجموعه 504 کلمه یکی از معروف ترین و محبوب ترین مجموعه لغات انگلیسی، طراحی شده برای افرادی با سطح زبان متوسطه، هدف اصلی این مجموعه آموزش کلماتیه که به وفور تو مکالمات روزانه، ادبیات، روزنامه ها و تستای مختلف مثل GRE, IELTS, TOFEL و SAT تکرار می شن"
+    json_file_path: "assets/data/504-ultimate.json"
+    linked_achievement_title: "504 Progress"
+  - title: "1100 Words You Need to Know"
+    persian_title: "1100 کلمه که باید بدانید"
+    description: "An engaging list of 1,100 advanced English words organized into weekly units, with exercises and quizzes to expand your academic and professional vocabulary."
+    persian_description: "مجموعه کلمات 1100 در کنار مجموعه 504 یکی دیگه از مجموعه لغات انگیلیسی معروف و محبوبه، این مجموعه برای کسایی طراحی شده که سطح زبان بالایی دارن و می خوان به طور قابل توجهی دایره لغات خودشون رو گسترش بدن، این مجموعه به نسبت مجموعه 504 دارای کلمات سخت تر، اصطلاحات و کلمات آکادمیکه"
+    json_file_path: "assets/data/1100-ultimate.json"
+    linked_achievement_title: "1100 Progress"

@@ -87,3 +87,11 @@ migrate-down:
 	@echo "Running 'down' migration..."
 	@go run ./cmd/migrate down
 
+
+# --- Database Seeding Target ---
+
+## Populates the database with initial data (achievements, courses, words).
+seed:
+	@echo "Running database seeder..."
+	@go run ./cmd/seeder/main.go
+
