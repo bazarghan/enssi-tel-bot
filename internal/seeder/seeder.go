@@ -131,7 +131,6 @@ func (s *Seeder) seedCourses(courseConfigs []CourseConfig, achievements map[stri
 	return nil
 }
 
-// populateCourseFromJSON reads a JSON file and populates words for a specific course.
 func (s *Seeder) populateCourseFromJSON(filePath string, course *postgres.CourseModel) error {
 	fileBytes, err := os.ReadFile(filePath)
 	if err != nil {
@@ -150,12 +149,17 @@ func (s *Seeder) populateCourseFromJSON(filePath string, course *postgres.Course
 				fmt.Printf("...populating word %d/%d for course '%s'\n", i+1, len(orderedList), course.Title)
 			}
 
-			// Using FirstOrCreate for idempotency
+			// --- Start of Corrected Block with Error Handling ---
+
 			source := postgres.SourceModel{Title: "Vocabulary.com", URL: "vocabulary.com"}
-			tx.Where(postgres.SourceModel{URL: source.URL}).FirstOrCreate(&source)
+			if err := tx.Where(postgres.SourceModel{URL: source.URL}).FirstOrCreate(&source).Error; err != nil {
+				return fmt.Errorf("failed on source: %w", err)
+			}
 
 			word := postgres.WordModel{Lang: "En", Title: item.Word}
-			tx.Where(postgres.WordModel{Title: item.Word, Lang: "En"}).FirstOrCreate(&word)
+			if err := tx.Where(postgres.WordModel{Title: item.Word, Lang: "En"}).FirstOrCreate(&word).Error; err != nil {
+				return fmt.Errorf("failed on word '%s': %w", item.Word, err)
+			}
 
 			courseWord := postgres.CourseWordModel{
 				CourseID:          course.ID,
@@ -165,7 +169,9 @@ func (s *Seeder) populateCourseFromJSON(filePath string, course *postgres.Course
 				Lesson:            fmt.Sprintf("Unit %d", (i+11)/12),
 				Index:             uint(i + 1),
 			}
-			tx.Create(&courseWord)
+			if err := tx.Create(&courseWord).Error; err != nil {
+				return fmt.Errorf("failed on courseWord for word '%s': %w", item.Word, err)
+			}
 
 			wordSource := postgres.WordSourceModel{
 				WordID:       word.ID,
@@ -173,14 +179,20 @@ func (s *Seeder) populateCourseFromJSON(filePath string, course *postgres.Course
 				DefPrimary:   item.Details.DefPrimary,
 				DefSecondary: item.Details.DefSecondary,
 			}
-			tx.Create(&wordSource)
+			if err := tx.Create(&wordSource).Error; err != nil {
+				return fmt.Errorf("failed on wordSource for word '%s': %w", item.Word, err)
+			}
 
 			for _, posData := range item.Details.PartOfSpeeches {
 				ps := postgres.PartOfSpeechModel{WordSourceID: wordSource.ID, Title: posData.Title}
-				tx.Create(&ps)
+				if err := tx.Create(&ps).Error; err != nil {
+					return fmt.Errorf("failed on PartOfSpeech for word '%s': %w", item.Word, err)
+				}
 				for _, meaningData := range posData.Meanings {
 					m := postgres.MeaningModel{PartOfSpeechID: ps.ID, Lang: meaningData.Lang, Title: meaningData.Title}
-					tx.Create(&m)
+					if err := tx.Create(&m).Error; err != nil {
+						return fmt.Errorf("failed on Meaning for word '%s': %w", item.Word, err)
+					}
 				}
 			}
 
@@ -192,14 +204,20 @@ func (s *Seeder) populateCourseFromJSON(filePath string, course *postgres.Course
 						URL:            pronData.URL,
 						TelgramVoiceID: item.Details.TelgramVoiceDocID,
 					}
-					tx.Create(&p)
+					if err := tx.Create(&p).Error; err != nil {
+						return fmt.Errorf("failed on Pronunciation for word '%s': %w", item.Word, err)
+					}
 				}
 			}
 
 			for _, phoneticData := range item.Details.Phonetics {
 				ph := postgres.PhoneticModel{WordSourceID: wordSource.ID, Lang: phoneticData.Lang, Title: phoneticData.Title}
-				tx.Create(&ph)
+				if err := tx.Create(&ph).Error; err != nil {
+					return fmt.Errorf("failed on Phonetic for word '%s': %w", item.Word, err)
+				}
 			}
+
+			// --- End of Corrected Block ---
 		}
 		return nil
 	})

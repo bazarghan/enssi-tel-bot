@@ -17,7 +17,8 @@ func (WordModel) TableName() string { return "words" }
 
 type SourceModel struct {
 	gorm.Model
-	Words []WordSourceModel
+
+	Words []WordSourceModel `gorm:"foreignKey:SourceID"`
 
 	Title       string `gorm:"not null"`
 	Description string
