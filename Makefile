@@ -65,3 +65,25 @@ docker-down:
 	@echo "Stopping services with docker-compose..."
 	@docker-compose down
 
+
+# --- Database Migration Targets ---
+
+## Creates new up/down migration files. Usage: make migrate-create name=add_new_feature
+migrate-create:
+	@if [ -z "$(name)" ]; then \
+		echo "Usage: make migrate-create name=<migration_name>"; \
+		exit 1; \
+	fi
+	@echo "Creating migration files for: $(name)..."
+	@go run ./cmd/migrate create $(name)
+
+## Applies all available 'up' migrations.
+migrate-up:
+	@echo "Running 'up' migrations..."
+	@go run ./cmd/migrate up
+
+## Reverts the last 'down' migration.
+migrate-down:
+	@echo "Running 'down' migration..."
+	@go run ./cmd/migrate down
+
