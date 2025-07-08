@@ -43,6 +43,7 @@ COPY --from=builder /app/enssi-worker .
 COPY --from=builder /app/migrate .
 COPY --from=builder /app/seeder .
 COPY --from=builder /app/assets ./assets
+COPY migrations ./migrations
 
 # Copy the entrypoint script into the container.
 COPY entrypoint.sh .
