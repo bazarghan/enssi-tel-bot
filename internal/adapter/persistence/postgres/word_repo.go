@@ -20,7 +20,7 @@ func NewWordRepository(db *gorm.DB) *WordRepository {
 
 // FindByCourseIndex finds a single word for a course at a specific index.
 func (r *WordRepository) FindByCourseIndex(ctx context.Context, courseID uint, index uint) (word.Word, error) {
-	var cw courseWordModel
+	var cw CourseWordModel
 	err := r.db.WithContext(ctx).Where("course_id = ? AND index = ?", courseID, index).First(&cw).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -29,7 +29,7 @@ func (r *WordRepository) FindByCourseIndex(ctx context.Context, courseID uint, i
 		return word.Word{}, err
 	}
 
-	var wm wordModel
+	var wm WordModel
 	if err := r.db.WithContext(ctx).First(&wm, cw.WordID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return word.Word{}, word.ErrNotFound
@@ -37,7 +37,7 @@ func (r *WordRepository) FindByCourseIndex(ctx context.Context, courseID uint, i
 		return word.Word{}, err
 	}
 
-	var wsm wordSourceModel
+	var wsm WordSourceModel
 	err = r.db.WithContext(ctx).
 		Where("word_id = ?", wm.ID).
 		Preload("Phonetics").
@@ -57,7 +57,7 @@ func (r *WordRepository) FindByCourseIndex(ctx context.Context, courseID uint, i
 
 // FindStudiedWord retrieves a user's SRS data for a specific word.
 func (r *WordRepository) FindStudiedWord(ctx context.Context, userID, wordID uint) (word.StudiedWord, error) {
-	var model studiedWordModel
+	var model StudiedWordModel
 	err := r.db.WithContext(ctx).Where("user_id = ? AND word_id = ?", userID, wordID).First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -79,7 +79,7 @@ func (r *WordRepository) SaveStudiedWord(ctx context.Context, sw word.StudiedWor
 // FindWordIDsByCourseBlock retrieves a slice of word IDs for a specific block in a course.
 func (r *WordRepository) FindWordIDsByCourseBlock(ctx context.Context, courseID uint, limit uint, offset uint) ([]uint, error) {
 	var wordIDs []uint
-	err := r.db.WithContext(ctx).Model(&courseWordModel{}).
+	err := r.db.WithContext(ctx).Model(&CourseWordModel{}).
 		Where("course_id = ?", courseID).
 		Order("index ASC").
 		Limit(int(limit)).
@@ -90,7 +90,7 @@ func (r *WordRepository) FindWordIDsByCourseBlock(ctx context.Context, courseID 
 
 // GetWordsDueForReview retrieves all WordStudied records for a user that are due for review by 'now'.
 func (r *WordRepository) GetWordsDueForReview(ctx context.Context, userID uint, now time.Time) ([]word.StudiedWord, error) {
-	var models []studiedWordModel
+	var models []StudiedWordModel
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND next_review_at <= ?", userID, now).
 		Find(&models).Error
@@ -108,7 +108,7 @@ func (r *WordRepository) GetWordsDueForReview(ctx context.Context, userID uint, 
 }
 
 func (r *WordRepository) FindDisplayableWordByIndex(ctx context.Context, courseID uint, index uint) (word.DisplayableWord, error) {
-	var cw courseWordModel
+	var cw CourseWordModel
 	err := r.db.WithContext(ctx).Where("course_id = ? AND index = ?", courseID, index).First(&cw).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -131,7 +131,7 @@ func (r *WordRepository) FindDisplayableWordByIndex(ctx context.Context, courseI
 
 	for _, pron := range domainWord.Pronunciations {
 		// This is slightly inefficient but works. A single complex query would be better in a high-load system.
-		var pronModel pronunciationModel
+		var pronModel PronunciationModel
 		r.db.WithContext(ctx).First(&pronModel, pron.ID)
 		displayable.Pronunciations = append(displayable.Pronunciations, word.DisplayablePronunciation{
 			Pronunciation:   pron,
@@ -153,16 +153,16 @@ func (r *WordRepository) CacheImageFileIDs(ctx context.Context, courseWordID uin
 	if len(updates) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&courseWordModel{}).Where("id = ?", courseWordID).Updates(updates).Error
+	return r.db.WithContext(ctx).Model(&CourseWordModel{}).Where("id = ?", courseWordID).Updates(updates).Error
 }
 
 func (r *WordRepository) CacheVoiceFileID(ctx context.Context, pronunciationID uint, voiceFileID string) error {
-	return r.db.WithContext(ctx).Model(&pronunciationModel{}).Where("id = ?", pronunciationID).Update("telgram_voice_id", voiceFileID).Error
+	return r.db.WithContext(ctx).Model(&PronunciationModel{}).Where("id = ?", pronunciationID).Update("telgram_voice_id", voiceFileID).Error
 }
 
 func (r *WordRepository) CountMasteredWords(ctx context.Context, userID uint) (int, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&studiedWordModel{}).
+	err := r.db.WithContext(ctx).Model(&StudiedWordModel{}).
 		Where("user_id = ? AND is_mastered = ?", userID, true).
 		Count(&count).Error
 	return int(count), err

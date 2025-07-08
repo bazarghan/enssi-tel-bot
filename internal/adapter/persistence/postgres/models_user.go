@@ -6,10 +6,10 @@ import (
 )
 
 // userModel is the GORM-specific struct for the 'users' table. It is unexported.
-type userModel struct {
+type UserModel struct {
 	gorm.Model
 
-	Profile profileModel `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Profile ProfileModel `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	TelegramID                   int64 `gorm:"not null;uniqueIndex"`
 	LastActive                   time.Time
@@ -19,12 +19,12 @@ type userModel struct {
 	IsAdmin                      bool      `gorm:"default:false"`
 }
 
-func (userModel) TableName() string {
+func (UserModel) TableName() string {
 	return "users"
 }
 
 // profileModel is the GORM-specific struct for the 'profiles' table. It is unexported.
-type profileModel struct {
+type ProfileModel struct {
 	gorm.Model
 	UserID    uint
 	Username  string
@@ -33,6 +33,6 @@ type profileModel struct {
 	Score     uint
 }
 
-func (profileModel) TableName() string {
+func (ProfileModel) TableName() string {
 	return "profiles"
 }

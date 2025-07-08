@@ -7,55 +7,69 @@ import (
 
 // This file aggregates all models related to the Word domain.
 
-type wordModel struct {
+type WordModel struct {
 	gorm.Model
 	Lang  string `gorm:"not null"`
 	Title string `gorm:"not null"`
 }
 
-func (wordModel) TableName() string { return "words" }
+func (WordModel) TableName() string { return "words" }
 
-type wordSourceModel struct {
+type SourceModel struct {
 	gorm.Model
-	WordID          uint
-	DefPrimary      string
-	DefSecondary    string
-	PartsOfSpeeches []partOfSpeechModel  `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Pronunciations  []pronunciationModel `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Phonetics       []phoneticModel      `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Images          []imageModel         `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Words []WordSourceModel
+
+	Title       string `gorm:"not null"`
+	Description string
+	URL         string `gorm:"not null"`
 }
 
-func (wordSourceModel) TableName() string { return "word_sources" }
+func (SourceModel) TableName() string { return "sources" }
 
-type partOfSpeechModel struct {
+type WordSourceModel struct {
+	gorm.Model
+	WordID   uint
+	SourceID uint
+
+	PartsOfSpeeches []PartOfSpeechModel  `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Pronunciations  []PronunciationModel `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Phonetics       []PhoneticModel      `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Images          []ImageModel         `gorm:"foreignKey:WordSourceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+
+	DefPrimary   string
+	DefSecondary string
+}
+
+func (WordSourceModel) TableName() string { return "word_sources" }
+
+type PartOfSpeechModel struct {
 	gorm.Model
 	WordSourceID uint
 	Title        string         `gorm:"not null"`
-	Meanings     []meaningModel `gorm:"foreignKey:PartOfSpeechID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Meanings     []MeaningModel `gorm:"foreignKey:PartOfSpeechID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-func (partOfSpeechModel) TableName() string { return "part_of_speeches" }
+func (PartOfSpeechModel) TableName() string { return "part_of_speeches" }
 
-type meaningModel struct {
+type MeaningModel struct {
 	gorm.Model
 	PartOfSpeechID uint
 	Lang           string `gorm:"not null"`
 	Title          string `gorm:"not null"`
 }
 
-func (meaningModel) TableName() string { return "meanings" }
+func (MeaningModel) TableName() string { return "meanings" }
 
-type phoneticModel struct {
+type PhoneticModel struct {
 	gorm.Model
 	WordSourceID uint
 	Lang         string `gorm:"not null"`
 	Title        string `gorm:"not null"`
 }
 
-func (phoneticModel) TableName() string { return "phonetics" }
+func (PhoneticModel) TableName() string { return "phonetics" }
 
-type pronunciationModel struct {
+type PronunciationModel struct {
 	gorm.Model
 	WordSourceID   uint
 	Region         string `gorm:"not null"`
@@ -63,17 +77,17 @@ type pronunciationModel struct {
 	TelgramVoiceID string
 }
 
-func (pronunciationModel) TableName() string { return "pronunciations" }
+func (PronunciationModel) TableName() string { return "pronunciations" }
 
-type imageModel struct {
+type ImageModel struct {
 	gorm.Model
 	WordSourceID uint
 	URL          string `gorm:"not null"`
 }
 
-func (imageModel) TableName() string { return "images" }
+func (ImageModel) TableName() string { return "images" }
 
-type studiedWordModel struct {
+type StudiedWordModel struct {
 	gorm.Model
 	UserID             uint `gorm:"index"`
 	WordID             uint `gorm:"index"`
@@ -83,4 +97,4 @@ type studiedWordModel struct {
 	IsMastered         bool      `gorm:"default:false;not null"`
 }
 
-func (studiedWordModel) TableName() string { return "word_studieds" }
+func (StudiedWordModel) TableName() string { return "word_studieds" }

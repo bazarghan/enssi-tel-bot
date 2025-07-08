@@ -5,50 +5,50 @@ import (
 	"gorm.io/gorm"
 )
 
-type quizModel struct {
+type QuizModel struct {
 	gorm.Model
 	CourseID        uint
-	Questions       []questionModel `gorm:"foreignKey:QuizID"`
+	Questions       []QuestionModel `gorm:"foreignKey:QuizID"`
 	QuestionCount   uint
 	Type            quiz.QuizType `gorm:"type:varchar(50);default:'COURSE_BLOCK'"`
 	TriggerProgress uint
 }
 
-func (quizModel) TableName() string { return "quizzes" }
+func (QuizModel) TableName() string { return "quizzes" }
 
-type questionModel struct {
+type QuestionModel struct {
 	gorm.Model
 	QuizID  uint
 	Text    string
-	Options []optionModel `gorm:"foreignKey:QuizQuestionID"`
+	Options []OptionModel `gorm:"foreignKey:QuizQuestionID"`
 	WordID  uint          `gorm:"index"`
 }
 
-func (questionModel) TableName() string { return "quiz_questions" }
+func (QuestionModel) TableName() string { return "quiz_questions" }
 
-type optionModel struct {
+type OptionModel struct {
 	gorm.Model
 	QuizQuestionID uint   `gorm:"not null"`
 	Text           string `gorm:"not null"`
 	IsCorrect      bool   `gorm:"not null;default:false"`
 }
 
-func (optionModel) TableName() string { return "quiz_question_options" }
+func (OptionModel) TableName() string { return "quiz_question_options" }
 
-type attemptModel struct {
+type AttemptModel struct {
 	gorm.Model
 	QuizID                   uint          `gorm:"not null"`
 	UserID                   uint          `gorm:"not null"`
 	Score                    int           `gorm:"default:0"`
 	IsCompleted              bool          `gorm:"default:false"`
-	Answers                  []answerModel `gorm:"foreignKey:QuizAttemptID"`
+	Answers                  []AnswerModel `gorm:"foreignKey:QuizAttemptID"`
 	CurrentQuestionNum       int           `gorm:"default:0"`
 	CurrentQuestionMessageID int
 }
 
-func (attemptModel) TableName() string { return "quiz_attempts" }
+func (AttemptModel) TableName() string { return "quiz_attempts" }
 
-type answerModel struct {
+type AnswerModel struct {
 	gorm.Model
 	QuizAttemptID        uint
 	QuizQuestionID       uint
@@ -56,4 +56,4 @@ type answerModel struct {
 	IsCorrect            bool
 }
 
-func (answerModel) TableName() string { return "quiz_answers" }
+func (AnswerModel) TableName() string { return "quiz_answers" }

@@ -102,7 +102,7 @@ func (GormBitSet) GormDataType() string {
 }
 
 // achievementModel is the GORM struct for the 'achievements' table.
-type achievementModel struct {
+type AchievementModel struct {
 	gorm.Model
 	Title           string `gorm:"not null;unique"`
 	Description     string
@@ -114,16 +114,16 @@ type achievementModel struct {
 	CellHeight      uint
 }
 
-func (achievementModel) TableName() string { return "achievements" }
+func (AchievementModel) TableName() string { return "achievements" }
 
 // userAchievementModel is the GORM struct for the join table.
-type userAchievementModel struct {
+type UserAchievementModel struct {
 	gorm.Model
 	ProfileID     uint `gorm:"column:profile_id"`
 	AchievementID uint
 	State         GormBitSet       // Custom type for bitset storage
-	Achievement   achievementModel `gorm:"foreignKey:AchievementID"`
+	Achievement   AchievementModel `gorm:"foreignKey:AchievementID"`
 	CompletedAt   *time.Time       `gorm:"null"`
 }
 
-func (userAchievementModel) TableName() string { return "profile_achievements" }
+func (UserAchievementModel) TableName() string { return "profile_achievements" }

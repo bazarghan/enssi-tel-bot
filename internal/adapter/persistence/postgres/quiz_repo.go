@@ -35,7 +35,7 @@ func (r *QuizRepository) CreateQuiz(ctx context.Context, quizType quiz.QuizType,
 		return 0, quiz.ErrNoWordsForQuiz
 	}
 
-	newQuiz := quizModel{
+	newQuiz := QuizModel{
 		Type:            quizType,
 		CourseID:        courseID,
 		TriggerProgress: triggerProgress,
@@ -84,7 +84,7 @@ func (r *QuizRepository) CreateQuiz(ctx context.Context, quizType quiz.QuizType,
 }
 
 func (r *QuizRepository) FindActiveCourseBlockAttempt(ctx context.Context, userID, courseID uint, triggerProgress uint) (quiz.Attempt, error) {
-	var am attemptModel
+	var am AttemptModel
 	err := r.db.WithContext(ctx).
 		Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
 		Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ? AND quizzes.type = ?",
@@ -103,7 +103,7 @@ func (r *QuizRepository) FindActiveCourseBlockAttempt(ctx context.Context, userI
 }
 
 func (r *QuizRepository) GetAttempt(ctx context.Context, attemptID uint) (quiz.Attempt, error) {
-	var am attemptModel
+	var am AttemptModel
 	if err := r.db.WithContext(ctx).First(&am, attemptID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return quiz.Attempt{}, quiz.ErrAttemptNotFound
@@ -112,13 +112,13 @@ func (r *QuizRepository) GetAttempt(ctx context.Context, attemptID uint) (quiz.A
 	}
 
 	// Fetch the answers for this attempt
-	var userAnswers []answerModel
+	var userAnswers []AnswerModel
 	if err := r.db.WithContext(ctx).Where("quiz_attempt_id = ?", attemptID).Find(&userAnswers).Error; err != nil {
 		// Non-fatal, we can still show the attempt without the answers
 		r.logger.Warn("Could not fetch user answers for attempt", "attemptID", attemptID, "error", err)
 	}
 
-	var qm quizModel
+	var qm QuizModel
 	err := r.db.WithContext(ctx).
 		Preload("Questions.Options").
 		First(&qm, am.QuizID).Error
@@ -133,7 +133,7 @@ func (r *QuizRepository) GetAttempt(ctx context.Context, attemptID uint) (quiz.A
 }
 
 func (r *QuizRepository) CreateAttempt(ctx context.Context, userID, quizID uint) (quiz.Attempt, error) {
-	newAttempt := attemptModel{
+	newAttempt := AttemptModel{
 		UserID: userID,
 		QuizID: quizID,
 	}
@@ -146,7 +146,7 @@ func (r *QuizRepository) CreateAttempt(ctx context.Context, userID, quizID uint)
 func (r *QuizRepository) SaveAnswer(ctx context.Context, attemptID, questionID, optionID uint, isCorrect bool) error {
 	tx := r.db.WithContext(ctx).Begin()
 	var existingAnswerCount int64
-	if err := tx.Model(&answerModel{}).
+	if err := tx.Model(&AnswerModel{}).
 		Where("quiz_attempt_id = ? AND quiz_question_id = ?", attemptID, questionID).
 		Count(&existingAnswerCount).Error; err != nil {
 		tx.Rollback()
@@ -158,7 +158,7 @@ func (r *QuizRepository) SaveAnswer(ctx context.Context, attemptID, questionID, 
 		return quiz.ErrQuestionAlreadyAnswered
 	}
 
-	answer := answerModel{
+	answer := AnswerModel{
 		QuizAttemptID:        attemptID,
 		QuizQuestionID:       questionID,
 		QuizQuestionOptionID: optionID,
@@ -173,7 +173,7 @@ func (r *QuizRepository) SaveAnswer(ctx context.Context, attemptID, questionID, 
 }
 
 func (r *QuizRepository) IncrementQuestionIndex(ctx context.Context, attemptID uint) error {
-	return r.db.WithContext(ctx).Model(&attemptModel{}).Where("id = ?", attemptID).
+	return r.db.WithContext(ctx).Model(&AttemptModel{}).Where("id = ?", attemptID).
 		Update("current_question_num", gorm.Expr("current_question_num + 1")).Error
 }
 
@@ -182,7 +182,7 @@ func (r *QuizRepository) MarkAttemptCompleted(ctx context.Context, attemptID uin
 	tx := r.db.WithContext(ctx)
 
 	// Calculate score
-	if err := tx.Model(&answerModel{}).
+	if err := tx.Model(&AnswerModel{}).
 		Where("quiz_attempt_id = ? AND is_correct = ?", attemptID, true).
 		Select("COUNT(*)").
 		Row().Scan(&score); err != nil {
@@ -191,7 +191,7 @@ func (r *QuizRepository) MarkAttemptCompleted(ctx context.Context, attemptID uin
 
 	// Update attempt
 	updates := map[string]interface{}{"is_completed": true, "score": score}
-	if err := tx.Model(&attemptModel{}).Where("id = ?", attemptID).Updates(updates).Error; err != nil {
+	if err := tx.Model(&AttemptModel{}).Where("id = ?", attemptID).Updates(updates).Error; err != nil {
 		return 0, err
 	}
 
@@ -199,7 +199,7 @@ func (r *QuizRepository) MarkAttemptCompleted(ctx context.Context, attemptID uin
 }
 
 func (r *QuizRepository) UpdateMessageID(ctx context.Context, attemptID uint, messageID int) error {
-	result := r.db.WithContext(ctx).Model(&attemptModel{}).Where("id = ?", attemptID).Update("current_question_message_id", messageID)
+	result := r.db.WithContext(ctx).Model(&AttemptModel{}).Where("id = ?", attemptID).Update("current_question_message_id", messageID)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -210,12 +210,12 @@ func (r *QuizRepository) UpdateMessageID(ctx context.Context, attemptID uint, me
 }
 
 func (r *QuizRepository) createQuestionInternal(tx *gorm.DB, quizID, wordID, courseID uint, distractorPoolIDs []uint) error {
-	var questionWord wordModel
+	var questionWord WordModel
 	if err := tx.First(&questionWord, wordID).Error; err != nil {
 		return fmt.Errorf("failed to fetch word for question (WordID: %d): %w", wordID, err)
 	}
 
-	var questionWS wordSourceModel
+	var questionWS WordSourceModel
 	if err := tx.Where("word_id = ?", questionWord.ID).Preload("PartsOfSpeeches.Meanings").First(&questionWS).Error; err != nil {
 		return fmt.Errorf("failed to fetch word source for question (WordID: %d): %w", questionWord.ID, err)
 	}
@@ -233,7 +233,7 @@ func (r *QuizRepository) createQuestionInternal(tx *gorm.DB, quizID, wordID, cou
 	}
 	correctMeaningText := allMeanings[rand.Intn(len(allMeanings))]
 
-	newQuestion := questionModel{
+	newQuestion := QuestionModel{
 		QuizID: quizID,
 		Text:   questionWord.Title,
 		WordID: wordID,
@@ -242,7 +242,7 @@ func (r *QuizRepository) createQuestionInternal(tx *gorm.DB, quizID, wordID, cou
 		return err
 	}
 
-	correctOption := optionModel{QuizQuestionID: newQuestion.ID, Text: correctMeaningText, IsCorrect: true}
+	correctOption := OptionModel{QuizQuestionID: newQuestion.ID, Text: correctMeaningText, IsCorrect: true}
 	if err := tx.Create(&correctOption).Error; err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (r *QuizRepository) createQuestionInternal(tx *gorm.DB, quizID, wordID, cou
 	}
 
 	for _, distractorText := range distractors {
-		distractorOption := optionModel{QuizQuestionID: newQuestion.ID, Text: distractorText, IsCorrect: false}
+		distractorOption := OptionModel{QuizQuestionID: newQuestion.ID, Text: distractorText, IsCorrect: false}
 		tx.Create(&distractorOption)
 	}
 	return nil
@@ -269,7 +269,7 @@ func (r *QuizRepository) getDistractorMeanings(tx *gorm.DB, correctText string, 
 	// Step 1: Get from course block pool
 	if courseID != 0 && len(poolIDs) > 0 {
 		var meanings []string
-		tx.Model(&meaningModel{}).
+		tx.Model(&MeaningModel{}).
 			Joins("JOIN part_of_speeches ON part_of_speeches.id = meanings.part_of_speech_id").
 			Joins("JOIN word_sources ON word_sources.id = part_of_speeches.word_source_id").
 			Joins("JOIN words ON words.id = word_sources.word_id").
@@ -292,7 +292,7 @@ func (r *QuizRepository) getDistractorMeanings(tx *gorm.DB, correctText string, 
 	// Step 2: Fill remaining from random words
 	if len(finalDistractors) < numDistractorsNeeded {
 		var randomMeanings []string
-		tx.Model(&meaningModel{}).
+		tx.Model(&MeaningModel{}).
 			Where("title NOT IN ?", getKeys(seenDistractors)).
 			Order(gorm.Expr("RANDOM()")).
 			Limit(numDistractorsNeeded-len(finalDistractors)).
@@ -314,7 +314,7 @@ func getKeys(m map[string]bool) []string {
 func (r *QuizRepository) GetHighestScoreForCourseBlock(ctx context.Context, userID, courseID, triggerProgress uint) (int, error) {
 	var maxScore sql.NullInt64 // Use sql.NullInt64 to handle cases where no rows are found (score is NULL)
 
-	err := r.db.WithContext(ctx).Model(&attemptModel{}).
+	err := r.db.WithContext(ctx).Model(&AttemptModel{}).
 		Select("MAX(score)").
 		Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
 		Where("quiz_attempts.user_id = ? AND quizzes.course_id = ? AND quizzes.trigger_progress = ? AND quiz_attempts.is_completed = ?",
@@ -338,7 +338,7 @@ func (r *QuizRepository) GetHighestScoreForCourseBlock(ctx context.Context, user
 }
 
 func (r *QuizRepository) FindPendingReviewAttempt(ctx context.Context, userID uint) (quiz.Attempt, error) {
-	var am attemptModel
+	var am AttemptModel
 	err := r.db.WithContext(ctx).
 		Joins("JOIN quizzes ON quizzes.id = quiz_attempts.quiz_id").
 		Where("quiz_attempts.user_id = ? AND quizzes.type = ? AND quiz_attempts.is_completed = ?",
@@ -358,6 +358,6 @@ func (r *QuizRepository) FindPendingReviewAttempt(ctx context.Context, userID ui
 
 func (r *QuizRepository) DeleteAttempt(ctx context.Context, attemptID uint) error {
 
-	result := r.db.WithContext(ctx).Delete(&attemptModel{}, attemptID)
+	result := r.db.WithContext(ctx).Delete(&AttemptModel{}, attemptID)
 	return result.Error
 }
