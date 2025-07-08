@@ -4,7 +4,7 @@ import (
 	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
 )
 
-func toDomainAttempt(m attemptModel, qm quizModel, answers []answerModel) quiz.Attempt {
+func toDomainAttempt(m AttemptModel, qm QuizModel, answers []AnswerModel) quiz.Attempt {
 	questions := make([]quiz.Question, len(qm.Questions))
 	for i, q := range qm.Questions {
 		questions[i] = toDomainQuestion(q)
@@ -32,7 +32,7 @@ func toDomainAttempt(m attemptModel, qm quizModel, answers []answerModel) quiz.A
 	}
 }
 
-func toDomainQuestion(m questionModel) quiz.Question {
+func toDomainQuestion(m QuestionModel) quiz.Question {
 	options := make([]quiz.Option, len(m.Options))
 	for i, o := range m.Options {
 		options[i] = toDomainOption(o)
@@ -45,7 +45,7 @@ func toDomainQuestion(m questionModel) quiz.Question {
 	}
 }
 
-func toDomainOption(m optionModel) quiz.Option {
+func toDomainOption(m OptionModel) quiz.Option {
 	return quiz.Option{
 		ID:        m.ID,
 		Text:      m.Text,

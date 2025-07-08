@@ -3,7 +3,7 @@ package postgres
 import "github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
 
 // toDomainAchievement maps the gorm model to the domain entity.
-func toDomainAchievement(m achievementModel) achievement.Achievement {
+func toDomainAchievement(m AchievementModel) achievement.Achievement {
 	return achievement.Achievement{
 		ID:              m.ID,
 		Title:           m.Title,
@@ -18,7 +18,7 @@ func toDomainAchievement(m achievementModel) achievement.Achievement {
 }
 
 // toDomainUserAchievement maps the gorm model to the domain entity.
-func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement {
+func toDomainUserAchievement(m UserAchievementModel) achievement.UserAchievement {
 	return achievement.UserAchievement{
 		ID:            m.ID,
 		AchievementID: m.AchievementID,
@@ -29,8 +29,8 @@ func toDomainUserAchievement(m userAchievementModel) achievement.UserAchievement
 }
 
 // toPersistenceUserAchievement maps the domain entity to the gorm model for saving.
-func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint, totalItems uint) userAchievementModel {
-	model := userAchievementModel{
+func toPersistenceUserAchievement(d achievement.UserAchievement, profileID uint, totalItems uint) UserAchievementModel {
+	model := UserAchievementModel{
 
 		ProfileID:     profileID, // Use the found profileID
 		AchievementID: d.AchievementID,

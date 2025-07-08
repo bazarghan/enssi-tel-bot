@@ -14,9 +14,9 @@ An intelligent Telegram bot designed to make language learning effective and eng
 - [About The Project](#about-the-project)
 - [✨ Key Features](#-key-features)
 - [🛠️ Tech Stack & Architecture](#️-tech-stack--architecture)
-- [🚀 Getting Started](#-getting-started)
+- [🚀 Local Development Setup](#-local-development-setup)
   - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
+  - [Installation & Setup](#installation--setup)
 - [🔧 Development & Tooling](#-development--tooling)
   - [Makefile Commands](#makefile-commands)
 - [📂 Project Structure](#-project-structure)
@@ -42,6 +42,8 @@ The project is architected for scalability and maintainability, featuring a clea
 -   🏆 **Achievement System**: Stay motivated by unlocking achievements and tracking your progress with unique, progressively-revealed visuals.
 -   🎧 **Rich Media Content**: Learn with images and audio pronunciations for a multi-sensory experience.
 -   ⚙️ **Admin Panel**: Built-in tools for administrators to view bot statistics and broadcast messages to all users.
+-   ⛓️ **Version-Controlled Migrations**: Database schema changes are managed through versioned SQL files, ensuring consistency across all environments.
+-   🌱 **Configurable Data Seeding**: Easily populate the database with initial data (courses, words) using a simple make command.
 -   🔒 **Concurrency Safe**: Handles simultaneous user interactions reliably, preventing data races and ensuring a smooth user experience.
 -   🐳 **Containerized**: Fully containerized with Docker and Docker Compose for easy setup and deployment.
 
@@ -54,6 +56,7 @@ The project is architected for scalability and maintainability, featuring a clea
 -   **Backend**: [Go](https://golang.org/)
 -   **Database**: [PostgreSQL](https://www.postgresql.org/)
 -   **ORM**: [GORM](https://gorm.io/)
+-   **Database Migrations**: [golang-migrate/migrate](https://github.com/golang-migrate/migrate)
 -   **Telegram API**: [Telebot (v4)](https://github.com/tucnak/telebot)
 -   **Configuration**: [Viper](https://github.com/spf13/viper)
 -   **Logging**: [Zap](https://github.com/uber-go/zap)
@@ -70,7 +73,7 @@ This project follows the principles of **Clean Architecture**, ensuring a clear 
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Local Development Setup
 
 Follow these instructions to get a local copy up and running for development and testing purposes.
 
@@ -79,8 +82,9 @@ Follow these instructions to get a local copy up and running for development and
 -   [Go](https://golang.org/doc/install/) (version 1.21 or higher)
 -   [Docker](https://docs.docker.com/get-docker/)
 -   [Docker Compose](https://docs.docker.com/compose/install/)
+-   [make](https://www.gnu.org/software/make/)
 
-### Installation
+### Installation & Setup
 
 1.  **Clone the repository:**
     ```sh
@@ -89,13 +93,13 @@ Follow these instructions to get a local copy up and running for development and
     ```
 
 2.  **Create an environment file:**
-    Copy the example `.env` file and fill in your specific credentials.
+    Copy the example `.env` file. This file is ignored by Git to keep your secrets safe.
     ```sh
     cp .env.example .env
     ```
 
 3.  **Configure your `.env` file:**
-    Open the `.env` file and add your credentials. This file is ignored by Git to keep your secrets safe.
+    Open the `.env` file and add your credentials.
     ```env
     # Your Telegram bot token from BotFather
     ENSSI_TELEGRAM_TOKEN=your_telegram_bot_token
@@ -105,18 +109,36 @@ Follow these instructions to get a local copy up and running for development and
     ENSSI_DATABASE_USER=postgres
     ENSSI_DATABASE_PASSWORD=your_super_secret_password
     ENSSI_DATABASE_NAME=enssi_bot_db
-    ENSSI_DATABASE_HOST=db
+    ENSSI_DATABASE_HOST=localhost
     ENSSI_DATABASE_PORT=5432
     ```
-    > **Note**: The `docker-compose.yml` also defines `POSTGRES_PASSWORD`. Ensure the password in your `.env` file matches the one in `docker-compose.yml`.
+    > **Important**: For local development, `ENSSI_DATABASE_HOST` should be `localhost`. The `db` hostname is for communication between containers.
 
-4.  **Build and run the services using Docker Compose:**
-    This command will build the Docker images for the bot and worker, and start them along with the PostgreSQL database.
+4.  **Start the Database Service:**
+    Launch the PostgreSQL database using Docker Compose. This runs the database in the background.
     ```sh
-    docker-compose up -d --build
+    docker-compose up -d db
     ```
 
-5.  **Start interacting with your bot!**
+5.  **Run Database Migrations:**
+    Apply the latest database schema. This creates all the necessary tables. You only need to run this once initially and whenever there are new migration files.
+    ```sh
+    make migrate-up
+    ```
+
+6.  **Seed the Database:**
+    Populate the database with the initial set of courses, words, and achievements from the configuration files.
+    ```sh
+    make seed
+    ```
+
+7.  **Run the Bot Application:**
+    You can now start the bot locally. It will connect to the Dockerized database you set up.
+    ```sh
+    make run-bot
+    ```
+
+8.  **Start interacting with your bot!**
     Find your bot on Telegram and send the `/start` command.
 
 ---
@@ -128,14 +150,26 @@ The `Makefile` provides several commands to streamline the development process.
 ### Makefile Commands
 
 -   `make help`: Displays a list of all available commands.
+
+**Local Development:**
 -   `make run-bot`: Runs the bot application locally without Docker.
 -   `make run-worker`: Runs the background worker locally without Docker.
 -   `make build`: Compiles and builds the binaries for both the bot and worker.
 -   `make test`: Runs all Go tests in the project.
 -   `make wire`: Generates the dependency injection files using Google Wire.
--   `make docker-up`: Starts all services using `docker-compose`.
--   `make docker-down`: Stops and removes all running containers.
 -   `make clean`: Removes build artifacts and cleans the test cache.
+
+**Database Management:**
+-   `make db-reset`: ⚠️ **Destructive!** Resets the dev database by dropping all tables, re-migrating, and re-seeding.
+-   `make seed`: Populates the database with initial data from config files.
+-   `make migrate-up`: Applies all available 'up' database migrations.
+-   `make migrate-down`: Reverts the last 'down' database migration.
+-   `make migrate-create name=<name>`: Creates new up/down migration files.
+
+**Docker Management:**
+-   `make docker-up`: Starts all services (bot, worker, db) using `docker-compose`.
+-   `make docker-down`: Stops and removes all running containers.
+-   `make docker-build`: Builds the Docker images for the bot and worker.
 
 ---
 
@@ -145,20 +179,21 @@ The project's structure is organized according to Clean Architecture principles:
 
 ```
 .
-├── cmd/                # Main application entrypoints (bot, worker)
-├── configs/            # Configuration files (config.yaml)
+├── cmd/                 # Main application entrypoints (bot, worker, seeder, migrate)
+├── configs/             # Configuration files (config.yaml, seeder.config.yaml)
 ├── internal/
-│   ├── adapter/        # Adapters for external services (PostgreSQL, Telegram)
-│   ├── domain/         # Core business logic and entities
-│   ├── platform/       # Supporting platform code (DI, config loading, DB connection)
-│   └── usecase/        # Application-specific business rules (Commands & Queries)
-├── pkg/                # Reusable packages (e.g., imagekit, tgmarkdown)
-├── assets/             # Static assets like images for achievements
-├── test/               # Integration and end-to-end tests
-├── Dockerfile          # Multi-stage Dockerfile for building the application
-├── docker-compose.yml  # Docker Compose configuration for all services
-└── Makefile            # Helper commands for development
-
+│   ├── adapter/         # Adapters for external services (PostgreSQL, Telegram)
+│   ├── domain/          # Core business logic and entities
+│   ├── platform/        # Supporting platform code (DI, config loading, DB connection)
+│   ├── seeder/          # Logic for database data population
+│   └── usecase/         # Application-specific business rules (Commands & Queries)
+├── migrations/          # Version-controlled SQL migration files
+├── pkg/                 # Reusable packages (e.g., imagekit, tgmarkdown)
+├── assets/              # Static assets like images and course data
+├── test/                # Integration and end-to-end tests
+├── Dockerfile           # Multi-stage Dockerfile for building the application
+├── docker-compose.yml   # Docker Compose configuration for all services
+└── Makefile             # Helper commands for development
 ```
 
 ---
@@ -184,3 +219,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ## 📞 Contact
 
 Project Link: [https://github.com/2000ostd/enssi-tel-bot](https://github.com/2000ostd/enssi-tel-bot)
+

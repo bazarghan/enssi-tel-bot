@@ -21,7 +21,7 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 
 // GetOrCreate finds a user by Telegram ID or creates one.
 func (r *UserRepository) GetOrCreate(ctx context.Context, telegramID int64, username, firstName, lastName string) (user.User, error) {
-	var model userModel
+	var model UserModel
 	err := r.db.WithContext(ctx).Where("telegram_id = ?", telegramID).Preload("Profile").First(&model).Error
 
 	if err != nil {
@@ -37,12 +37,12 @@ func (r *UserRepository) GetOrCreate(ctx context.Context, telegramID int64, user
 }
 
 func (r *UserRepository) createUser(ctx context.Context, telegramID int64, username, firstName, lastName string) (user.User, error) {
-	newUser := userModel{
+	newUser := UserModel{
 		TelegramID: telegramID,
 		LastMenu:   "main",
 		LastActive: time.Now(),
 		LastOnline: time.Now(),
-		Profile: profileModel{
+		Profile: ProfileModel{
 			Username:  username,
 			FirstName: firstName,
 			LastName:  lastName,
@@ -55,7 +55,7 @@ func (r *UserRepository) createUser(ctx context.Context, telegramID int64, usern
 	return toDomainUser(newUser), nil
 }
 
-func (r *UserRepository) updateUser(ctx context.Context, model userModel, username, firstName, lastName string) (user.User, error) {
+func (r *UserRepository) updateUser(ctx context.Context, model UserModel, username, firstName, lastName string) (user.User, error) {
 	model.LastActive = time.Now()
 	model.LastOnline = time.Now()
 
@@ -93,7 +93,7 @@ func (r *UserRepository) updateUser(ctx context.Context, model userModel, userna
 
 // FindByID retrieves a user by their internal database ID.
 func (r *UserRepository) FindByID(ctx context.Context, userID uint) (user.User, error) {
-	var model userModel
+	var model UserModel
 	err := r.db.WithContext(ctx).Where("id = ?", userID).Preload("Profile").First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -106,7 +106,7 @@ func (r *UserRepository) FindByID(ctx context.Context, userID uint) (user.User, 
 
 // UpdateLastMenu updates the user's last known menu state.
 func (r *UserRepository) UpdateLastMenu(ctx context.Context, userID uint, menuState string) error {
-	result := r.db.WithContext(ctx).Model(&userModel{}).Where("id = ?", userID).Update("last_menu", menuState)
+	result := r.db.WithContext(ctx).Model(&UserModel{}).Where("id = ?", userID).Update("last_menu", menuState)
 	if result.Error != nil {
 		return fmt.Errorf("db error updating last_menu: %w", result.Error)
 	}
@@ -119,7 +119,7 @@ func (r *UserRepository) UpdateLastMenu(ctx context.Context, userID uint, menuSt
 // FindAllIDs retrieves all user IDs.
 func (r *UserRepository) FindAllIDs(ctx context.Context) ([]uint, error) {
 	var ids []uint
-	err := r.db.WithContext(ctx).Model(&userModel{}).Pluck("id", &ids).Error
+	err := r.db.WithContext(ctx).Model(&UserModel{}).Pluck("id", &ids).Error
 	if err != nil {
 		return nil, fmt.Errorf("could not pluck user ids: %w", err)
 	}
@@ -128,8 +128,8 @@ func (r *UserRepository) FindAllIDs(ctx context.Context) ([]uint, error) {
 
 // FindTelegramID retrieves a user's Telegram ID.
 func (r *UserRepository) FindTelegramID(ctx context.Context, userID uint) (int64, error) {
-	var model userModel
-	err := r.db.WithContext(ctx).Model(&userModel{}).Where("id = ?", userID).First(&model).Error
+	var model UserModel
+	err := r.db.WithContext(ctx).Model(&UserModel{}).Where("id = ?", userID).First(&model).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, user.ErrNotFound
@@ -140,13 +140,13 @@ func (r *UserRepository) FindTelegramID(ctx context.Context, userID uint) (int64
 }
 
 func (r *UserRepository) UpdateLastReviewSession(ctx context.Context, userID uint) error {
-	return r.db.WithContext(ctx).Model(&userModel{}).
+	return r.db.WithContext(ctx).Model(&UserModel{}).
 		Where("id = ?", userID).
 		Update("last_review_session_completed_at", time.Now()).Error
 }
 
 func (r *UserRepository) CountTotalUsers(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&userModel{}).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&UserModel{}).Count(&count).Error
 	return count, err
 }

@@ -7,7 +7,7 @@ import (
 )
 
 // toDomainUser converts a GORM userModel to a domain User entity.
-func toDomainUser(m userModel) user.User {
+func toDomainUser(m UserModel) user.User {
 	return user.User{
 		ID:                           m.ID,
 		TelegramID:                   m.TelegramID,
@@ -26,8 +26,8 @@ func toDomainUser(m userModel) user.User {
 }
 
 // toPersistenceUserModel converts a domain User entity back to a GORM userModel for saving.
-func toPersistenceUserModel(u user.User) userModel {
-	return userModel{
+func toPersistenceUserModel(u user.User) UserModel {
+	return UserModel{
 		Model:                        gorm.Model{ID: u.ID, CreatedAt: time.Time{}, UpdatedAt: time.Time{}},
 		TelegramID:                   u.TelegramID,
 		IsAdmin:                      u.IsAdmin,
@@ -39,8 +39,8 @@ func toPersistenceUserModel(u user.User) userModel {
 }
 
 // toPersistenceProfileModel converts a domain Profile entity to a GORM profileModel for saving.
-func toPersistenceProfileModel(p user.Profile) profileModel {
-	return profileModel{
+func toPersistenceProfileModel(p user.Profile) ProfileModel {
+	return ProfileModel{
 		Model:     gorm.Model{ID: p.ID, CreatedAt: time.Time{}, UpdatedAt: time.Time{}},
 		UserID:    p.UserID,
 		Username:  p.Username,

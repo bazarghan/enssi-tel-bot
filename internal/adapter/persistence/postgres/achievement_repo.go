@@ -21,7 +21,7 @@ func NewAchievementRepository(db *gorm.DB) *AchievementRepository {
 
 // FindAll retrieves all defined achievements.
 func (r *AchievementRepository) FindAll(ctx context.Context) ([]achievement.Achievement, error) {
-	var models []achievementModel
+	var models []AchievementModel
 	if err := r.db.WithContext(ctx).Order("id asc").Find(&models).Error; err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (r *AchievementRepository) FindAll(ctx context.Context) ([]achievement.Achi
 
 // FindByID retrieves a single achievement definition.
 func (r *AchievementRepository) FindByID(ctx context.Context, achievementID uint) (achievement.Achievement, error) {
-	var model achievementModel
+	var model AchievementModel
 	if err := r.db.WithContext(ctx).First(&model, achievementID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return achievement.Achievement{}, achievement.ErrNotFound
@@ -47,7 +47,7 @@ func (r *AchievementRepository) FindByID(ctx context.Context, achievementID uint
 
 // GetUserAchievement retrieves a user's specific progress on an achievement.
 func (r *AchievementRepository) GetUserAchievement(ctx context.Context, userID, achievementID uint) (achievement.UserAchievement, error) {
-	var model userAchievementModel
+	var model UserAchievementModel
 
 	err := r.db.WithContext(ctx).
 		Joins("JOIN profiles ON profiles.id = profile_achievements.profile_id").
@@ -72,7 +72,7 @@ func (r *AchievementRepository) GetUserAchievement(ctx context.Context, userID, 
 func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achievement.UserAchievement, totalItems uint) error {
 	// 1. Find the profile_id for the given user_id
 	var profileID uint
-	err := r.db.WithContext(ctx).Model(&profileModel{}).Select("id").Where("user_id = ?", ua.UserID).Row().Scan(&profileID)
+	err := r.db.WithContext(ctx).Model(&ProfileModel{}).Select("id").Where("user_id = ?", ua.UserID).Row().Scan(&profileID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("could not find profile for user_id %d to save achievement", ua.UserID)
@@ -93,7 +93,7 @@ func (r *AchievementRepository) SaveUserAchievement(ctx context.Context, ua achi
 
 // FindUserAchievements retrieves all of a user's achievement progress records, preloading the base achievement data.
 func (r *AchievementRepository) FindUserAchievements(ctx context.Context, userID uint) ([]achievement.UserAchievement, error) {
-	var models []userAchievementModel
+	var models []UserAchievementModel
 
 	err := r.db.WithContext(ctx).
 		Joins("Achievement"). // Preload the associated Achievement details
@@ -116,7 +116,7 @@ func (r *AchievementRepository) FindUserAchievements(ctx context.Context, userID
 }
 
 func (r *AchievementRepository) FindByTitle(ctx context.Context, title string) (achievement.Achievement, error) {
-	var model achievementModel
+	var model AchievementModel
 	if err := r.db.WithContext(ctx).Where("title = ?", title).First(&model).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return achievement.Achievement{}, achievement.ErrNotFound
@@ -128,7 +128,7 @@ func (r *AchievementRepository) FindByTitle(ctx context.Context, title string) (
 
 func (r *AchievementRepository) FindAllProgressiveDaily(ctx context.Context) ([]achievement.Achievement, error) {
 
-	var models []achievementModel
+	var models []AchievementModel
 	err := r.db.WithContext(ctx).
 		Where("type = ?", "DAILY_PROGRESSIVE_IMAGE").
 		Order("min_word_required asc").

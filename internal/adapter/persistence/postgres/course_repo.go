@@ -19,12 +19,12 @@ func NewCourseRepository(db *gorm.DB) *CourseRepository {
 
 // GetOrCreateUserCourse ensures a user course record exists and returns its progress state.
 func (r *CourseRepository) GetOrCreateUserCourse(ctx context.Context, userID uint, courseID uint) (course.UserProgress, error) {
-	var uc userCourseModel
+	var uc UserCourseModel
 	err := r.db.WithContext(ctx).Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Create a new record because the user is starting the course.
-		uc = userCourseModel{UserID: userID, CourseID: courseID, Progress: 0}
+		uc = UserCourseModel{UserID: userID, CourseID: courseID, Progress: 0}
 		if createErr := r.db.WithContext(ctx).Create(&uc).Error; createErr != nil {
 			return course.UserProgress{}, createErr
 		}
@@ -44,7 +44,7 @@ func (r *CourseRepository) GetOrCreateUserCourse(ctx context.Context, userID uin
 
 }
 
-func calculateProgress(uc userCourseModel, totalWords int) course.UserProgress {
+func calculateProgress(uc UserCourseModel, totalWords int) course.UserProgress {
 	progress := course.UserProgress{
 		WordsCompleted: int(uc.Progress),
 	}
@@ -68,7 +68,7 @@ func calculateProgress(uc userCourseModel, totalWords int) course.UserProgress {
 
 // FindAll retrieves all available courses from the database.
 func (r *CourseRepository) FindAll(ctx context.Context) ([]course.Course, error) {
-	var models []courseModel
+	var models []CourseModel
 	if err := r.db.WithContext(ctx).Order("id ASC").Find(&models).Error; err != nil {
 		return nil, course.ErrFetchFailed
 	}
@@ -83,7 +83,7 @@ func (r *CourseRepository) FindAll(ctx context.Context) ([]course.Course, error)
 
 // FindByID retrieves a single course by its ID.
 func (r *CourseRepository) FindByID(ctx context.Context, courseID uint) (course.Course, error) {
-	var model courseModel
+	var model CourseModel
 	if err := r.db.WithContext(ctx).First(&model, courseID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return course.Course{}, course.ErrNotFound
@@ -96,7 +96,7 @@ func (r *CourseRepository) FindByID(ctx context.Context, courseID uint) (course.
 
 // FindByPersianTitle retrieves a single course by its Persian title.
 func (r *CourseRepository) FindByPersianTitle(ctx context.Context, title string) (course.Course, error) {
-	var model courseModel
+	var model CourseModel
 	// The title on the keyboard may have progress percentage, so we need a partial match.
 	if err := r.db.WithContext(ctx).Where("persian_title LIKE ?", title+"%").First(&model).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -110,7 +110,7 @@ func (r *CourseRepository) FindByPersianTitle(ctx context.Context, title string)
 
 // GetUserProgress retrieves a specific user's progress for a given course.
 func (r *CourseRepository) GetUserProgress(ctx context.Context, userID uint, courseID uint) (course.UserProgress, error) {
-	var uc userCourseModel
+	var uc UserCourseModel
 	err := r.db.WithContext(ctx).Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
 
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -138,7 +138,7 @@ func (r *CourseRepository) GetUserProgress(ctx context.Context, userID uint, cou
 
 // IncrementProgress advances a user's progress in a course by one.
 func (r *CourseRepository) IncrementProgress(ctx context.Context, userID, courseID uint) (course.UserProgress, error) {
-	var uc userCourseModel
+	var uc UserCourseModel
 	err := r.db.WithContext(ctx).Where("user_id = ? AND course_id = ?", userID, courseID).First(&uc).Error
 	if err != nil {
 		// Should not happen if user is in a course, but handle defensively.
@@ -157,13 +157,13 @@ func (r *CourseRepository) IncrementProgress(ctx context.Context, userID, course
 // GetTotalWords retrieves the number of words in a course.
 func (r *CourseRepository) GetTotalWords(ctx context.Context, courseID uint) (int, error) {
 	var totalWords int64
-	err := r.db.WithContext(ctx).Model(&courseWordModel{}).Where("course_id = ?", courseID).Count(&totalWords).Error
+	err := r.db.WithContext(ctx).Model(&CourseWordModel{}).Where("course_id = ?", courseID).Count(&totalWords).Error
 	return int(totalWords), err
 }
 
 // Add this new function to the file
 func (r *CourseRepository) SetProgress(ctx context.Context, userID, courseID, newProgress uint) error {
-	result := r.db.WithContext(ctx).Model(&userCourseModel{}).
+	result := r.db.WithContext(ctx).Model(&UserCourseModel{}).
 		Where("user_id = ? AND course_id = ?", userID, courseID).
 		Update("progress", newProgress)
 

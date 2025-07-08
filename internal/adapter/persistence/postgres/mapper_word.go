@@ -7,7 +7,7 @@ import (
 )
 
 // toDomainWord converts the GORM wordSourceModel to the pure domain Word entity.
-func toDomainWord(wm wordModel, wsm wordSourceModel) word.Word {
+func toDomainWord(wm WordModel, wsm WordSourceModel) word.Word {
 	domainWord := word.Word{
 		ID:           wm.ID,
 		Title:        wm.Title,
@@ -44,7 +44,7 @@ func toDomainWord(wm wordModel, wsm wordSourceModel) word.Word {
 	return domainWord
 }
 
-func toDomainStudiedWord(m studiedWordModel) word.StudiedWord {
+func toDomainStudiedWord(m StudiedWordModel) word.StudiedWord {
 	return word.StudiedWord{
 		ID:                 m.ID,
 		UserID:             m.UserID,
@@ -56,7 +56,7 @@ func toDomainStudiedWord(m studiedWordModel) word.StudiedWord {
 	}
 }
 
-func toPersistenceStudiedWord(d word.StudiedWord) studiedWordModel {
+func toPersistenceStudiedWord(d word.StudiedWord) StudiedWordModel {
 	// If ID is 0, GORM will INSERT. If ID is non-zero, it will UPDATE.
 	// We explicitly clear time fields for GORM to handle them correctly on create vs update.
 	var createdAt, updatedAt time.Time
@@ -65,7 +65,7 @@ func toPersistenceStudiedWord(d word.StudiedWord) studiedWordModel {
 		// This requires fetching first, which our logic does.
 	}
 
-	return studiedWordModel{
+	return StudiedWordModel{
 		Model:              gorm.Model{ID: d.ID, CreatedAt: createdAt, UpdatedAt: updatedAt},
 		UserID:             d.UserID,
 		WordID:             d.WordID,
