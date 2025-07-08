@@ -33,4 +33,7 @@ type Repository interface {
 
 	// Count the Mastered Words
 	CountMasteredWords(ctx context.Context, userID uint) (int, error)
+
+	// CountTotalStudiedWords counts the total number of studied word records across all users.
+	CountTotalStudiedWords(ctx context.Context) (int64, error)
 }

@@ -167,3 +167,11 @@ func (r *WordRepository) CountMasteredWords(ctx context.Context, userID uint) (i
 		Count(&count).Error
 	return int(count), err
 }
+
+// CountTotalStudiedWords counts the total number of studied word records across all users.
+func (r *WordRepository) CountTotalStudiedWords(ctx context.Context) (int64, error) {
+	var count int64
+	// This counts every entry in the word_studieds table, representing each time any user has studied any word.
+	err := r.db.WithContext(ctx).Model(&StudiedWordModel{}).Count(&count).Error
+	return count, err
+}

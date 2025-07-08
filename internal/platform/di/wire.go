@@ -76,7 +76,9 @@ var wordSet = wire.NewSet(
 	wire.Bind(new(word.Repository), new(*postgres.WordRepository)),
 )
 
-var statsHandlerSet = wire.NewSet(adminQueries.NewGetStatsHandler)
+var statsHandlerSet = wire.NewSet(
+	adminQueries.NewGetStatsHandler,
+)
 var broadcastHandlerSet = wire.NewSet(adminCmd.NewBroadcastHandler)
 
 var quizSet = wire.NewSet(
