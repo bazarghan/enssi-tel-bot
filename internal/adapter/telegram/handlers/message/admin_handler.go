@@ -59,9 +59,12 @@ func (h *AdminHandler) handleGetStats(c telebot.Context) error {
 	}
 
 	// Format the message and send it back to the admin
-	statsMsg := fmt.Sprintf("📊 *آمار ربات*\n\nتعداد کل کاربران: *%d*", stats.TotalUsers)
+	statsMsg := fmt.Sprintf(
+		"📊 *آمار ربات*\n\nتعداد کل کاربران: *%d*\nتعداد کل کلمات مطالعه شده: *%d*",
+		stats.TotalUsers,
+		stats.TotalWordsStudied, // <-- ADD THIS
+	)
 	return c.Send(statsMsg, telebot.ModeMarkdownV2)
-
 }
 
 func (h *AdminHandler) handleInitiateAdminBroadcast(c telebot.Context, u user.User) error {
