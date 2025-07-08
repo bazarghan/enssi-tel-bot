@@ -14,8 +14,8 @@ type Achievement struct {
 	ImageURL        string // Path to base asset in assets/
 	MinWordRequired uint
 	TotalItems      uint
-	GridWidth       uint
-	GridHeight      uint
+	CellWidth       uint
+	CellHeight      uint
 }
 
 // UserAchievement tracks a user's progress towards a single achievement.

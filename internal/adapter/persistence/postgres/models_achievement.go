@@ -110,8 +110,8 @@ type achievementModel struct {
 	ImageURL        string
 	MinWordRequired uint
 	TotalItems      uint
-	GridWidth       uint
-	GridHeight      uint
+	CellWidth       uint
+	CellHeight      uint
 }
 
 func (achievementModel) TableName() string { return "achievements" }

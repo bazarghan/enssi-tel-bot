@@ -12,8 +12,8 @@ func toDomainAchievement(m achievementModel) achievement.Achievement {
 		ImageURL:        m.ImageURL,
 		MinWordRequired: m.MinWordRequired,
 		TotalItems:      m.TotalItems,
-		GridWidth:       m.GridWidth,
-		GridHeight:      m.GridHeight,
+		CellWidth:       m.CellWidth,
+		CellHeight:      m.CellHeight,
 	}
 }
 

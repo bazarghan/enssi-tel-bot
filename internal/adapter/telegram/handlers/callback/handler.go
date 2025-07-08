@@ -279,7 +279,7 @@ func (h *Handler) sendMasteryNotification(c telebot.Context, userID uint, notifi
 		return
 	}
 
-	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, notification.RecentlyRevealed, ach.GridWidth, ach.GridHeight)
+	generatedPath, err := h.imgSvc.Generate(ach.ImageURL, userAch.State, notification.RecentlyRevealed, ach.CellWidth, ach.CellHeight)
 	if err != nil {
 		logger.Error("Failed to generate achievement image", "error", err, "image_url", ach.ImageURL)
 		return
