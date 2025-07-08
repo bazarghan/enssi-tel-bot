@@ -7,10 +7,10 @@ services:
     container_name: enssi_postgres
     restart: unless-stopped
     environment:
-      # These credentials should match what you have in `configs/config.yaml`
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: your_db_password # IMPORTANT: Change this password
-      POSTGRES_DB: enssi_bot_db
+      # These credentials are read from your .env file
+      POSTGRES_USER: ${ENSSI_DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${ENSSI_DATABASE_PASSWORD:-your_db_password}
+      POSTGRES_DB: ${ENSSI_DATABASE_NAME:-enssi_bot_db}
     ports:
       # Expose the database port to the host machine for local debugging/access.
       - "5432:5432"
@@ -25,15 +25,25 @@ services:
       dockerfile: Dockerfile
     container_name: enssi_bot_app
     restart: unless-stopped
-    command: ["./enssi-bot"] # This command runs the bot binary
+    # The command is now handled by the Dockerfile's CMD and the entrypoint script.
     depends_on:
-      - db # Ensures the database is started before the bot
+      - db # Ensures the database container is started before the bot container
     volumes:
       # Mount the configs directory to allow for live changes without rebuilding.
-      - ./configs:/root/configs
+      - ./configs:/app/configs
     env_file:
       # Load secrets (like the bot token) from a .env file.
       - .env
+    environment:
+      # Pass database connection details to the entrypoint script and the app.
+      # Note: We use 'db' as the host because that's the service name within Docker's network.
+      - ENSSI_DATABASE_HOST=db
+      - ENSSI_DATABASE_PORT=${ENSSI_DATABASE_PORT}
+      - ENSSI_DATABASE_USER=${ENSSI_DATABASE_USER}
+      - ENSSI_DATABASE_PASSWORD=${ENSSI_DATABASE_PASSWORD}
+      - ENSSI_DATABASE_NAME=${ENSSI_DATABASE_NAME}
+      # Designate this service to run migrations and seeding
+      - run_migrations=true
 
   # Background Worker Service
   worker:
@@ -42,13 +52,21 @@ services:
       dockerfile: Dockerfile
     container_name: enssi_worker_app
     restart: unless-stopped
-    command: ["./enssi-worker"] # This command runs the worker binary
+    command: ["./enssi-worker"] # This command runs the worker binary via the entrypoint
     depends_on:
       - db # Ensures the database is started before the worker
     volumes:
-      - ./configs:/root/configs
+      - ./configs:/app/configs
     env_file:
       - .env
+    environment:
+      # Pass database connection details to the entrypoint script and the app.
+      - ENSSI_DATABASE_HOST=db
+      - ENSSI_DATABASE_PORT=${ENSSI_DATABASE_PORT}
+      - ENSSI_DATABASE_USER=${ENSSI_DATABASE_USER}
+      - ENSSI_DATABASE_PASSWORD=${ENSSI_DATABASE_PASSWORD}
+      - ENSSI_DATABASE_NAME=${ENSSI_DATABASE_NAME}
+      # This service will NOT run migrations, it will just wait for the DB.
 
 # Define the named volume for persisting database data
 volumes:

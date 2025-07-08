@@ -71,11 +71,13 @@ func InitializeBotApp(cfg *config.Config, db *gorm.DB, appLogger logger.Logger) 
 	handleQuizCompletionHandler := course2.NewHandleQuizCompletionHandler(appLogger, courseRepository, wordRepository, createCourseQuizHandler, awardProgressHandler)
 	handleWordMasteryHandler := achievement2.NewHandleWordMasteryHandler(appLogger, wordRepository, achievementRepository)
 	callbackHandler := callback.NewHandler(appLogger, submitAnswerHandler, handleQuizCompletionHandler, quizRepository, achievementRepository, generator, userRepository, getOverviewHandler, handleWordMasteryHandler)
+	ensureAdminHandler := user.NewEnsureAdminHandler(appLogger, userRepository)
 	botApp := &BotApp{
 		CommandHandler:      commandHandler,
 		MessageHandler:      router,
 		CallbackHandler:     callbackHandler,
 		RegisterUserHandler: registerUserHandler,
+		EnsureAdminHandler:  ensureAdminHandler,
 	}
 	return botApp, nil
 }
@@ -114,6 +116,7 @@ type BotApp struct {
 	MessageHandler      *message.Router
 	CallbackHandler     *callback.Handler
 	RegisterUserHandler user.RegisterUserHandler
+	EnsureAdminHandler  user.EnsureAdminHandler
 }
 
 // WorkerApp remains the same.
@@ -122,7 +125,7 @@ type WorkerApp struct {
 }
 
 // --- Provider Sets ---
-var userSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(user3.Repository), new(*postgres.UserRepository)), user.NewRegisterUserHandler, user2.NewGetProfileHandler)
+var userSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(user3.Repository), new(*postgres.UserRepository)), user.NewRegisterUserHandler, user2.NewGetProfileHandler, user.NewEnsureAdminHandler)
 
 var courseSet = wire.NewSet(postgres.NewCourseRepository, wire.Bind(new(course3.Repository), new(*postgres.CourseRepository)), course.NewListCoursesHandler, course.NewGetOverviewHandler, course2.NewStartSessionHandler, course2.NewAdvanceWordHandler, course2.NewHandleQuizCompletionHandler)
 

@@ -24,4 +24,10 @@ type Repository interface {
 
 	// Count the total number of users
 	CountTotalUsers(ctx context.Context) (int64, error)
+
+	// SetAdminStatus updates a user's admin flag based on their Telegram ID.
+	SetAdminStatus(ctx context.Context, telegramID int64, isAdmin bool) error
+
+	// Save persists all changes to a User and their Profile.
+	Save(ctx context.Context, user User) error
 }

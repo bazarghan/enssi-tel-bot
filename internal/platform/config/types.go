@@ -19,7 +19,8 @@ type Database struct {
 
 // Telegram holds all configuration related to the Telegram Bot API.
 type Telegram struct {
-	Token string `mapstructure:"token"`
+	Token           string `mapstructure:"token"`
+	AdminTelegramID int64  `mapstructure:"admin_telegram_id"`
 }
 
 type Log struct {

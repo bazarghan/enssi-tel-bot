@@ -3,11 +3,14 @@
 package main
 
 import (
+	"context"
 	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/database"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
 	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+
+	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
 	"log"
 	"os"
 )
@@ -39,6 +42,15 @@ func main() {
 	}
 
 	appLogger.Info("Logger and dependencies initialized by DI.")
+
+	// Ensure the configured admin user has admin privileges on startup.
+	ensureAdminCmd := userCmd.EnsureAdminCommand{
+		TelegramID: cfg.Telegram.AdminTelegramID,
+	}
+	if err := botApp.EnsureAdminHandler.Handle(context.Background(), ensureAdminCmd); err != nil {
+		// This is not a fatal error, so we log a warning and continue.
+		appLogger.Warn("Could not ensure admin status on startup", "error", err)
+	}
 
 	// Validate essential config
 	if cfg.Telegram.Token == "" {

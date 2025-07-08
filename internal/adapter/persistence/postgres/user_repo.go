@@ -150,3 +150,44 @@ func (r *UserRepository) CountTotalUsers(ctx context.Context) (int64, error) {
 	err := r.db.WithContext(ctx).Model(&UserModel{}).Count(&count).Error
 	return count, err
 }
+
+// SetAdminStatus updates a user's admin flag based on their Telegram ID.
+// It will not return an error if the user does not exist.
+func (r *UserRepository) SetAdminStatus(ctx context.Context, telegramID int64, isAdmin bool) error {
+	// This query finds the user by their telegram_id and updates only the is_admin column.
+	result := r.db.WithContext(ctx).Model(&UserModel{}).
+		Where("telegram_id = ?", telegramID).
+		Update("is_admin", isAdmin)
+
+	return result.Error
+}
+
+// Save persists all changes to a User object and its associated Profile.
+func (r *UserRepository) Save(ctx context.Context, u user.User) error {
+	userModel := toPersistenceUserModel(u)
+	profileModel := toPersistenceProfileModel(u.Profile)
+
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Save(&userModel).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Ensure the profile has the correct UserID before saving
+	if profileModel.UserID == 0 {
+		profileModel.UserID = userModel.ID
+	}
+
+	if err := tx.Save(&profileModel).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}

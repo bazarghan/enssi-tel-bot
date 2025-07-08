@@ -44,6 +44,7 @@ type BotApp struct {
 	MessageHandler      *message.Router
 	CallbackHandler     *callback.Handler
 	RegisterUserHandler userCmd.RegisterUserHandler
+	EnsureAdminHandler  userCmd.EnsureAdminHandler
 }
 
 // WorkerApp remains the same.
@@ -57,6 +58,7 @@ var userSet = wire.NewSet(
 	wire.Bind(new(domainUser.Repository), new(*postgres.UserRepository)),
 	userCmd.NewRegisterUserHandler,
 	userQueries.NewGetProfileHandler,
+	userCmd.NewEnsureAdminHandler,
 )
 
 var courseSet = wire.NewSet(
