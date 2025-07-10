@@ -58,7 +58,7 @@ achievements:
   - title: "Wordunter"
     description: ""
     type: "DAILY_PROGRESSIVE_IMAGE"
-    image_url: "assets/imgs/achievements/worunter.png"
+    image_url: "assets/imgs/achievements/wordunter.png"
     min_word_required: 1000
     total_items: 1024
     cell_width: 80
