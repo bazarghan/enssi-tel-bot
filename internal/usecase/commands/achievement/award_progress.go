@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
 	"github.com/bits-and-blooms/bitset"
 	"math/rand"
 	"time"

@@ -1,11 +1,11 @@
 package telegram
 
 import (
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/command"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/handlers/message"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/handlers/callback"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/handlers/command"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/handlers/message"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
+	registerCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
 

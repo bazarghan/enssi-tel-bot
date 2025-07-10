@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // Handler processes the HasPendingReviewQuery.

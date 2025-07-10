@@ -3,8 +3,8 @@ package course
 import (
 	"context"
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/course"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // GetOverviewQuery defines the input for getting a course overview.

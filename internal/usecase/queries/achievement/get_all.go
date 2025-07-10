@@ -2,8 +2,8 @@ package achievement
 
 import (
 	"context"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // GetAllResult is a DTO for the use case layer.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

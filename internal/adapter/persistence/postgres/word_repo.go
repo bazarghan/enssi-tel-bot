@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
 	"gorm.io/gorm"
 	"time"
 )

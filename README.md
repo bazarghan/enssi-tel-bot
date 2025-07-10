@@ -88,7 +88,7 @@ Follow these instructions to get a local copy up and running for development and
 
 1.  **Clone the repository:**
     ```sh
-    git clone [https://github.com/2000ostd/enssi-tel-bot.git](https://github.com/2000ostd/enssi-tel-bot.git)
+    git clone [https://github.com/bazarghan/enssi-tel-bot.git](https://github.com/bazarghan/enssi-tel-bot.git)
     cd enssi-tel-bot
     ```
 
@@ -218,5 +218,5 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📞 Contact
 
-Project Link: [https://github.com/2000ostd/enssi-tel-bot](https://github.com/2000ostd/enssi-tel-bot)
+Project Link: [https://github.com/bazarghan/enssi-tel-bot](https://github.com/bazarghan/enssi-tel-bot)
 

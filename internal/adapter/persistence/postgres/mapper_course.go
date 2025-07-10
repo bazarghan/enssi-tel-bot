@@ -1,6 +1,6 @@
 package postgres
 
-import "github.com/2000ostd/enssi-tel-bot/internal/domain/course"
+import "github.com/bazarghan/enssi-tel-bot/internal/domain/course"
 
 // toDomainCourse converts a GORM courseModel to a domain Course entity.
 func toDomainCourse(m CourseModel, totalWords int) course.Course {

@@ -2,7 +2,7 @@ package imagegen
 
 import (
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/pkg/imagekit"
+	"github.com/bazarghan/enssi-tel-bot/pkg/imagekit"
 	"github.com/bits-and-blooms/bitset"
 	"image"
 	_ "image/jpeg" // Register JPEG decoder

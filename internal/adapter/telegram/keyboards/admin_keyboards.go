@@ -3,7 +3,7 @@ package keyboards
 import (
 	"gopkg.in/telebot.v4"
 
-	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	ui "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/uiconstants"
 )
 
 // Add this new function to the file

@@ -2,8 +2,8 @@ package keyboards
 
 import (
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
-	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/dto"
+	ui "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/uiconstants"
 	"gopkg.in/telebot.v4"
 )
 

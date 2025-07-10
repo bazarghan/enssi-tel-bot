@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/notification"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/notification"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // BroadcastCommand holds the message to be sent to all users.

@@ -6,19 +6,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/dto"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/formatters"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/keyboards"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
-	reviewQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/review"
-	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
-	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
+	registerCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/user"
+	reviewQueries "github.com/bazarghan/enssi-tel-bot/internal/usecase/queries/review"
+	getProfileQry "github.com/bazarghan/enssi-tel-bot/internal/usecase/queries/user"
+	"github.com/bazarghan/enssi-tel-bot/pkg/tgmarkdown"
 	"gopkg.in/telebot.v4"
 )
 

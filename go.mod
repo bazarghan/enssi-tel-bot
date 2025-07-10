@@ -1,4 +1,4 @@
-module github.com/2000ostd/enssi-tel-bot
+module github.com/bazarghan/enssi-tel-bot
 
 go 1.24.2
 

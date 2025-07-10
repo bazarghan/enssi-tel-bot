@@ -3,8 +3,8 @@ package telegram
 import (
 	"context"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	registerCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
+	registerCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/user"
 	"gopkg.in/telebot.v4"
 )
 

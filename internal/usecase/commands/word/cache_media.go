@@ -2,7 +2,7 @@ package word
 
 import (
 	"context"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
 )
 
 // CacheImageCommand holds the data needed to cache image file IDs.

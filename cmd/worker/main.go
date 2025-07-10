@@ -7,10 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/database"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/config"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/database"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/di"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/telebot.v4"
 )

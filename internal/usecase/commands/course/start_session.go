@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/course"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	quizCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/course"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
+	quizCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/quiz"
 	"github.com/bits-and-blooms/bitset"
 )
 

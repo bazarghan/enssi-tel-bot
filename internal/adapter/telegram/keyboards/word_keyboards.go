@@ -1,7 +1,7 @@
 package keyboards
 
 import (
-	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	ui "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/uiconstants"
 	"gopkg.in/telebot.v4"
 )
 

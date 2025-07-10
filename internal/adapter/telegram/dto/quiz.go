@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+import "github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
 
 // QuestionView is a DTO for rendering a quiz question.
 type QuestionView struct {

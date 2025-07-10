@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
-	sc "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/stateconstants"
-	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	adminCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/admin"
-	adminQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/admin"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/keyboards"
+	sc "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/stateconstants"
+	ui "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
+	adminCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/admin"
+	adminQueries "github.com/bazarghan/enssi-tel-bot/internal/usecase/queries/admin"
 	"gopkg.in/telebot.v4"
 )
 

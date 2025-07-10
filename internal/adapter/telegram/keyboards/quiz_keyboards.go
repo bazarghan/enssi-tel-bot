@@ -2,10 +2,10 @@ package keyboards
 
 import (
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
 	"gopkg.in/telebot.v4"
 
-	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	ui "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/uiconstants"
 )
 
 // QuizQuestionOptionsKeyboard generates the inline keyboard for a quiz question.

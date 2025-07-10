@@ -1,7 +1,7 @@
 package postgres
 
 import (
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
 	"gorm.io/gorm"
 	"time"
 )

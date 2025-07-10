@@ -10,21 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/dto"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/formatters"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/keyboards"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 
-	achCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/achievement"
-	courseCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/course"
-	submitCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/quiz"
+	achCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/achievement"
+	courseCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/course"
+	submitCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/quiz"
 
-	courseQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/course"
+	courseQueries "github.com/bazarghan/enssi-tel-bot/internal/usecase/queries/course"
 
-	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+	"github.com/bazarghan/enssi-tel-bot/pkg/tgmarkdown"
 	"gopkg.in/telebot.v4"
 )
 

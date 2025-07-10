@@ -1,6 +1,6 @@
 package postgres
 
-import "github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
+import "github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
 
 // toDomainAchievement maps the gorm model to the domain entity.
 func toDomainAchievement(m AchievementModel) achievement.Achievement {

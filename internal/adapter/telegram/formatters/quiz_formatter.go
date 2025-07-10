@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/pkg/tgmarkdown"
 )
 
 // FormatQuizQuestion creates the text for a quiz question message.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/persistence/postgres"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/persistence/postgres"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )

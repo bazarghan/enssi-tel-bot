@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/keyboards"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
 
-	sc "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/stateconstants"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	sc "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/stateconstants"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 	"gopkg.in/telebot.v4"
 )
 

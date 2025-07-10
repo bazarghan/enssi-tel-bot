@@ -4,13 +4,13 @@ package main
 
 import (
 	"context"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/database"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/di"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/config"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/database"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/di"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 
-	userCmd "github.com/2000ostd/enssi-tel-bot/internal/usecase/commands/user"
+	userCmd "github.com/bazarghan/enssi-tel-bot/internal/usecase/commands/user"
 	"log"
 	"os"
 )

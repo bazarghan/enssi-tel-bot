@@ -3,8 +3,8 @@ package user
 import (
 	"context"
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // EnsureAdminCommand holds the data needed to ensure a user is an admin.

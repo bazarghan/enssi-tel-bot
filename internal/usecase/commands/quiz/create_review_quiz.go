@@ -3,8 +3,8 @@ package quiz
 import (
 	"context"
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/quiz"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/quiz"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
 )
 
 // CreateReviewQuizCommand defines the input for creating a review quiz.

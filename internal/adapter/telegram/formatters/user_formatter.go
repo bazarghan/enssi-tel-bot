@@ -2,8 +2,8 @@ package formatters
 
 import (
 	"fmt"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
-	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/dto"
+	"github.com/bazarghan/enssi-tel-bot/pkg/tgmarkdown"
 	"strings"
 )
 

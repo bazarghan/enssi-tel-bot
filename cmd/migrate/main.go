@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/config"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/config"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"

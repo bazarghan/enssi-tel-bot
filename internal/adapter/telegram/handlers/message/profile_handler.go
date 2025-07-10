@@ -9,18 +9,18 @@ import (
 
 	"github.com/bits-and-blooms/bitset"
 
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/dto"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/formatters"
-	"github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/keyboards"
-	sc "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/stateconstants"
-	ui "github.com/2000ostd/enssi-tel-bot/internal/adapter/telegram/uiconstants"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/achievement"
-	"github.com/2000ostd/enssi-tel-bot/internal/domain/user"
-	"github.com/2000ostd/enssi-tel-bot/internal/platform/observability/logger"
-	"github.com/2000ostd/enssi-tel-bot/pkg/tgmarkdown"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/dto"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/formatters"
+	"github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/keyboards"
+	sc "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/stateconstants"
+	ui "github.com/bazarghan/enssi-tel-bot/internal/adapter/telegram/uiconstants"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
+	"github.com/bazarghan/enssi-tel-bot/pkg/tgmarkdown"
 
-	achQueries "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/achievement"
-	getProfileQry "github.com/2000ostd/enssi-tel-bot/internal/usecase/queries/user"
+	achQueries "github.com/bazarghan/enssi-tel-bot/internal/usecase/queries/achievement"
+	getProfileQry "github.com/bazarghan/enssi-tel-bot/internal/usecase/queries/user"
 	"gopkg.in/telebot.v4"
 )
 
