@@ -10,6 +10,6 @@ database:
 
 telegram:
   token: "telgram_token"  #set the telegram token in .env file
-  admin_telegram_id: 164312805 #your telegram Id  
+  admin_telegram_id: 8421468108 #your telegram Id  
 
 
