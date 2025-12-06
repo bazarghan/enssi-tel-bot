@@ -55,7 +55,7 @@ func main() {
 
 	// Schedule the daily review job
 	c := cron.New()
-	_, err = c.AddJob("*/2 * * * *", workerApp.TriggerDailyReviewsJob)
+	_, err = c.AddJob("0 10 * * *", workerApp.TriggerDailyReviewsJob)
 	if err != nil {
 		appLogger.Error("Could not add daily review job to cron", "error", err)
 	}
