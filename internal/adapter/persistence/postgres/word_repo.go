@@ -3,9 +3,10 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
 	"gorm.io/gorm"
-	"time"
 )
 
 // WordRepository is the GORM implementation of the word repository port.
@@ -174,4 +175,13 @@ func (r *WordRepository) CountTotalStudiedWords(ctx context.Context) (int64, err
 	// This counts every entry in the word_studieds table, representing each time any user has studied any word.
 	err := r.db.WithContext(ctx).Model(&StudiedWordModel{}).Count(&count).Error
 	return count, err
+}
+
+// CountStudiedWords counts the number of words studied by a specific user.
+func (r *WordRepository) CountStudiedWords(ctx context.Context, userID uint) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&StudiedWordModel{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error
+	return int(count), err
 }

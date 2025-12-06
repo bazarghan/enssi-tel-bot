@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+
 	"github.com/bazarghan/enssi-tel-bot/internal/domain/course"
 	"gorm.io/gorm"
 )
@@ -168,4 +169,14 @@ func (r *CourseRepository) SetProgress(ctx context.Context, userID, courseID, ne
 		Update("progress", newProgress)
 
 	return result.Error
+}
+
+// CountActive counts the number of active courses for a user.
+func (r *CourseRepository) CountActive(ctx context.Context, userID uint) (int, error) {
+	var count int64
+
+	err := r.db.WithContext(ctx).Model(&UserCourseModel{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error
+	return int(count), err
 }

@@ -4,6 +4,7 @@ go 1.24.2
 
 require (
 	github.com/bits-and-blooms/bitset v1.22.0
+	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/google/wire v0.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/robfig/cron/v3 v3.0.1
@@ -16,7 +17,6 @@ require (
 
 require (
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
-	github.com/golang-migrate/migrate/v4 v4.18.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect

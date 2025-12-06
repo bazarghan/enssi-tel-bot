@@ -3,10 +3,13 @@ package user
 import (
 	"context"
 	"fmt"
-	"github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
-	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
-	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 	"time"
+
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/achievement"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/course"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/user"
+	"github.com/bazarghan/enssi-tel-bot/internal/domain/word"
+	"github.com/bazarghan/enssi-tel-bot/internal/platform/observability/logger"
 )
 
 // GetProfileQuery defines the input for the query.
@@ -29,10 +32,11 @@ type GetProfileResult struct {
 
 // GetProfileHandler processes the query.
 type GetProfileHandler struct {
-	logger   logger.Logger
-	userRepo user.Repository
-	achRepo  achievement.Repository
-	// Dependencies on other repositories (WordStudied, UserCourse) will be added in later slices.
+	logger     logger.Logger
+	userRepo   user.Repository
+	achRepo    achievement.Repository
+	wordRepo   word.Repository   // Added
+	courseRepo course.Repository // Added
 }
 
 // AchievementResult is a DTO for achievements included in the profile.
@@ -46,11 +50,15 @@ func NewGetProfileHandler(
 	appLogger logger.Logger,
 	userRepo user.Repository,
 	achRepo achievement.Repository,
+	wordRepo word.Repository, // Added
+	courseRepo course.Repository, // Added
 ) GetProfileHandler {
 	return GetProfileHandler{
-		logger:   appLogger,
-		userRepo: userRepo,
-		achRepo:  achRepo,
+		logger:     appLogger,
+		userRepo:   userRepo,
+		achRepo:    achRepo,
+		wordRepo:   wordRepo,
+		courseRepo: courseRepo,
 	}
 }
 
@@ -65,7 +73,17 @@ func (h GetProfileHandler) Handle(ctx context.Context, q GetProfileQuery) (GetPr
 		return GetProfileResult{}, fmt.Errorf("failed to find user for profile: %w", err)
 	}
 
-	// TODO: In future slices, call other repositories to get WordsStudied and CoursesActive counts.
+	wordsStudied, err := h.wordRepo.CountStudiedWords(ctx, q.UserID)
+	if err != nil {
+		h.logger.Warn("Could not fetch words studied count", "userID", q.UserID, "error", err)
+		// Default to 0 on error
+	}
+
+	coursesActive, err := h.courseRepo.CountActive(ctx, q.UserID)
+	if err != nil {
+		h.logger.Warn("Could not fetch active courses count", "userID", q.UserID, "error", err)
+		// Default to 0 on error
+	}
 
 	userAchievements, err := h.achRepo.FindUserAchievements(ctx, q.UserID)
 	if err != nil {
@@ -87,8 +105,8 @@ func (h GetProfileHandler) Handle(ctx context.Context, q GetProfileQuery) (GetPr
 		FirstName:     domainUser.Profile.FirstName,
 		LastName:      domainUser.Profile.LastName,
 		Score:         domainUser.Profile.Score,
-		WordsStudied:  0, // Placeholder for this slice
-		CoursesActive: 0, // Placeholder for this slice
+		WordsStudied:  wordsStudied,
+		CoursesActive: coursesActive,
 		Achievements:  achResults,
 	}, nil
 }

@@ -36,4 +36,7 @@ type Repository interface {
 
 	// CountTotalStudiedWords counts the total number of studied word records across all users.
 	CountTotalStudiedWords(ctx context.Context) (int64, error)
+
+	// CountStudiedWords counts the number of words studied by a specific user.
+	CountStudiedWords(ctx context.Context, userID uint) (int, error)
 }

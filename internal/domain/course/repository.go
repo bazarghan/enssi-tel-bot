@@ -27,4 +27,7 @@ type Repository interface {
 
 	// Set the UserProgress for teh course
 	SetProgress(ctx context.Context, userID, courseID, newProgress uint) error
+
+	// CountActive counts the number of active courses for a user.
+	CountActive(ctx context.Context, userID uint) (int, error)
 }
