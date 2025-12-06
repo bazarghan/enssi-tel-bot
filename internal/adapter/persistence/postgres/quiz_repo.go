@@ -266,16 +266,23 @@ func (r *QuizRepository) getDistractorMeanings(tx *gorm.DB, correctText string, 
 	seenDistractors[correctText] = true
 	finalDistractors := make([]string, 0, numDistractorsNeeded)
 
-	// Step 1: Get from course block pool
-	if courseID != 0 && len(poolIDs) > 0 {
+	// Step 1: Get from course block pool or general pool if IDs are provided
+	if len(poolIDs) > 0 {
 		var meanings []string
-		tx.Model(&MeaningModel{}).
+
+		query := tx.Model(&MeaningModel{}).
 			Joins("JOIN part_of_speeches ON part_of_speeches.id = meanings.part_of_speech_id").
 			Joins("JOIN word_sources ON word_sources.id = part_of_speeches.word_source_id").
-			Joins("JOIN words ON words.id = word_sources.word_id").
-			Joins("JOIN course_words ON course_words.word_id = words.id").
-			Where("course_words.course_id = ? AND course_words.word_id IN ? AND course_words.word_id != ?", courseID, poolIDs, correctWordID).
-			Pluck("meanings.title", &meanings)
+			Joins("JOIN words ON words.id = word_sources.word_id")
+
+		if courseID != 0 {
+			query = query.Joins("JOIN course_words ON course_words.word_id = words.id").
+				Where("course_words.course_id = ? AND course_words.word_id IN ? AND course_words.word_id != ?", courseID, poolIDs, correctWordID)
+		} else {
+			query = query.Where("words.id IN ? AND words.id != ?", poolIDs, correctWordID)
+		}
+
+		query.Pluck("meanings.title", &meanings)
 
 		localRand.Shuffle(len(meanings), func(i, j int) { meanings[i], meanings[j] = meanings[j], meanings[i] })
 		for _, m := range meanings {
